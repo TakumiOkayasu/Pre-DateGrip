@@ -207,3 +207,4 @@ interface RelationEdge {
     data: { cardinality: '1:1' | '1:N' | 'N:M'; sourceColumn: string; targetColumn: string; };
 }
 ```
+- git commit, git push は絶対禁止。コミットメッセージを考えるだけにして。
