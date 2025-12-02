@@ -35,3 +35,7 @@
 .children {
   /* Children are indented via paddingLeft in the node */
 }
+
+.loading {
+  opacity: 0.7;
+}

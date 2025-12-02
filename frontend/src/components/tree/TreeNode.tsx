@@ -5,13 +5,16 @@ interface TreeNodeProps {
   node: DatabaseObject;
   level: number;
   expandedNodes: Set<string>;
+  loadingNodes?: Set<string>;
   onToggle: (id: string) => void;
 }
 
-const getIcon = (type: DatabaseObject['type']): string => {
+const getIcon = (type: DatabaseObject['type'] | 'folder'): string => {
   switch (type) {
     case 'database':
       return '🗄️'
+    case 'folder':
+      return '📁'
     case 'table':
       return '📋'
     case 'view':
@@ -19,7 +22,7 @@ const getIcon = (type: DatabaseObject['type']): string => {
     case 'procedure':
       return '⚙️'
     case 'function':
-      return '𝑓'
+      return 'ƒ'
     case 'column':
       return '│'
     case 'index':
@@ -29,12 +32,14 @@ const getIcon = (type: DatabaseObject['type']): string => {
   }
 }
 
-export function TreeNode({ node, level, expandedNodes, onToggle }: TreeNodeProps) {
+export function TreeNode({ node, level, expandedNodes, loadingNodes, onToggle }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0
+  const canExpand = hasChildren || node.type === 'table' // Tables can lazy-load columns
   const isExpanded = expandedNodes.has(node.id)
+  const isLoading = loadingNodes?.has(node.id)
 
   const handleClick = () => {
-    if (hasChildren) {
+    if (canExpand) {
       onToggle(node.id)
     }
   }
@@ -50,17 +55,23 @@ export function TreeNode({ node, level, expandedNodes, onToggle }: TreeNodeProps
     console.log('Context menu:', node)
   }
 
+  const getExpander = () => {
+    if (isLoading) return '⏳'
+    if (canExpand) return isExpanded ? '▼' : '▶'
+    return ' '
+  }
+
   return (
     <div className={styles.container}>
       <div
-        className={styles.node}
+        className={`${styles.node} ${isLoading ? styles.loading : ''}`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleContextMenu}
       >
         <span className={styles.expander}>
-          {hasChildren ? (isExpanded ? '▼' : '▶') : ' '}
+          {getExpander()}
         </span>
         <span className={styles.icon}>{getIcon(node.type)}</span>
         <span className={styles.name}>{node.name}</span>
@@ -74,6 +85,7 @@ export function TreeNode({ node, level, expandedNodes, onToggle }: TreeNodeProps
               node={child}
               level={level + 1}
               expandedNodes={expandedNodes}
+              loadingNodes={loadingNodes}
               onToggle={onToggle}
             />
           ))}

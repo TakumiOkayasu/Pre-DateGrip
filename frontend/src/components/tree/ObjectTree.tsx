@@ -1,70 +1,117 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { TreeNode } from './TreeNode'
 import type { DatabaseObject } from '../../types'
+import { useConnectionStore } from '../../store/connectionStore'
+import { bridge } from '../../api/bridge'
 import styles from './ObjectTree.module.css'
 
 interface ObjectTreeProps {
   filter: string;
 }
 
-// Mock data for development
-const mockData: DatabaseObject[] = [
-  {
-    id: 'db-1',
-    name: 'SampleDatabase',
-    type: 'database',
-    children: [
-      {
-        id: 'tables',
-        name: 'Tables',
-        type: 'table',
-        children: [
-          {
-            id: 'table-users',
-            name: 'Users',
-            type: 'table',
-            children: [
-              { id: 'col-id', name: 'id (int, PK)', type: 'column' },
-              { id: 'col-name', name: 'name (nvarchar)', type: 'column' },
-              { id: 'col-email', name: 'email (nvarchar)', type: 'column' },
-            ],
-          },
-          {
-            id: 'table-orders',
-            name: 'Orders',
-            type: 'table',
-            children: [
-              { id: 'col-order-id', name: 'id (int, PK)', type: 'column' },
-              { id: 'col-user-id', name: 'user_id (int, FK)', type: 'column' },
-              { id: 'col-total', name: 'total (decimal)', type: 'column' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'views',
-        name: 'Views',
-        type: 'view',
-        children: [
-          { id: 'view-active-users', name: 'ActiveUsers', type: 'view' },
-        ],
-      },
-      {
-        id: 'procedures',
-        name: 'Stored Procedures',
-        type: 'procedure',
-        children: [
-          { id: 'sp-get-user', name: 'GetUserById', type: 'procedure' },
-        ],
-      },
-    ],
-  },
-]
-
 export function ObjectTree({ filter }: ObjectTreeProps) {
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['db-1', 'tables']))
+  const { connections, activeConnectionId } = useConnectionStore()
+  const [treeData, setTreeData] = useState<DatabaseObject[]>([])
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [loadingNodes, setLoadingNodes] = useState<Set<string>>(new Set())
 
-  const toggleNode = (id: string) => {
+  const activeConnection = connections.find(c => c.id === activeConnectionId)
+
+  // Load tables for a connection
+  const loadTables = useCallback(async (connectionId: string): Promise<DatabaseObject[]> => {
+    try {
+      const tables = await bridge.getTables(connectionId, '')
+
+      const tableNodes: DatabaseObject[] = []
+      const viewNodes: DatabaseObject[] = []
+
+      for (const table of tables) {
+        const node: DatabaseObject = {
+          id: `${connectionId}-${table.schema}-${table.name}`,
+          name: table.schema !== 'dbo' ? `${table.schema}.${table.name}` : table.name,
+          type: table.type === 'VIEW' ? 'view' : 'table',
+          children: [], // Will be loaded on expand
+        }
+
+        if (table.type === 'VIEW') {
+          viewNodes.push(node)
+        } else {
+          tableNodes.push(node)
+        }
+      }
+
+      return [
+        {
+          id: `${connectionId}-tables`,
+          name: 'Tables',
+          type: 'folder' as const,
+          children: tableNodes,
+        },
+        {
+          id: `${connectionId}-views`,
+          name: 'Views',
+          type: 'folder' as const,
+          children: viewNodes,
+        },
+      ]
+    } catch (error) {
+      console.error('Failed to load tables:', error)
+      return []
+    }
+  }, [])
+
+  // Load columns for a table
+  const loadColumns = useCallback(async (connectionId: string, tableName: string): Promise<DatabaseObject[]> => {
+    try {
+      const columns = await bridge.getColumns(connectionId, tableName)
+      return columns.map(col => ({
+        id: `${connectionId}-${tableName}-${col.name}`,
+        name: `${col.name} (${col.type}${col.isPrimaryKey ? ', PK' : ''}${col.nullable ? '' : ', NOT NULL'})`,
+        type: 'column' as const,
+      }))
+    } catch (error) {
+      console.error('Failed to load columns:', error)
+      return []
+    }
+  }, [])
+
+  // Build tree when connection changes
+  useEffect(() => {
+    if (!activeConnectionId || !activeConnection) {
+      setTreeData([])
+      return
+    }
+
+    const buildTree = async () => {
+      const dbNode: DatabaseObject = {
+        id: activeConnectionId,
+        name: `${activeConnection.server}/${activeConnection.database}`,
+        type: 'database',
+        children: [],
+      }
+
+      setTreeData([dbNode])
+      setExpandedNodes(new Set([activeConnectionId]))
+
+      // Load tables
+      setLoadingNodes(prev => new Set(prev).add(activeConnectionId))
+      const children = await loadTables(activeConnectionId)
+      dbNode.children = children
+      setTreeData([{ ...dbNode }])
+      setLoadingNodes(prev => {
+        const next = new Set(prev)
+        next.delete(activeConnectionId)
+        return next
+      })
+    }
+
+    buildTree()
+  }, [activeConnectionId, activeConnection, loadTables])
+
+  // Handle node toggle with lazy loading for table columns
+  const toggleNode = useCallback(async (id: string, node: DatabaseObject) => {
+    const isExpanding = !expandedNodes.has(id)
+
     setExpandedNodes((prev) => {
       const next = new Set(prev)
       if (next.has(id)) {
@@ -74,7 +121,38 @@ export function ObjectTree({ filter }: ObjectTreeProps) {
       }
       return next
     })
-  }
+
+    // Lazy load columns when expanding a table
+    if (isExpanding && activeConnectionId && node.type === 'table' && (!node.children || node.children.length === 0)) {
+      setLoadingNodes(prev => new Set(prev).add(id))
+
+      // Extract table name from node name
+      const tableName = node.name.includes('.') ? node.name.split('.')[1] : node.name
+      const columns = await loadColumns(activeConnectionId, tableName)
+
+      // Update tree data with columns
+      setTreeData(prev => {
+        const updateNode = (nodes: DatabaseObject[]): DatabaseObject[] => {
+          return nodes.map(n => {
+            if (n.id === id) {
+              return { ...n, children: columns }
+            }
+            if (n.children) {
+              return { ...n, children: updateNode(n.children) }
+            }
+            return n
+          })
+        }
+        return updateNode(prev)
+      })
+
+      setLoadingNodes(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }, [expandedNodes, activeConnectionId, loadColumns])
 
   const filterTree = (nodes: DatabaseObject[]): DatabaseObject[] => {
     if (!filter.trim()) return nodes
@@ -96,7 +174,23 @@ export function ObjectTree({ filter }: ObjectTreeProps) {
     return result
   }
 
-  const filteredData = filterTree(mockData)
+  const filteredData = filterTree(treeData)
+
+  if (!activeConnectionId) {
+    return (
+      <div className={styles.noConnection}>
+        No active connection
+      </div>
+    )
+  }
+
+  if (treeData.length === 0) {
+    return (
+      <div className={styles.loading}>
+        Loading...
+      </div>
+    )
+  }
 
   return (
     <div className={styles.container}>
@@ -106,7 +200,8 @@ export function ObjectTree({ filter }: ObjectTreeProps) {
           node={node}
           level={0}
           expandedNodes={expandedNodes}
-          onToggle={toggleNode}
+          loadingNodes={loadingNodes}
+          onToggle={(id) => toggleNode(id, node)}
         />
       ))}
     </div>

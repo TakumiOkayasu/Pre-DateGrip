@@ -57,7 +57,7 @@ export interface TableInfo {
 export interface DatabaseObject {
   id: string;
   name: string;
-  type: 'database' | 'table' | 'view' | 'procedure' | 'function' | 'column' | 'index';
+  type: 'database' | 'folder' | 'table' | 'view' | 'procedure' | 'function' | 'column' | 'index';
   children?: DatabaseObject[];
   metadata?: Record<string, unknown>;
 }
