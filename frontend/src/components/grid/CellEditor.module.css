@@ -1,0 +1,67 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--accent-color);
+  border-radius: 2px;
+  padding: 4px;
+  min-width: 150px;
+}
+
+.inputWrapper {
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  padding: 4px 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+  min-height: 24px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.nullInput {
+  background-color: rgba(128, 128, 128, 0.2);
+  color: #888;
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  gap: 4px;
+}
+
+.actionButton {
+  padding: 2px 8px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nullButton {
+  color: #888;
+}
+
+.nullButton:hover {
+  color: #aaa;
+}
