@@ -1,13 +1,14 @@
 import { useCallback, useMemo } from 'react'
-import ReactFlow, {
-  Node,
-  Edge,
+import {
+  ReactFlow,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
   MarkerType,
+  type Node,
+  type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { TableNode } from './TableNode'

@@ -162,7 +162,8 @@ export function ResultGrid() {
       const node = gridApi.getDisplayedRowAtIndex(i)
       if (!node) continue
       const row = columns.map((col) => {
-        const value = gridApi.getValue(col, node)
+        const colId = col.getColId()
+        const value = node.data[colId]
         return value === null || value === undefined ? 'NULL' : String(value)
       })
       rows.push(row.join('\t'))

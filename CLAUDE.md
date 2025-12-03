@@ -208,3 +208,4 @@ interface RelationEdge {
 }
 ```
 - git commit, git push は絶対禁止。コミットメッセージを考えるだけにして。
+- 作業が終わったら、Linter/formatterでエラーが出ないかチェックを**必ずすること**
