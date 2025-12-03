@@ -2,11 +2,60 @@
 
 echo "Running pre-push checks..."
 
+# Try to find uv in various locations
+find_uv() {
+    # 1. Check if uv is in PATH
+    if command -v uv >/dev/null 2>&1; then
+        echo "uv"
+        return 0
+    fi
+
+    # 2. Check common winget installation path
+    WINGET_UV="/c/Users/$USER/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uv.exe"
+    if [ -f "$WINGET_UV" ]; then
+        echo "$WINGET_UV"
+        return 0
+    fi
+
+    # 3. Check cargo installation
+    CARGO_UV="/c/Users/$USER/.cargo/bin/uv.exe"
+    if [ -f "$CARGO_UV" ]; then
+        echo "$CARGO_UV"
+        return 0
+    fi
+
+    # 4. Check scoop installation
+    SCOOP_UV="/c/Users/$USER/scoop/shims/uv.exe"
+    if [ -f "$SCOOP_UV" ]; then
+        echo "$SCOOP_UV"
+        return 0
+    fi
+
+    # 5. Check pipx installation
+    PIPX_UV="/c/Users/$USER/.local/bin/uv.exe"
+    if [ -f "$PIPX_UV" ]; then
+        echo "$PIPX_UV"
+        return 0
+    fi
+
+    return 1
+}
+
+UV_PATH=$(find_uv)
+if [ -n "$UV_PATH" ]; then
+    RUN_CMD="$UV_PATH run"
+    echo "Using uv: $UV_PATH"
+else
+    # Fallback to python
+    echo "Warning: uv not found, using python directly"
+    RUN_CMD="python.exe"
+fi
+
 # Check for uncommitted changes before lint (to detect if lint modifies files)
 DIRTY_BEFORE=$(git status --porcelain)
 
 # Run lint + format first (fast)
-uv run scripts/run_lint.py
+$RUN_CMD scripts/run_lint.py
 if [ $? -ne 0 ]; then
     echo ""
     echo "=========================================="
@@ -61,7 +110,7 @@ cd ..
 # Run C++ build
 echo ""
 echo "[C++] Running build..."
-uv run scripts/build.py Release
+$RUN_CMD scripts/build.py Release
 if [ $? -ne 0 ]; then
     echo ""
     echo "=========================================="
