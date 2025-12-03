@@ -1,7 +1,7 @@
 ﻿#include "session_manager.h"
 
-#include "../simdjson.h"
 #include "json_utils.h"
+#include "simdjson.h"
 
 #include <ShlObj.h>
 #include <Windows.h>

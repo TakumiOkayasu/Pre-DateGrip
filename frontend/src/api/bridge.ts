@@ -6,123 +6,6 @@ declare global {
   }
 }
 
-// Development mode mock data
-const mockData: Record<string, unknown> = {
-  connect: { connectionId: 'mock-conn-1' },
-  disconnect: undefined,
-  testConnection: { success: true, message: 'Mock connection successful' },
-  executeQuery: {
-    columns: [
-      { name: 'id', type: 'int' },
-      { name: 'name', type: 'nvarchar' },
-      { name: 'created_at', type: 'datetime' },
-    ],
-    rows: [
-      ['1', 'Test Item 1', '2024-01-01 00:00:00'],
-      ['2', 'Test Item 2', '2024-01-02 00:00:00'],
-      ['3', 'Test Item 3', '2024-01-03 00:00:00'],
-    ],
-    affectedRows: 0,
-    executionTimeMs: 15,
-    cached: false,
-  },
-  getCacheStats: {
-    currentSizeBytes: 0,
-    maxSizeBytes: 104857600,
-    usagePercent: 0,
-  },
-  clearCache: { cleared: true },
-  executeAsyncQuery: { queryId: 'mock-query-1' },
-  getAsyncQueryResult: {
-    queryId: 'mock-query-1',
-    status: 'completed',
-    columns: [
-      { name: 'id', type: 'int' },
-      { name: 'name', type: 'nvarchar' },
-    ],
-    rows: [
-      ['1', 'Test Item 1'],
-      ['2', 'Test Item 2'],
-    ],
-    affectedRows: 0,
-    executionTimeMs: 50,
-  },
-  cancelAsyncQuery: { cancelled: true },
-  getActiveQueries: [],
-  filterResultSet: {
-    columns: [
-      { name: 'id', type: 'int' },
-      { name: 'name', type: 'nvarchar' },
-    ],
-    rows: [['1', 'Test Item 1']],
-    totalRows: 3,
-    filteredRows: 1,
-    simdAvailable: true,
-  },
-  getDatabases: ['master', 'tempdb', 'model', 'msdb'],
-  getTables: [
-    { schema: 'dbo', name: 'Users', type: 'TABLE' },
-    { schema: 'dbo', name: 'Orders', type: 'TABLE' },
-    { schema: 'dbo', name: 'Products', type: 'TABLE' },
-  ],
-  getColumns: [
-    { name: 'id', type: 'int', size: 4, nullable: false, isPrimaryKey: true },
-    { name: 'name', type: 'nvarchar', size: 255, nullable: false, isPrimaryKey: false },
-    { name: 'created_at', type: 'datetime', size: 8, nullable: true, isPrimaryKey: false },
-  ],
-  formatSQL: { sql: 'SELECT\n    *\nFROM\n    users\nWHERE\n    id = 1;' },
-  getQueryHistory: [],
-  parseA5ER: { name: '', databaseType: '', tables: [], relations: [] },
-  getExecutionPlan: { plan: 'Mock execution plan text', actual: false },
-  getSettings: {
-    general: {
-      autoConnect: false,
-      lastConnectionId: '',
-      confirmOnExit: true,
-      maxQueryHistory: 1000,
-      maxRecentConnections: 10,
-      language: 'en',
-    },
-    editor: {
-      fontSize: 14,
-      fontFamily: 'Consolas',
-      wordWrap: false,
-      tabSize: 4,
-      insertSpaces: true,
-      showLineNumbers: true,
-      showMinimap: true,
-      theme: 'vs-dark',
-    },
-    grid: {
-      defaultPageSize: 100,
-      showRowNumbers: true,
-      enableCellEditing: false,
-      dateFormat: 'yyyy-MM-dd HH:mm:ss',
-      nullDisplay: '(NULL)',
-    },
-  },
-  updateSettings: { saved: true },
-  getConnectionProfiles: [],
-  saveConnectionProfile: { id: 'mock-profile-1' },
-  deleteConnectionProfile: { deleted: true },
-  getSessionState: {
-    activeConnectionId: '',
-    activeTabId: '',
-    windowX: 100,
-    windowY: 100,
-    windowWidth: 1280,
-    windowHeight: 720,
-    isMaximized: false,
-    leftPanelWidth: 250,
-    bottomPanelHeight: 200,
-    openTabs: [],
-    expandedTreeNodes: [],
-  },
-  saveSessionState: { saved: true },
-  searchObjects: [],
-  quickSearch: [],
-};
-
 class Bridge {
   private async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const request: IPCRequest = {
@@ -141,8 +24,9 @@ class Bridge {
       return response.data as T;
     }
 
-    // Development mode: return mock data
+    // Development mode only: dynamically import mock data
     if (import.meta.env.DEV) {
+      const { mockData } = await import('./mockData');
       // Small delay to simulate network
       await new Promise((resolve) => setTimeout(resolve, 50));
       return (mockData[method] ?? {}) as T;

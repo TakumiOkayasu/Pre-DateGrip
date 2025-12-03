@@ -1,7 +1,7 @@
 ﻿#include "settings_manager.h"
 
-#include "../simdjson.h"
 #include "json_utils.h"
+#include "simdjson.h"
 
 #include <ShlObj.h>
 #include <Windows.h>
@@ -31,8 +31,13 @@ bool SettingsManager::load() {
     std::lock_guard lock(m_mutex);
 
     if (!std::filesystem::exists(m_settingsPath)) {
-        // Create default settings file
-        return save();
+        // Create default settings file (without lock - saveInternal handles it)
+        std::ofstream file(m_settingsPath);
+        if (!file.is_open()) {
+            return false;
+        }
+        file << serializeSettings();
+        return file.good();
     }
 
     std::ifstream file(m_settingsPath);
