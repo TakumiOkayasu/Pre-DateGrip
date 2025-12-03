@@ -592,9 +592,10 @@ std::string IPCHandler::parseA5ERFile(std::string_view params) {
         relationsJson += "]";
 
         // Build final response
-        std::string jsonResponse = std::format(
-            R"({{"name":"{}","databaseType":"{}","tables":{},"relations":{}}})",
-            JsonUtils::escapeString(model.name), JsonUtils::escapeString(model.databaseType), tablesJson, relationsJson);
+        std::string jsonResponse =
+            std::format(R"({{"name":"{}","databaseType":"{}","tables":{},"relations":{}}})",
+                        JsonUtils::escapeString(model.name), JsonUtils::escapeString(model.databaseType),
+                        tablesJson, relationsJson);
 
         return JsonUtils::successResponse(jsonResponse);
     } catch (const std::exception& e) {
@@ -662,9 +663,9 @@ std::string IPCHandler::getExecutionPlan(std::string_view params) {
             }
         }
 
-        return JsonUtils::successResponse(std::format(R"({{"plan":"{}","actual":{}}})",
-                                                       JsonUtils::escapeString(planText),
-                                                       actualPlan ? "true" : "false"));
+        auto planJson = std::format(R"({{"plan":"{}","actual":{}}})", JsonUtils::escapeString(planText),
+                                     actualPlan ? "true" : "false");
+        return JsonUtils::successResponse(planJson);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
     }
