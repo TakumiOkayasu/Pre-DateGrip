@@ -83,15 +83,15 @@ if not exist node_modules (
     )
 )
 
-REM ESLint
+REM Biome lint
 echo.
-echo [Frontend] Running ESLint...
+echo [Frontend] Running Biome lint...
 call npm run lint
 if errorlevel 1 (
-    echo WARNING: ESLint found issues
+    echo WARNING: Biome lint found issues
     set /a TOTAL_ERRORS+=1
 ) else (
-    echo ESLint passed.
+    echo Biome lint passed.
 )
 
 REM TypeScript type check
