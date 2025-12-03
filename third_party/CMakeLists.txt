@@ -11,7 +11,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/webview2/include")
     target_link_directories(webview2 INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/webview2/lib
     )
-    target_link_libraries(webview2 INTERFACE WebView2Loader.dll.lib)
+    target_link_libraries(webview2 INTERFACE WebView2LoaderStatic.lib version.lib)
     set(WEBVIEW2_FOUND TRUE)
 else()
     message(WARNING "WebView2 SDK not found. Please download and extract to third_party/webview2/")
