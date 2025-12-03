@@ -155,25 +155,35 @@ private:
     }
 
     void initWebView2() {
+        MessageBoxA(m_hwnd, "initWebView2() called - starting WebView2 initialization", "Debug", MB_OK);
+
         HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
             nullptr, nullptr, nullptr,
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
                 [this](HRESULT result, ICoreWebView2Environment* env) -> HRESULT {
                     if (FAILED(result)) {
-                        MessageBoxA(m_hwnd, "Failed to create WebView2 environment", "Error", MB_OK | MB_ICONERROR);
+                        char errorMsg[256];
+                        snprintf(errorMsg, sizeof(errorMsg), "Failed to create WebView2 environment. HRESULT: 0x%08X", result);
+                        MessageBoxA(m_hwnd, errorMsg, "Error", MB_OK | MB_ICONERROR);
                         PostQuitMessage(1);
                         return result;
                     }
+
+                    MessageBoxA(m_hwnd, "WebView2 environment created successfully", "Debug", MB_OK);
 
                     env->CreateCoreWebView2Controller(
                         m_hwnd,
                         Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
                             [this](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
                                 if (FAILED(result) || !controller) {
-                                    MessageBoxA(m_hwnd, "Failed to create WebView2 controller", "Error", MB_OK | MB_ICONERROR);
+                                    char errorMsg[256];
+                                    snprintf(errorMsg, sizeof(errorMsg), "Failed to create WebView2 controller. HRESULT: 0x%08X", result);
+                                    MessageBoxA(m_hwnd, errorMsg, "Error", MB_OK | MB_ICONERROR);
                                     PostQuitMessage(1);
                                     return result;
                                 }
+
+                                MessageBoxA(m_hwnd, "WebView2 controller created successfully", "Debug", MB_OK);
 
                                 m_webviewController = controller;
                                 m_webviewController->get_CoreWebView2(&m_webviewWindow);
@@ -183,13 +193,20 @@ private:
                                 GetClientRect(m_hwnd, &bounds);
                                 m_webviewController->put_Bounds(bounds);
 
+                                char boundsMsg[256];
+                                snprintf(boundsMsg, sizeof(boundsMsg), "WebView bounds set: %d x %d", bounds.right - bounds.left, bounds.bottom - bounds.top);
+                                MessageBoxA(m_hwnd, boundsMsg, "Debug", MB_OK);
+
                                 // Setup bindings
                                 setupBindings();
 
                                 // Navigate to URL
                                 if (!m_url.empty()) {
                                     std::wstring wurl = utf8_to_utf16(m_url);
+                                    MessageBoxA(m_hwnd, ("Navigating to: " + m_url).c_str(), "Debug", MB_OK);
                                     m_webviewWindow->Navigate(wurl.c_str());
+                                } else {
+                                    MessageBoxA(m_hwnd, "No URL set - WebView will be blank", "Warning", MB_OK);
                                 }
 
                                 return S_OK;
