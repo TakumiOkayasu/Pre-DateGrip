@@ -34,6 +34,7 @@ Windows向け高性能RDBMSマネジメントツール。DataGripライクなUI/
 - Visual Studio 2022（C++ワークロード）
 - Node.js 20以上
 - CMake 3.20以上
+- Ninja（`winget install Ninja-build.Ninja`）
 
 #### ビルド手順
 
@@ -42,15 +43,18 @@ Windows向け高性能RDBMSマネジメントツール。DataGripライクなUI/
 git clone https://github.com/your-username/Pre-DateGrip.git
 cd Pre-DateGrip
 
+# Developer Command Promptを開く（MSVCコンパイラが必要）
+# または: "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+
 # フロントエンドのビルド
 cd frontend
 npm install
 npm run build
 cd ..
 
-# バックエンドのビルド
-cmake -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+# バックエンドのビルド（Ninja使用）
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 
 # パッケージ作成
 scripts\package.bat

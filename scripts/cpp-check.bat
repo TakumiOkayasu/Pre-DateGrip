@@ -169,78 +169,43 @@ echo ============================================================
 echo [4/4] Building C++ project (%BUILD_TYPE%)...
 echo ============================================================
 
-REM Detect available build system
-set GENERATOR=
-
-REM Try Visual Studio first
-cmake -G "Visual Studio 17 2022" --system-information >nul 2>&1
-if not errorlevel 1 (
-    set GENERATOR=Visual Studio 17 2022
-    set GENERATOR_ARGS=-A x64
-    goto :do_build
-)
-
-REM Try Ninja with MSVC
+REM Check for Ninja (preferred)
 ninja --version >nul 2>&1
-if not errorlevel 1 (
-    cl 2>&1 | findstr /c:"Microsoft" >nul
-    if not errorlevel 1 (
-        set GENERATOR=Ninja
-        set GENERATOR_ARGS=-DCMAKE_BUILD_TYPE=%BUILD_TYPE%
-        goto :do_build
-    )
+if errorlevel 1 (
+    echo ERROR: Ninja not found in PATH
+    echo Install Ninja: winget install Ninja-build.Ninja
+    set /a ERROR_COUNT+=1
+    goto summary
 )
 
-REM No build system available
-echo ERROR: No suitable build system found.
-echo Options:
-echo   1. Install Visual Studio 2022 with C++ workload
-echo   2. Run from Developer Command Prompt with Ninja installed
-set /a ERROR_COUNT+=1
-goto summary
+REM Check for MSVC compiler
+cl 2>&1 | findstr /c:"Microsoft" >nul
+if errorlevel 1 (
+    echo ERROR: MSVC compiler (cl.exe) not found in PATH
+    echo Run this script from Developer Command Prompt
+    set /a ERROR_COUNT+=1
+    goto summary
+)
 
-:do_build
-echo Using generator: %GENERATOR%
+echo Using generator: Ninja
 
 if not exist build mkdir build
-cd build
 
-if "%GENERATOR%"=="Visual Studio 17 2022" (
-    cmake .. -G "%GENERATOR%" %GENERATOR_ARGS%
-    if errorlevel 1 (
-        echo ERROR: CMake configuration failed
-        set /a ERROR_COUNT+=1
-        cd ..
-        goto summary
-    )
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+if errorlevel 1 (
+    echo ERROR: CMake configuration failed
+    set /a ERROR_COUNT+=1
+    goto summary
+)
 
-    cmake --build . --config %BUILD_TYPE%
-    if errorlevel 1 (
-        echo ERROR: Build failed
-        set /a ERROR_COUNT+=1
-        cd ..
-        goto summary
-    )
-) else (
-    cmake .. -G "%GENERATOR%" %GENERATOR_ARGS%
-    if errorlevel 1 (
-        echo ERROR: CMake configuration failed
-        set /a ERROR_COUNT+=1
-        cd ..
-        goto summary
-    )
-
-    cmake --build .
-    if errorlevel 1 (
-        echo ERROR: Build failed
-        set /a ERROR_COUNT+=1
-        cd ..
-        goto summary
-    )
+cmake --build build --parallel
+if errorlevel 1 (
+    echo ERROR: Build failed
+    set /a ERROR_COUNT+=1
+    goto summary
 )
 
 echo Build completed successfully!
-cd ..
 
 REM ============================================================
 REM Summary

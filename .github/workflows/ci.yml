@@ -109,8 +109,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSVC
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup MSVC Developer Environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        run: choco install ninja -y
 
       - name: Cache CMake build
         uses: actions/cache@v4
@@ -118,24 +121,24 @@ jobs:
           path: |
             build/_deps
             build/third_party
-          key: cmake-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/CMakeLists.txt', 'third_party/CMakeLists.txt') }}
+          key: cmake-ninja-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/CMakeLists.txt', 'third_party/CMakeLists.txt') }}
           restore-keys: |
-            cmake-${{ runner.os }}-
+            cmake-ninja-${{ runner.os }}-
 
       - name: Configure CMake
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTS=ON
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --parallel
 
       - name: Run Tests
-        run: ctest --test-dir build -C Release --output-on-failure --parallel
+        run: ctest --test-dir build --output-on-failure --parallel
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: backend-build
-          path: build/src/Release/
+          path: build/src/
           retention-days: 7
 
   # Package: combine frontend and backend into distributable package
