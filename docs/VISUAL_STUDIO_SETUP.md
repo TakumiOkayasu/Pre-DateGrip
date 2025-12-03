@@ -81,7 +81,7 @@ https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 2. 「ソリューションのクリーン」を実行してからリビルド
 3. `build` フォルダを削除してCMakeを再実行：
    ```
-   scripts\build.bat Debug
+   uv run scripts/build.py Debug
    ```
 
 ## デバッグのヒント

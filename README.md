@@ -57,7 +57,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 
 # パッケージ作成
-scripts\package.bat
+uv run scripts/package.py
 ```
 
 ビルド成果物は `dist/` フォルダに出力されます。
@@ -102,10 +102,10 @@ npm run typecheck
 npm run test
 
 # C++ Lint/Format/Build（一括）
-scripts\cpp-check.bat all Release
+uv run scripts/cpp_check.py all Release
 
 # 全体チェック（C++ + Frontend）
-scripts\check-all.bat Release
+uv run scripts/check_all.py Release
 ```
 
 ### 技術スタック

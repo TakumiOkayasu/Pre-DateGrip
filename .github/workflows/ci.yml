@@ -109,9 +109,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          allow-prereleases: true
+
       - name: Normalize line endings (CRLF)
-        run: |
-          powershell -ExecutionPolicy Bypass -File scripts/convert-eol.ps1 -EolType crlf
+        run: python scripts/convert_eol.py crlf
 
       - name: Setup MSVC Developer Environment
         uses: ilammy/msvc-dev-cmd@v1
