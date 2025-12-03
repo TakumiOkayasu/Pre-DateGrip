@@ -263,10 +263,9 @@ uv run scripts/run_lint.py
 
 #### バックエンド (C++)
 - **C++23**の機能を積極的に使用（std::expected, std::format, std::ranges等）
-- **clang-format 18**でフォーマット（Google style base）
-  - CI環境: LLVM 18 (ubuntu-24.04)
-  - ローカル: `winget install LLVM.LLVM` (バージョン18以上推奨)
-  - バージョン違いでフォーマット結果が異なる場合があるため、CI通過を優先
+- **clang-format 21**でフォーマット（Google style base）
+  - CI環境: LLVM 21 (apt.llvm.org)
+  - ローカル: `winget install LLVM.LLVM`
 - RAII原則に従う（スマートポインタ使用）
 - ODBCの戻り値は必ずチェック
 

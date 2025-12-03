@@ -592,10 +592,11 @@ std::string IPCHandler::parseA5ERFile(std::string_view params) {
         relationsJson += "]";
 
         // Build final response
-        std::string jsonResponse =
-            std::format(R"({{"name":"{}","databaseType":"{}","tables":{},"relations":{}}})",
-                        JsonUtils::escapeString(model.name), JsonUtils::escapeString(model.databaseType),
-                        tablesJson, relationsJson);
+        std::string jsonResponse = "{";
+        jsonResponse += "\"name\":\"" + JsonUtils::escapeString(model.name) + "\",";
+        jsonResponse += "\"databaseType\":\"" + JsonUtils::escapeString(model.databaseType) + "\",";
+        jsonResponse += "\"tables\":" + tablesJson + ",";
+        jsonResponse += "\"relations\":" + relationsJson + "}";
 
         return JsonUtils::successResponse(jsonResponse);
     } catch (const std::exception& e) {
@@ -663,8 +664,8 @@ std::string IPCHandler::getExecutionPlan(std::string_view params) {
             }
         }
 
-        auto planJson = std::format(R"({{"plan":"{}","actual":{}}})", JsonUtils::escapeString(planText),
-                                     actualPlan ? "true" : "false");
+        std::string planJson = "{\"plan\":\"" + JsonUtils::escapeString(planText) + "\",";
+        planJson += "\"actual\":" + std::string(actualPlan ? "true" : "false") + "}";
         return JsonUtils::successResponse(planJson);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
