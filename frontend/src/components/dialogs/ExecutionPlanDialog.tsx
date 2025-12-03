@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
 import styles from './ExecutionPlanDialog.module.css';

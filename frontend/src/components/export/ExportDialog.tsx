@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ResultSet } from '../../types';
 import styles from './ExportDialog.module.css';
 

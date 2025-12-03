@@ -1,4 +1,4 @@
-﻿import { Handle, Position } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import { memo } from 'react';
 import type { Column } from '../../types';
 import styles from './TableNode.module.css';

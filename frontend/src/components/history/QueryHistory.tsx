@@ -1,4 +1,4 @@
-﻿import { useHistoryStore } from '../../store/historyStore';
+import { useHistoryStore } from '../../store/historyStore';
 import { HistoryItem } from './HistoryItem';
 import styles from './QueryHistory.module.css';
 

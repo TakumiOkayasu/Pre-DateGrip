@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { bridge } from '../api/bridge';
 import type { ERRelationEdge, ERTableNode } from '../types';
 

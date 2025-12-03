@@ -109,6 +109,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Normalize line endings (CRLF)
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/convert-eol.ps1 -EolType crlf
+
       - name: Setup MSVC Developer Environment
         uses: ilammy/msvc-dev-cmd@v1
 

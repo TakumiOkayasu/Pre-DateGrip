@@ -1,0 +1,18 @@
+{
+  "name": "pre-dategrip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-performance RDBMS management tool for Windows",
+  "scripts": {
+    "prepare": "husky",
+    "lint": "scripts\\run-lint.bat",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:fix": "cd frontend && npm run lint:fix",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "scripts\\build.bat Release",
+    "package": "scripts\\package.bat"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

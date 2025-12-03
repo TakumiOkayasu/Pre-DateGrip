@@ -39,7 +39,8 @@
       "Bash(git -C \"C:\\prog\\Pre-DateGrip\" checkout HEAD -- CLAUDE.md .gitignore)",
       "Bash(git -C:*)",
       "WebSearch",
-      "Bash(npx biome:*)"
+      "Bash(npx biome:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

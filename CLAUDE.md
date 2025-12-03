@@ -9,14 +9,15 @@ Pre-DateGrip is a Windows-only high-performance RDBMS management tool with DataG
 ## Build Commands
 
 ```bash
-# Backend (C++ with CMake)
+# Backend (C++ with CMake + Ninja)
+# Run from Developer Command Prompt (MSVC required)
 scripts\build.bat Debug       # Debug build
 scripts\build.bat Release     # Release build
 scripts\test.bat              # Run C++ tests
 
 # Or manually with CMake
-cmake -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 
 # Frontend (React)
 cd frontend
@@ -24,7 +25,13 @@ npm install                   # Install dependencies
 npm run dev                   # Development server (localhost:5173)
 npm run build                 # Production build
 npm run test                  # Run tests
-npm run lint                  # Lint code
+npm run lint                  # Lint code (Biome)
+npm run lint:fix              # Auto-fix lint issues
+
+# Full project checks
+scripts\check-all.bat         # Run all checks (EOL, format, lint, build)
+scripts\run-lint.bat          # Run lint only (frontend + C++)
+scripts\cpp-check.bat all     # C++ only (format, lint, build)
 
 # Package for distribution
 scripts\package.bat
@@ -40,13 +47,15 @@ Phase 0 (CI/CD foundation) is complete. The project structure is implemented wit
 
 ## Technology Stack
 
-### Backend (C++20)
+### Backend (C++23)
+- **Build**: CMake + Ninja (MSVC)
 - **WebView**: webview/webview (OS WebView2)
 - **Database**: ODBC Native API (SQL Server)
 - **JSON**: simdjson
-- **SQL Parser**: sqlparser-rs (Rust) or custom implementation
+- **SQL Parser**: Custom implementation using modern C++23 patterns
 - **Optimization**: SIMD (AVX2), Memory-Mapped Files
 - **XML Parser**: pugixml (for A5:ER support)
+- **Linter/Formatter**: clang-format, clang-tidy
 
 ### Frontend (React + TypeScript)
 - **Build**: Vite
@@ -56,10 +65,15 @@ Phase 0 (CI/CD foundation) is complete. The project structure is implemented wit
 - **Styling**: CSS Modules + DataGrip dark theme
 - **State**: Zustand
 - **ER Diagram**: React Flow
+- **Linter/Formatter**: Biome (replaces ESLint + Prettier)
 
 ### Testing
 - **C++**: Google Test
 - **Frontend**: Vitest
+
+### Development Tools
+- **Git Hooks**: Husky (pre-commit)
+- **EOL Normalization**: convert-eol.ps1 (CRLF for Windows)
 
 ## Project Structure
 
@@ -207,5 +221,44 @@ interface RelationEdge {
     data: { cardinality: '1:1' | '1:N' | 'N:M'; sourceColumn: string; targetColumn: string; };
 }
 ```
-- git commit, git push は絶対禁止。コミットメッセージを考えるだけにして。
-- 作業が終わったら、Linter/formatterでエラーが出ないかチェックを**必ずすること**
+## 重要な指示 (Instructions for Claude)
+
+### 禁止事項
+- **git commit, git push は絶対禁止**。コミットメッセージを考えるだけにすること。
+
+### 作業完了時の必須チェック
+作業が終わったら、以下のLinter/Formatterでエラーが出ないか**必ずチェック**すること：
+
+```bash
+# フロントエンド (Biome)
+cd frontend && npm run lint
+
+# C++ (clang-format)
+clang-format --style=file --dry-run --Werror src/**/*.cpp src/**/*.h
+
+# または一括チェック
+scripts\run-lint.bat
+```
+
+### コーディング規約
+
+#### フロントエンド (TypeScript/React)
+- **Biomeの警告は必ず修正する**（--error-on-warnings で警告もエラー扱い）
+- 非nullアサーション (`!`) は使用禁止 → 明示的なnullチェックを使用
+- CSS Modulesを使用（グローバルCSSは避ける）
+- Zustandでの状態管理
+
+#### バックエンド (C++)
+- **C++23**の機能を積極的に使用（std::expected, std::format, std::ranges等）
+- clang-formatでフォーマット（Google style base）
+- RAII原則に従う（スマートポインタ使用）
+- ODBCの戻り値は必ずチェック
+
+### 改行コード
+- **CRLF (Windows)** で統一
+- コミット前にHuskyが自動でconvert-eol.ps1を実行
+- 手動変換: `powershell -File scripts\convert-eol.ps1 -EolType crlf`
+
+### ビルドシステム
+- **Ninja**を使用（Visual Studio generatorは使用しない）
+- Developer Command Promptから実行（MSVCコンパイラが必要）

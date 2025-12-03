@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 
 export interface CellChange {
   rowIndex: number;
@@ -102,9 +102,11 @@ export const useEditStore = create<EditState>((set, get) => ({
 
     // Handle inserted rows separately
     if (insertedRows.has(rowIndex)) {
-      const row = insertedRows.get(rowIndex)!;
-      row[columnName] = newValue;
-      set({ insertedRows: new Map(insertedRows) });
+      const row = insertedRows.get(rowIndex);
+      if (row) {
+        row[columnName] = newValue;
+        set({ insertedRows: new Map(insertedRows) });
+      }
       return;
     }
 

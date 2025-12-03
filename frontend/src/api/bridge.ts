@@ -1,4 +1,4 @@
-﻿import type { IPCRequest, IPCResponse } from '../types';
+import type { IPCRequest, IPCResponse } from '../types';
 
 declare global {
   interface Window {

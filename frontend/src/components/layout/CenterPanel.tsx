@@ -1,4 +1,4 @@
-﻿import { EditorTabs } from '../editor/EditorTabs';
+import { EditorTabs } from '../editor/EditorTabs';
 import { SqlEditor } from '../editor/SqlEditor';
 import styles from './CenterPanel.module.css';
 

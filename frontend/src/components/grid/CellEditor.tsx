@@ -1,4 +1,4 @@
-﻿import type { ICellEditorParams } from 'ag-grid-community';
+import type { ICellEditorParams } from 'ag-grid-community';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './CellEditor.module.css';
 

@@ -1,4 +1,4 @@
-﻿// Barrel exports for dialog components
+// Barrel exports for dialog components
 export { ConnectionDialog, type ConnectionConfig } from './ConnectionDialog';
 export { SearchDialog } from './SearchDialog';
 export { SettingsDialog } from './SettingsDialog';

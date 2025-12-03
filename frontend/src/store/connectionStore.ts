@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { bridge } from '../api/bridge';
 import type { Connection } from '../types';

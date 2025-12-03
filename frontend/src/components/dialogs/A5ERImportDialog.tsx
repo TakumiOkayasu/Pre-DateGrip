@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import styles from './A5ERImportDialog.module.css';
 
 interface A5ERImportDialogProps {

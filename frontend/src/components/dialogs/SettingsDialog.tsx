@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styles from './SettingsDialog.module.css';
 import { type AppSettings, defaultSettings } from './settingsUtils';
 
