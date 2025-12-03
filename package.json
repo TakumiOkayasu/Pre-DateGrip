@@ -18,10 +18,10 @@
   },
   "lint-staged": {
     "frontend/src/**/*.{ts,tsx,js,jsx}": [
-      "npx biome check --write --config-path=frontend"
+      "npx biome format --write --config-path=frontend"
     ],
     "frontend/src/**/*.css": [
-      "npx biome check --write --config-path=frontend"
+      "npx biome format --write --config-path=frontend"
     ],
     "src/**/*.{cpp,h}": [
       "clang-format -i --style=file"
