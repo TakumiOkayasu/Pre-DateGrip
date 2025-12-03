@@ -1,0 +1,95 @@
+.container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  min-width: 180px;
+  max-width: 250px;
+  font-size: 11px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.container.selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 6px 6px 0 0;
+}
+
+.icon {
+  font-size: 12px;
+}
+
+.tableName {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.columns {
+  padding: 6px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.column {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+}
+
+.column:hover {
+  background-color: var(--bg-hover);
+}
+
+.primaryKey {
+  background-color: rgba(220, 220, 170, 0.1);
+}
+
+.keyIcon {
+  font-size: 10px;
+}
+
+.columnName {
+  flex: 1;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.columnType {
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 10px;
+}
+
+.moreColumns {
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+}
+
+.handle {
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-color);
+  border: 2px solid var(--bg-secondary);
+}

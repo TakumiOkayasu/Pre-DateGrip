@@ -1,0 +1,31 @@
+.container {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+}
+
+.container :global(.react-flow__node) {
+  cursor: pointer;
+}
+
+.container :global(.react-flow__controls) {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.container :global(.react-flow__controls-button) {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  fill: var(--text-primary);
+}
+
+.container :global(.react-flow__controls-button:hover) {
+  background-color: var(--bg-hover);
+}
+
+.container :global(.react-flow__minimap) {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
