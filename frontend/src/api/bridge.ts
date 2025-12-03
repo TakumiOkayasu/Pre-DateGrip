@@ -74,6 +74,53 @@ const mockData: Record<string, unknown> = {
   getQueryHistory: [],
   parseA5ER: { name: '', databaseType: '', tables: [], relations: [] },
   getExecutionPlan: { plan: 'Mock execution plan text', actual: false },
+  getSettings: {
+    general: {
+      autoConnect: false,
+      lastConnectionId: '',
+      confirmOnExit: true,
+      maxQueryHistory: 1000,
+      maxRecentConnections: 10,
+      language: 'en',
+    },
+    editor: {
+      fontSize: 14,
+      fontFamily: 'Consolas',
+      wordWrap: false,
+      tabSize: 4,
+      insertSpaces: true,
+      showLineNumbers: true,
+      showMinimap: true,
+      theme: 'vs-dark',
+    },
+    grid: {
+      defaultPageSize: 100,
+      showRowNumbers: true,
+      enableCellEditing: false,
+      dateFormat: 'yyyy-MM-dd HH:mm:ss',
+      nullDisplay: '(NULL)',
+    },
+  },
+  updateSettings: { saved: true },
+  getConnectionProfiles: [],
+  saveConnectionProfile: { id: 'mock-profile-1' },
+  deleteConnectionProfile: { deleted: true },
+  getSessionState: {
+    activeConnectionId: '',
+    activeTabId: '',
+    windowX: 100,
+    windowY: 100,
+    windowWidth: 1280,
+    windowHeight: 720,
+    isMaximized: false,
+    leftPanelWidth: 250,
+    bottomPanelHeight: 200,
+    openTabs: [],
+    expandedTreeNodes: [],
+  },
+  saveSessionState: { saved: true },
+  searchObjects: [],
+  quickSearch: [],
 };
 
 class Bridge {
@@ -334,6 +381,166 @@ class Bridge {
       filterValue,
       filterValueMax,
     });
+  }
+
+  // Settings methods
+  async getSettings(): Promise<{
+    general: {
+      autoConnect: boolean;
+      lastConnectionId: string;
+      confirmOnExit: boolean;
+      maxQueryHistory: number;
+      maxRecentConnections: number;
+      language: string;
+    };
+    editor: {
+      fontSize: number;
+      fontFamily: string;
+      wordWrap: boolean;
+      tabSize: number;
+      insertSpaces: boolean;
+      showLineNumbers: boolean;
+      showMinimap: boolean;
+      theme: string;
+    };
+    grid: {
+      defaultPageSize: number;
+      showRowNumbers: boolean;
+      enableCellEditing: boolean;
+      dateFormat: string;
+      nullDisplay: string;
+    };
+  }> {
+    return this.call('getSettings', {});
+  }
+
+  async updateSettings(settings: {
+    general?: Partial<{
+      autoConnect: boolean;
+      confirmOnExit: boolean;
+      maxQueryHistory: number;
+      language: string;
+    }>;
+    editor?: Partial<{
+      fontSize: number;
+      fontFamily: string;
+      wordWrap: boolean;
+      tabSize: number;
+      theme: string;
+    }>;
+    grid?: Partial<{
+      defaultPageSize: number;
+      showRowNumbers: boolean;
+      nullDisplay: string;
+    }>;
+  }): Promise<{ saved: boolean }> {
+    return this.call('updateSettings', settings);
+  }
+
+  // Connection profile methods
+  async getConnectionProfiles(): Promise<
+    {
+      id: string;
+      name: string;
+      server: string;
+      database: string;
+      username: string;
+      useWindowsAuth: boolean;
+    }[]
+  > {
+    return this.call('getConnectionProfiles', {});
+  }
+
+  async saveConnectionProfile(profile: {
+    id?: string;
+    name: string;
+    server: string;
+    database: string;
+    username?: string;
+    useWindowsAuth: boolean;
+  }): Promise<{ id: string }> {
+    return this.call('saveConnectionProfile', profile);
+  }
+
+  async deleteConnectionProfile(id: string): Promise<{ deleted: boolean }> {
+    return this.call('deleteConnectionProfile', { id });
+  }
+
+  // Session methods
+  async getSessionState(): Promise<{
+    activeConnectionId: string;
+    activeTabId: string;
+    windowX: number;
+    windowY: number;
+    windowWidth: number;
+    windowHeight: number;
+    isMaximized: boolean;
+    leftPanelWidth: number;
+    bottomPanelHeight: number;
+    openTabs: {
+      id: string;
+      title: string;
+      content: string;
+      filePath: string;
+      isDirty: boolean;
+      cursorLine: number;
+      cursorColumn: number;
+    }[];
+    expandedTreeNodes: string[];
+  }> {
+    return this.call('getSessionState', {});
+  }
+
+  async saveSessionState(state: {
+    activeConnectionId?: string;
+    activeTabId?: string;
+    windowX?: number;
+    windowY?: number;
+    windowWidth?: number;
+    windowHeight?: number;
+    isMaximized?: boolean;
+    leftPanelWidth?: number;
+    bottomPanelHeight?: number;
+    openTabs?: {
+      id: string;
+      title: string;
+      content: string;
+      filePath: string;
+      isDirty: boolean;
+      cursorLine: number;
+      cursorColumn: number;
+    }[];
+    expandedTreeNodes?: string[];
+  }): Promise<{ saved: boolean }> {
+    return this.call('saveSessionState', state);
+  }
+
+  // Search methods
+  async searchObjects(
+    connectionId: string,
+    pattern: string,
+    options?: {
+      searchTables?: boolean;
+      searchViews?: boolean;
+      searchProcedures?: boolean;
+      searchFunctions?: boolean;
+      searchColumns?: boolean;
+      caseSensitive?: boolean;
+      maxResults?: number;
+    }
+  ): Promise<
+    {
+      objectType: string;
+      schemaName: string;
+      objectName: string;
+      parentName: string;
+    }[]
+  > {
+    return this.call('searchObjects', { connectionId, pattern, ...options });
+  }
+
+  async quickSearch(connectionId: string, prefix: string, limit = 20): Promise<string[]> {
+    return this.call('quickSearch', { connectionId, prefix, limit });
   }
 }
 

@@ -17,6 +17,9 @@ class QueryHistory;
 class ResultCache;
 class AsyncQueryExecutor;
 class SIMDFilter;
+class SettingsManager;
+class SessionManager;
+class GlobalSearch;
 class DataExporter;
 class A5ERParser;
 class SQLFormatter;
@@ -84,6 +87,21 @@ private:
     // Filter operations
     [[nodiscard]] std::string filterResultSet(std::string_view params);
 
+    // Settings operations
+    [[nodiscard]] std::string getSettings(std::string_view params);
+    [[nodiscard]] std::string updateSettings(std::string_view params);
+    [[nodiscard]] std::string getConnectionProfiles(std::string_view params);
+    [[nodiscard]] std::string saveConnectionProfile(std::string_view params);
+    [[nodiscard]] std::string deleteConnectionProfile(std::string_view params);
+
+    // Session operations
+    [[nodiscard]] std::string getSessionState(std::string_view params);
+    [[nodiscard]] std::string saveSessionState(std::string_view params);
+
+    // Search operations
+    [[nodiscard]] std::string searchObjects(std::string_view params);
+    [[nodiscard]] std::string quickSearch(std::string_view params);
+
     std::unique_ptr<ConnectionPool> m_connectionPool;
     std::unique_ptr<SchemaInspector> m_schemaInspector;
     std::unique_ptr<TransactionManager> m_transactionManager;
@@ -91,6 +109,9 @@ private:
     std::unique_ptr<ResultCache> m_resultCache;
     std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;
     std::unique_ptr<SIMDFilter> m_simdFilter;
+    std::unique_ptr<SettingsManager> m_settingsManager;
+    std::unique_ptr<SessionManager> m_sessionManager;
+    std::unique_ptr<GlobalSearch> m_globalSearch;
     std::unique_ptr<SQLFormatter> m_sqlFormatter;
     std::unique_ptr<A5ERParser> m_a5erParser;
 

@@ -17,6 +17,9 @@ set(LIB_SOURCES
     utils/json_utils.cpp
     utils/simd_filter.cpp
     utils/file_utils.cpp
+    utils/settings_manager.cpp
+    utils/session_manager.cpp
+    utils/global_search.cpp
 )
 
 set(HEADERS
@@ -38,6 +41,9 @@ set(HEADERS
     utils/json_utils.h
     utils/simd_filter.h
     utils/file_utils.h
+    utils/settings_manager.h
+    utils/session_manager.h
+    utils/global_search.h
 )
 
 # Create a static library for the core functionality
