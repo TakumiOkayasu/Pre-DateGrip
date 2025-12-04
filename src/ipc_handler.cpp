@@ -54,8 +54,13 @@ struct DatabaseConnectionParams {
         simdjson::dom::element doc = parser.parse(jsonParams);
 
         DatabaseConnectionParams result;
-        result.server = std::string(doc["server"].get_string().value());
-        result.database = std::string(doc["database"].get_string().value());
+        auto serverResult = doc["server"].get_string();
+        auto databaseResult = doc["database"].get_string();
+        if (serverResult.error() || databaseResult.error()) {
+            return std::unexpected("Missing required fields: server or database");
+        }
+        result.server = std::string(serverResult.value());
+        result.database = std::string(databaseResult.value());
 
         if (auto username = doc["username"].get_string(); !username.error()) {
             result.username = std::string(username.value());
@@ -480,9 +485,15 @@ std::string IPCHandler::exportToCSV(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string filepath = std::string(doc["filepath"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto filepathResult = doc["filepath"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || filepathResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId, filepath, or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string filepath = std::string(filepathResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -518,9 +529,15 @@ std::string IPCHandler::exportToJSON(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string filepath = std::string(doc["filepath"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto filepathResult = doc["filepath"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || filepathResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId, filepath, or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string filepath = std::string(filepathResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -550,9 +567,15 @@ std::string IPCHandler::exportToExcel(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string filepath = std::string(doc["filepath"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto filepathResult = doc["filepath"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || filepathResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId, filepath, or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string filepath = std::string(filepathResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -705,8 +728,13 @@ std::string IPCHandler::getExecutionPlan(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
         bool actualPlan = false;
         if (auto actual = doc["actual"].get_bool(); !actual.error()) {
             actualPlan = actual.value();
@@ -771,8 +799,13 @@ std::string IPCHandler::executeAsyncQuery(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -793,7 +826,11 @@ std::string IPCHandler::getAsyncQueryResult(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string queryId = std::string(doc["queryId"].get_string().value());
+        auto queryIdResult = doc["queryId"].get_string();
+        if (queryIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: queryId");
+        }
+        std::string queryId = std::string(queryIdResult.value());
 
         AsyncQueryResult asyncResult = m_asyncExecutor->getQueryResult(queryId);
 
@@ -868,7 +905,11 @@ std::string IPCHandler::cancelAsyncQuery(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string queryId = std::string(doc["queryId"].get_string().value());
+        auto queryIdResult = doc["queryId"].get_string();
+        if (queryIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: queryId");
+        }
+        std::string queryId = std::string(queryIdResult.value());
 
         bool cancelled = m_asyncExecutor->cancelQuery(queryId);
 
@@ -897,11 +938,21 @@ std::string IPCHandler::filterResultSet(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
-        auto columnIndex = doc["columnIndex"].get_uint64().value();
-        std::string filterType = std::string(doc["filterType"].get_string().value());
-        std::string filterValue = std::string(doc["filterValue"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        auto columnIndexResult = doc["columnIndex"].get_uint64();
+        auto filterTypeResult = doc["filterType"].get_string();
+        auto filterValueResult = doc["filterValue"].get_string();
+        if (connectionIdResult.error() || sqlQueryResult.error() || columnIndexResult.error() ||
+            filterTypeResult.error() || filterValueResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse(
+                "Missing required fields: connectionId, sql, columnIndex, filterType, or filterValue");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto sqlQuery = std::string(sqlQueryResult.value());
+        auto columnIndex = columnIndexResult.value();
+        auto filterType = std::string(filterTypeResult.value());
+        auto filterValue = std::string(filterValueResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -1125,7 +1176,11 @@ std::string IPCHandler::deleteConnectionProfile(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string profileId = std::string(doc["id"].get_string().value());
+        auto profileIdResult = doc["id"].get_string();
+        if (profileIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: id");
+        }
+        auto profileId = std::string(profileIdResult.value());
         m_settingsManager->removeConnectionProfile(profileId);
         m_settingsManager->save();
 
@@ -1254,8 +1309,13 @@ std::string IPCHandler::searchObjects(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string pattern = std::string(doc["pattern"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto patternResult = doc["pattern"].get_string();
+        if (connectionIdResult.error() || patternResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or pattern");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto pattern = std::string(patternResult.value());
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -1305,8 +1365,13 @@ std::string IPCHandler::quickSearch(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string prefix = std::string(doc["prefix"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto prefixResult = doc["prefix"].get_string();
+        if (connectionIdResult.error() || prefixResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or prefix");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto prefix = std::string(prefixResult.value());
         int limit = 20;
         if (auto val = doc["limit"].get_int64(); !val.error())
             limit = static_cast<int>(val.value());
