@@ -122,7 +122,7 @@ uv run scripts/package.py
 
 ### ディレクトリ構成
 
-```
+```markdown
 Pre-DateGrip/
 ├── src/                    # C++バックエンド
 │   ├── database/           # DB接続、接続プール、結果キャッシュ、非同期実行
