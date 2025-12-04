@@ -146,6 +146,7 @@ void IPCHandler::registerRequestRoutes() {
     m_requestRoutes["getConnectionProfiles"] = [this](std::string_view p) { return getConnectionProfiles(p); };
     m_requestRoutes["saveConnectionProfile"] = [this](std::string_view p) { return saveConnectionProfile(p); };
     m_requestRoutes["deleteConnectionProfile"] = [this](std::string_view p) { return deleteConnectionProfile(p); };
+    m_requestRoutes["getProfilePassword"] = [this](std::string_view p) { return getProfilePassword(p); };
     m_requestRoutes["getSessionState"] = [this](std::string_view p) { return getSessionState(p); };
     m_requestRoutes["saveSessionState"] = [this](std::string_view p) { return saveSessionState(p); };
     m_requestRoutes["searchObjects"] = [this](std::string_view p) { return searchObjects(p); };
@@ -1144,7 +1145,7 @@ std::string IPCHandler::updateSettings(std::string_view params) {
 std::string IPCHandler::getConnectionProfiles(std::string_view) {
     const auto& profiles = m_settingsManager->getConnectionProfiles();
 
-    std::string json = "[";
+    std::string json = R"({"profiles":[)";
     for (size_t i = 0; i < profiles.size(); ++i) {
         if (i > 0)
             json += ',';
@@ -1153,12 +1154,14 @@ std::string IPCHandler::getConnectionProfiles(std::string_view) {
         json += std::format("\"id\":\"{}\",", JsonUtils::escapeString(p.id));
         json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(p.name));
         json += std::format("\"server\":\"{}\",", JsonUtils::escapeString(p.server));
+        json += std::format("\"port\":{},", p.port);
         json += std::format("\"database\":\"{}\",", JsonUtils::escapeString(p.database));
         json += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.username));
-        json += std::format("\"useWindowsAuth\":{}", p.useWindowsAuth ? "true" : "false");
+        json += std::format("\"useWindowsAuth\":{},", p.useWindowsAuth ? "true" : "false");
+        json += std::format("\"savePassword\":{}", p.savePassword ? "true" : "false");
         json += "}";
     }
-    json += "]";
+    json += "]}";
 
     return JsonUtils::successResponse(json);
 }
@@ -1175,21 +1178,40 @@ std::string IPCHandler::saveConnectionProfile(std::string_view params) {
             profile.name = std::string(val.value());
         if (auto val = doc["server"].get_string(); !val.error())
             profile.server = std::string(val.value());
+        if (auto val = doc["port"].get_int64(); !val.error())
+            profile.port = static_cast<int>(val.value());
         if (auto val = doc["database"].get_string(); !val.error())
             profile.database = std::string(val.value());
         if (auto val = doc["username"].get_string(); !val.error())
             profile.username = std::string(val.value());
         if (auto val = doc["useWindowsAuth"].get_bool(); !val.error())
             profile.useWindowsAuth = val.value();
+        if (auto val = doc["savePassword"].get_bool(); !val.error())
+            profile.savePassword = val.value();
+
+        // Generate ID if empty
+        if (profile.id.empty()) {
+            profile.id = std::format("profile_{}", std::chrono::system_clock::now().time_since_epoch().count());
+        }
 
         // Check if profile exists
         if (m_settingsManager->getConnectionProfile(profile.id).has_value()) {
             m_settingsManager->updateConnectionProfile(profile);
         } else {
-            if (profile.id.empty()) {
-                profile.id = std::format("profile_{}", std::chrono::system_clock::now().time_since_epoch().count());
-            }
             m_settingsManager->addConnectionProfile(profile);
+        }
+
+        // Handle password encryption
+        if (profile.savePassword) {
+            if (auto val = doc["password"].get_string(); !val.error()) {
+                auto password = std::string(val.value());
+                if (!password.empty()) {
+                    (void)m_settingsManager->setProfilePassword(profile.id, password);
+                }
+            }
+        } else {
+            // Clear saved password if savePassword is false
+            (void)m_settingsManager->setProfilePassword(profile.id, "");
         }
 
         m_settingsManager->save();
@@ -1214,6 +1236,29 @@ std::string IPCHandler::deleteConnectionProfile(std::string_view params) {
         m_settingsManager->save();
 
         return JsonUtils::successResponse(R"({"deleted":true})");
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::getProfilePassword(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto idResult = doc["id"].get_string();
+        if (idResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: id");
+        }
+        auto profileId = std::string(idResult.value());
+
+        auto passwordResult = m_settingsManager->getProfilePassword(profileId);
+        if (!passwordResult) {
+            return JsonUtils::errorResponse(passwordResult.error());
+        }
+
+        return JsonUtils::successResponse(
+            std::format(R"({{"password":"{}"}})", JsonUtils::escapeString(passwordResult.value())));
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
     }

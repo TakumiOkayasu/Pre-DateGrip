@@ -58,11 +58,16 @@ public:
         , m_hwnd(nullptr)
         , m_webviewController(nullptr)
         , m_webviewWindow(nullptr)
+        , m_disableCache(false)
     {
         if (window) {
             m_hwnd = static_cast<HWND>(window);
         }
     }
+
+    void set_user_data_folder(const std::string& path) { m_userDataFolder = path; }
+
+    void set_disable_cache(bool disable) { m_disableCache = disable; }
 
     ~webview() {
         if (m_webviewController) {
@@ -155,51 +160,35 @@ private:
     }
 
     void initWebView2() {
+        // Set user data folder path (nullptr = default = next to exe)
+        std::wstring wUserDataFolder;
+        LPCWSTR userDataFolderPtr = nullptr;
+        if (!m_userDataFolder.empty()) {
+            wUserDataFolder = utf8_to_utf16(m_userDataFolder);
+            userDataFolderPtr = wUserDataFolder.c_str();
+        }
+
+        // Create environment options to disable cache if requested
+        ComPtr<ICoreWebView2EnvironmentOptions> options;
+        if (m_disableCache) {
+            // Use command line args to disable cache
+            // --disk-cache-size=0 disables the disk cache
+            CreateCoreWebView2EnvironmentWithOptions(
+                nullptr, userDataFolderPtr, nullptr,
+                Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+                    [this](HRESULT result, ICoreWebView2Environment* env) -> HRESULT {
+                        return onEnvironmentCreated(result, env);
+                    }
+                ).Get()
+            );
+            return;
+        }
+
         HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-            nullptr, nullptr, nullptr,
+            nullptr, userDataFolderPtr, nullptr,
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
                 [this](HRESULT result, ICoreWebView2Environment* env) -> HRESULT {
-                    if (FAILED(result)) {
-                        MessageBoxA(m_hwnd, "Failed to create WebView2 environment.", "Error", MB_OK | MB_ICONERROR);
-                        PostQuitMessage(1);
-                        return result;
-                    }
-
-                    env->CreateCoreWebView2Controller(
-                        m_hwnd,
-                        Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                            [this](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
-                                if (FAILED(result) || !controller) {
-                                    MessageBoxA(m_hwnd, "Failed to create WebView2 controller.", "Error", MB_OK | MB_ICONERROR);
-                                    PostQuitMessage(1);
-                                    return result;
-                                }
-
-                                m_webviewController = controller;
-                                m_webviewController->get_CoreWebView2(&m_webviewWindow);
-
-                                // Resize WebView to fill window
-                                RECT bounds;
-                                GetClientRect(m_hwnd, &bounds);
-                                m_webviewController->put_Bounds(bounds);
-
-                                // Setup virtual host mapping for local files (fixes CORS)
-                                setupVirtualHostMapping();
-
-                                // Setup bindings
-                                setupBindings();
-
-                                // Navigate to URL
-                                if (!m_url.empty()) {
-                                    std::wstring wurl = utf8_to_utf16(m_url);
-                                    m_webviewWindow->Navigate(wurl.c_str());
-                                }
-
-                                return S_OK;
-                            }
-                        ).Get()
-                    );
-                    return S_OK;
+                    return onEnvironmentCreated(result, env);
                 }
             ).Get()
         );
@@ -207,6 +196,71 @@ private:
         if (FAILED(hr)) {
             MessageBoxA(m_hwnd, "WebView2 runtime not found.\nPlease install Microsoft Edge WebView2 Runtime.", "Error", MB_OK | MB_ICONERROR);
             PostQuitMessage(1);
+        }
+    }
+
+    HRESULT onEnvironmentCreated(HRESULT result, ICoreWebView2Environment* env) {
+        if (FAILED(result)) {
+            MessageBoxA(m_hwnd, "Failed to create WebView2 environment.", "Error", MB_OK | MB_ICONERROR);
+            PostQuitMessage(1);
+            return result;
+        }
+
+        env->CreateCoreWebView2Controller(
+            m_hwnd,
+            Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                [this](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
+                    if (FAILED(result) || !controller) {
+                        MessageBoxA(m_hwnd, "Failed to create WebView2 controller.", "Error", MB_OK | MB_ICONERROR);
+                        PostQuitMessage(1);
+                        return result;
+                    }
+
+                    m_webviewController = controller;
+                    m_webviewController->get_CoreWebView2(&m_webviewWindow);
+
+                    // Disable cache via DevTools protocol if requested
+                    if (m_disableCache) {
+                        disableCacheViaDevTools();
+                    }
+
+                    // Resize WebView to fill window
+                    RECT bounds;
+                    GetClientRect(m_hwnd, &bounds);
+                    m_webviewController->put_Bounds(bounds);
+
+                    // Setup virtual host mapping for local files (fixes CORS)
+                    setupVirtualHostMapping();
+
+                    // Setup bindings
+                    setupBindings();
+
+                    // Navigate to URL
+                    if (!m_url.empty()) {
+                        std::wstring wurl = utf8_to_utf16(m_url);
+                        m_webviewWindow->Navigate(wurl.c_str());
+                    }
+
+                    return S_OK;
+                }
+            ).Get()
+        );
+        return S_OK;
+    }
+
+    void disableCacheViaDevTools() {
+        if (!m_webviewWindow) return;
+
+        // Call DevTools protocol to disable cache
+        ComPtr<ICoreWebView2> webview;
+        m_webviewWindow->QueryInterface(IID_PPV_ARGS(&webview));
+        if (webview) {
+            // Network.setCacheDisabled disables the browser cache
+            webview->CallDevToolsProtocolMethod(
+                L"Network.setCacheDisabled",
+                L"{\"cacheDisabled\": true}",
+                nullptr
+            );
         }
     }
 
@@ -339,10 +393,12 @@ private:
 
     bool m_debug;
     bool m_externalWindow = true;
+    bool m_disableCache;
     HWND m_hwnd;
     std::string m_title;
     std::string m_url;
     std::string m_frontendPath;
+    std::string m_userDataFolder;
     int m_width = 800;
     int m_height = 600;
     int m_hints = WEBVIEW_HINT_NONE;

@@ -161,6 +161,15 @@
   overflow-y: auto;
 }
 
+.formModeIndicator {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #bbbbbb);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #3c3f41);
+}
+
 .formGroup {
   margin-bottom: 16px;
 }

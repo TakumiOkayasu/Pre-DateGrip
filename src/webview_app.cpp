@@ -80,6 +80,9 @@ void WebViewApp::createAndConfigureWebView() {
     m_webview->set_title("Pre-DateGrip");
     m_webview->set_size(1280, 800, WEBVIEW_HINT_NONE);
 
+    // Disable browser cache to always load fresh content
+    m_webview->set_disable_cache(true);
+
     m_webview->bind("invoke", [this](const std::string& request) -> std::string {
         // DEBUG: Log raw request to file
         {

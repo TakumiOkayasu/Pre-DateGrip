@@ -196,6 +196,7 @@ std::string SettingsManager::serializeSettings() const {
         json += std::format("      \"id\": \"{}\",\n", JsonUtils::escapeString(profile.id));
         json += std::format("      \"name\": \"{}\",\n", JsonUtils::escapeString(profile.name));
         json += std::format("      \"server\": \"{}\",\n", JsonUtils::escapeString(profile.server));
+        json += std::format("      \"port\": {},\n", profile.port);
         json += std::format("      \"database\": \"{}\",\n", JsonUtils::escapeString(profile.database));
         json += std::format("      \"username\": \"{}\",\n", JsonUtils::escapeString(profile.username));
         json += std::format("      \"useWindowsAuth\": {},\n", profile.useWindowsAuth ? "true" : "false");
@@ -276,6 +277,8 @@ bool SettingsManager::deserializeSettings(std::string_view jsonStr) {
                     profile.name = std::string(val.value());
                 if (auto val = profileEl["server"].get_string(); !val.error())
                     profile.server = std::string(val.value());
+                if (auto val = profileEl["port"].get_int64(); !val.error())
+                    profile.port = static_cast<int>(val.value());
                 if (auto val = profileEl["database"].get_string(); !val.error())
                     profile.database = std::string(val.value());
                 if (auto val = profileEl["username"].get_string(); !val.error())

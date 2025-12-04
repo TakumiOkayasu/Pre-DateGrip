@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
 import styles from './ConnectionDialog.module.css';
 
@@ -26,140 +26,260 @@ interface SavedProfile {
   database: string;
   username: string;
   useWindowsAuth: boolean;
+  savePassword: boolean;
 }
 
-const STORAGE_KEY = 'pre-dategrip-connection-profiles';
-
-function loadProfiles(): SavedProfile[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Failed to load connection profiles:', e);
-  }
-  return [];
-}
-
-function saveProfiles(profiles: SavedProfile[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
-  } catch (e) {
-    console.error('Failed to save connection profiles:', e);
-  }
-}
+const DEFAULT_CONFIG: ConnectionConfig = {
+  name: 'New Connection',
+  server: 'localhost',
+  port: 1433,
+  database: 'master',
+  username: '',
+  password: '',
+  useWindowsAuth: true,
+};
 
 export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialogProps) {
   const [profiles, setProfiles] = useState<SavedProfile[]>([]);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const [config, setConfig] = useState<ConnectionConfig>({
-    name: 'New Connection',
-    server: 'localhost',
-    port: 1433,
-    database: 'master',
-    username: '',
-    password: '',
-    useWindowsAuth: true,
-  });
+  // Use explicit mode tracking instead of relying on selectedProfileId being null
+  const [mode, setMode] = useState<'new' | 'edit'>('new');
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [savePassword, setSavePassword] = useState(false);
+  const [config, setConfig] = useState<ConnectionConfig>({ ...DEFAULT_CONFIG });
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
+  const [, setIsLoading] = useState(false);
 
-  const loadProfile = useCallback((profile: SavedProfile) => {
+  // Use a ref to track which profile we're loading to prevent race conditions
+  const loadingProfileIdRef = useRef<string | null>(null);
+  // Counter to invalidate stale async operations
+  const operationCounterRef = useRef(0);
+
+  const loadProfile = useCallback(async (profile: SavedProfile, operationId: number) => {
+    // Mark which profile we're loading
+    loadingProfileIdRef.current = profile.id;
+
+    let password = '';
+    // Load password from backend if saved
+    if (profile.savePassword) {
+      try {
+        const result = await bridge.getProfilePassword(profile.id);
+        // Check if this operation is still valid
+        if (operationCounterRef.current !== operationId) {
+          return; // Abort - operation was invalidated
+        }
+        if (result.password) {
+          password = result.password;
+        }
+      } catch (e) {
+        console.error('Failed to load password:', e);
+      }
+    }
+
+    // Double-check this operation is still valid
+    if (operationCounterRef.current !== operationId) {
+      return; // Abort - operation was invalidated
+    }
+
     setConfig({
       name: profile.name,
       server: profile.server,
       port: profile.port,
       database: profile.database,
       username: profile.username,
-      password: '', // Password is not saved
+      password,
       useWindowsAuth: profile.useWindowsAuth,
     });
+    setSavePassword(profile.savePassword);
     setTestResult(null);
+    setMode('edit');
+    setEditingProfileId(profile.id);
   }, []);
 
   const handleNewProfile = useCallback(() => {
-    setSelectedProfileId(null);
-    setConfig({
-      name: 'New Connection',
-      server: 'localhost',
-      port: 1433,
-      database: 'master',
-      username: '',
-      password: '',
-      useWindowsAuth: true,
-    });
+    // Invalidate any in-flight operations
+    operationCounterRef.current += 1;
+    loadingProfileIdRef.current = null;
+
+    // Explicitly set to new mode
+    setMode('new');
+    setEditingProfileId(null);
+    setConfig({ ...DEFAULT_CONFIG });
+    setSavePassword(false);
     setTestResult(null);
   }, []);
 
-  // Load profiles on mount
+  // Refs to capture current state for async operations
+  const modeRef = useRef(mode);
+  const editingProfileIdRef = useRef(editingProfileId);
+  modeRef.current = mode;
+  editingProfileIdRef.current = editingProfileId;
+
+  // Load profiles from backend on mount (only when dialog opens)
   useEffect(() => {
     if (isOpen) {
-      const loaded = loadProfiles();
-      setProfiles(loaded);
-      // Select first profile if available
-      if (loaded.length > 0 && !selectedProfileId) {
-        setSelectedProfileId(loaded[0].id);
-        loadProfile(loaded[0]);
-      }
+      setIsLoading(true);
+      const currentOperationId = operationCounterRef.current;
+
+      bridge
+        .getConnectionProfiles()
+        .then((result) => {
+          // Check if operation is still valid
+          if (operationCounterRef.current !== currentOperationId) {
+            return;
+          }
+
+          const loaded: SavedProfile[] = result.profiles.map((p) => ({
+            id: p.id,
+            name: p.name,
+            server: p.server,
+            port: p.port ?? 1433,
+            database: p.database,
+            username: p.username,
+            useWindowsAuth: p.useWindowsAuth,
+            savePassword: p.savePassword ?? false,
+          }));
+          setProfiles(loaded);
+
+          // Select first profile if available and we're in new mode with no editing profile
+          // Use refs to get current state without adding dependencies
+          if (
+            loaded.length > 0 &&
+            modeRef.current === 'new' &&
+            editingProfileIdRef.current === null
+          ) {
+            const newOperationId = ++operationCounterRef.current;
+            // Inline the profile loading to avoid dependency on loadProfile
+            const profile = loaded[0];
+            loadingProfileIdRef.current = profile.id;
+
+            const loadPasswordAndSetConfig = async () => {
+              let password = '';
+              if (profile.savePassword) {
+                try {
+                  const passwordResult = await bridge.getProfilePassword(profile.id);
+                  if (operationCounterRef.current !== newOperationId) return;
+                  if (passwordResult.password) {
+                    password = passwordResult.password;
+                  }
+                } catch (e) {
+                  console.error('Failed to load password:', e);
+                }
+              }
+              if (operationCounterRef.current !== newOperationId) return;
+
+              setConfig({
+                name: profile.name,
+                server: profile.server,
+                port: profile.port,
+                database: profile.database,
+                username: profile.username,
+                password,
+                useWindowsAuth: profile.useWindowsAuth,
+              });
+              setSavePassword(profile.savePassword);
+              setTestResult(null);
+              setMode('edit');
+              setEditingProfileId(profile.id);
+            };
+            loadPasswordAndSetConfig();
+          }
+        })
+        .catch((e) => {
+          console.error('Failed to load profiles:', e);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
-  }, [isOpen, loadProfile, selectedProfileId]);
+  }, [isOpen]);
 
   const handleProfileSelect = (profileId: string) => {
-    setSelectedProfileId(profileId);
     const profile = profiles.find((p) => p.id === profileId);
     if (profile) {
-      loadProfile(profile);
+      const operationId = ++operationCounterRef.current;
+      loadProfile(profile, operationId);
     }
   };
 
-  const handleSaveProfile = useCallback(() => {
-    const newProfile: SavedProfile = {
-      id: selectedProfileId || `profile-${Date.now()}`,
-      name: config.name,
-      server: config.server,
-      port: config.port,
-      database: config.database,
-      username: config.username,
-      useWindowsAuth: config.useWindowsAuth,
-    };
+  const handleSaveProfile = useCallback(async () => {
+    // Capture the current mode at the time of save
+    const isNewProfile = mode === 'new';
+    const currentEditingId = editingProfileId;
 
-    let updatedProfiles: SavedProfile[];
-    if (selectedProfileId) {
-      // Update existing
-      updatedProfiles = profiles.map((p) => (p.id === selectedProfileId ? newProfile : p));
-    } else {
-      // Add new
-      updatedProfiles = [...profiles, newProfile];
-      setSelectedProfileId(newProfile.id);
+    try {
+      // For new profiles, send empty ID; for edits, send the editing profile's ID
+      const result = await bridge.saveConnectionProfile({
+        id: isNewProfile ? '' : (currentEditingId ?? ''),
+        name: config.name,
+        server: config.server,
+        port: config.port,
+        database: config.database,
+        username: config.username,
+        useWindowsAuth: config.useWindowsAuth,
+        savePassword,
+        password: savePassword ? config.password : undefined,
+      });
+
+      const savedProfile: SavedProfile = {
+        id: result.id,
+        name: config.name,
+        server: config.server,
+        port: config.port,
+        database: config.database,
+        username: config.username,
+        useWindowsAuth: config.useWindowsAuth,
+        savePassword,
+      };
+
+      let updatedProfiles: SavedProfile[];
+      if (isNewProfile) {
+        // Add new profile to the list
+        updatedProfiles = [...profiles, savedProfile];
+      } else {
+        // Update existing profile
+        updatedProfiles = profiles.map((p) => (p.id === currentEditingId ? savedProfile : p));
+      }
+
+      setProfiles(updatedProfiles);
+      // Switch to edit mode for the saved profile
+      setMode('edit');
+      setEditingProfileId(result.id);
+      setTestResult({ success: true, message: 'Profile saved' });
+    } catch (e) {
+      console.error('Failed to save profile:', e);
+      setTestResult({ success: false, message: 'Failed to save profile' });
     }
+  }, [config, profiles, mode, editingProfileId, savePassword]);
 
-    setProfiles(updatedProfiles);
-    saveProfiles(updatedProfiles);
-  }, [config, profiles, selectedProfileId]);
-
-  const handleDeleteProfile = useCallback(() => {
-    if (!selectedProfileId) return;
+  const handleDeleteProfile = useCallback(async () => {
+    if (mode !== 'edit' || !editingProfileId) return;
 
     const confirmed = window.confirm(`Delete profile "${config.name}"?`);
     if (!confirmed) return;
 
-    const updatedProfiles = profiles.filter((p) => p.id !== selectedProfileId);
-    setProfiles(updatedProfiles);
-    saveProfiles(updatedProfiles);
+    try {
+      await bridge.deleteConnectionProfile(editingProfileId);
 
-    // Select another profile or clear
-    if (updatedProfiles.length > 0) {
-      setSelectedProfileId(updatedProfiles[0].id);
-      loadProfile(updatedProfiles[0]);
-    } else {
-      handleNewProfile();
+      const updatedProfiles = profiles.filter((p) => p.id !== editingProfileId);
+      setProfiles(updatedProfiles);
+
+      // Select another profile or switch to new mode
+      if (updatedProfiles.length > 0) {
+        const operationId = ++operationCounterRef.current;
+        loadProfile(updatedProfiles[0], operationId);
+      } else {
+        handleNewProfile();
+      }
+    } catch (e) {
+      console.error('Failed to delete profile:', e);
+      setTestResult({ success: false, message: 'Failed to delete profile' });
     }
-  }, [selectedProfileId, profiles, config.name, handleNewProfile, loadProfile]);
+  }, [editingProfileId, mode, profiles, config.name, handleNewProfile, loadProfile]);
 
   if (!isOpen) return null;
 
@@ -235,7 +355,7 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
               {profiles.map((profile) => (
                 <div
                   key={profile.id}
-                  className={`${styles.profileItem} ${selectedProfileId === profile.id ? styles.selected : ''}`}
+                  className={`${styles.profileItem} ${mode === 'edit' && editingProfileId === profile.id ? styles.selected : ''}`}
                   onClick={() => handleProfileSelect(profile.id)}
                 >
                   <span className={styles.profileIcon}>🗄️</span>
@@ -255,6 +375,10 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
 
           {/* Right: Connection Form */}
           <div className={styles.content}>
+            {/* Show indicator for new vs edit mode */}
+            <div className={styles.formModeIndicator}>
+              {mode === 'new' ? 'New Connection' : 'Edit Connection'}
+            </div>
             <div className={styles.formGroup}>
               <label>Connection Name</label>
               <input
@@ -327,6 +451,17 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
                     onChange={(e) => handleChange('password', e.target.value)}
                   />
                 </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={savePassword}
+                      onChange={(e) => setSavePassword(e.target.checked)}
+                    />
+                    Save password (encrypted)
+                  </label>
+                </div>
               </>
             )}
 
@@ -344,11 +479,11 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
           <button
             className={styles.saveButton}
             onClick={handleSaveProfile}
-            title="Save connection profile"
+            title={mode === 'new' ? 'Save as new profile' : 'Update profile'}
           >
-            Save
+            {mode === 'new' ? 'Save New' : 'Save'}
           </button>
-          {selectedProfileId && (
+          {mode === 'edit' && editingProfileId && (
             <button
               className={styles.deleteButton}
               onClick={handleDeleteProfile}

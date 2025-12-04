@@ -93,6 +93,7 @@ private:
     [[nodiscard]] std::string getConnectionProfiles(std::string_view params);
     [[nodiscard]] std::string saveConnectionProfile(std::string_view params);
     [[nodiscard]] std::string deleteConnectionProfile(std::string_view params);
+    [[nodiscard]] std::string getProfilePassword(std::string_view params);
 
     // Session operations
     [[nodiscard]] std::string getSessionState(std::string_view params);

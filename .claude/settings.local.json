@@ -73,7 +73,10 @@
       "Bash(gh issue create:*)",
       "Bash(gh label list:*)",
       "Bash(gh label create:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(C:nvm4wnodejsnpx.cmd biome lint --error-on-warnings \"D:\\prog\\Pre-DateGrip\\frontend\\src\\components\\dialogs\\ConnectionDialog.tsx\")",
+      "Bash(bun run build)",
+      "Bash(bun run test:*)"
     ],
     "deny": [],
     "ask": []

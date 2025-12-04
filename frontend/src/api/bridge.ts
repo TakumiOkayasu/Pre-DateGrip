@@ -355,16 +355,18 @@ class Bridge {
   }
 
   // Connection profile methods
-  async getConnectionProfiles(): Promise<
-    {
+  async getConnectionProfiles(): Promise<{
+    profiles: {
       id: string;
       name: string;
       server: string;
+      port?: number;
       database: string;
       username: string;
       useWindowsAuth: boolean;
-    }[]
-  > {
+      savePassword?: boolean;
+    }[];
+  }> {
     return this.call('getConnectionProfiles', {});
   }
 
@@ -372,15 +374,22 @@ class Bridge {
     id?: string;
     name: string;
     server: string;
+    port?: number;
     database: string;
     username?: string;
     useWindowsAuth: boolean;
+    savePassword?: boolean;
+    password?: string;
   }): Promise<{ id: string }> {
     return this.call('saveConnectionProfile', profile);
   }
 
   async deleteConnectionProfile(id: string): Promise<{ deleted: boolean }> {
     return this.call('deleteConnectionProfile', { id });
+  }
+
+  async getProfilePassword(profileId: string): Promise<{ password: string }> {
+    return this.call('getProfilePassword', { id: profileId });
   }
 
   // Session methods

@@ -9,10 +9,10 @@ import type {
 import { AgGridReact } from 'ag-grid-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
-import { darkTheme } from '../../main';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useEditStore } from '../../store/editStore';
 import { useActiveQuery, useQueryActions, useQueryStore } from '../../store/queryStore';
+import { darkTheme } from '../../theme/agGridTheme';
 import { ExportDialog } from '../export/ExportDialog';
 import styles from './ResultGrid.module.css';
 
@@ -72,26 +72,29 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!resultSet) return [];
 
-    // Calculate optimal width for each column based on content
+    // Calculate optimal width for each column based on header and content (use larger)
     const calculateColumnWidth = (colName: string, colIndex: number): number => {
-      const CHAR_WIDTH = 8; // Approximate character width in pixels
-      const PADDING = 24; // Cell padding
-      const MIN_WIDTH = 80;
+      const CHAR_WIDTH = 9; // Approximate character width in pixels (monospace)
+      const HEADER_PADDING = 48; // Header padding (includes sort/filter icons)
+      const CELL_PADDING = 24; // Cell padding
       const MAX_WIDTH = 400;
 
-      // Start with header length
-      let maxLength = colName.length;
+      // Calculate header width - this is the minimum width to show full header
+      const headerWidth = colName.length * CHAR_WIDTH + HEADER_PADDING;
 
-      // Sample first 100 rows to find max content length
+      // Find max content length from first 100 rows
+      let maxContentLength = 0;
       const sampleSize = Math.min(resultSet.rows.length, 100);
       for (let i = 0; i < sampleSize; i++) {
         const cellValue = resultSet.rows[i][colIndex];
         const displayValue = cellValue === null || cellValue === '' ? 'NULL' : cellValue;
-        maxLength = Math.max(maxLength, displayValue.length);
+        maxContentLength = Math.max(maxContentLength, displayValue.length);
       }
+      const contentWidth = maxContentLength * CHAR_WIDTH + CELL_PADDING;
 
-      const calculatedWidth = maxLength * CHAR_WIDTH + PADDING;
-      return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
+      // Use the larger of header width and content width (header is minimum)
+      const calculatedWidth = Math.max(headerWidth, contentWidth);
+      return Math.min(MAX_WIDTH, calculatedWidth);
     };
 
     return resultSet.columns.map((col, colIndex) => ({
@@ -101,7 +104,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       width: calculateColumnWidth(col.name, colIndex),
       sortable: true,
       filter: true,
-      resizable: true,
+      resizable: false,
       editable: isEditMode,
       cellClass: (params: CellClassParams) => {
         const classes: string[] = [];
@@ -151,14 +154,6 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const onGridReady = useCallback((params: GridReadyEvent) => {
     setGridApi(params.api);
   }, []);
-
-  const handleAutoSizeColumns = useCallback(() => {
-    if (!gridApi) return;
-    const allColumnIds = gridApi.getColumns()?.map((col) => col.getColId()) ?? [];
-    if (allColumnIds.length > 0) {
-      gridApi.autoSizeColumns(allColumnIds, false);
-    }
-  }, [gridApi]);
 
   const onCellValueChanged = useCallback(
     (event: CellValueChangedEvent) => {
@@ -480,13 +475,6 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         {applyError && <span className={styles.errorIndicator}>{applyError}</span>}
         <div className={styles.toolbarSpacer} />
         <button
-          onClick={handleAutoSizeColumns}
-          className={styles.toolbarButton}
-          title="Auto-size columns to fit content"
-        >
-          Resize
-        </button>
-        <button
           onClick={() => setIsExportDialogOpen(true)}
           className={styles.toolbarButton}
           title="Export Data"
@@ -535,11 +523,10 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           columnDefs={columnDefs}
           rowData={rowData}
           defaultColDef={{
-            minWidth: 80,
             sortable: true,
             filter: true,
-            resizable: true,
-            suppressSizeToFit: true,
+            resizable: false,
+            suppressMovable: true,
           }}
           onGridReady={onGridReady}
           onCellValueChanged={onCellValueChanged}
@@ -556,6 +543,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           stopEditingWhenCellsLoseFocus={true}
           singleClickEdit={false}
           suppressColumnVirtualisation={true}
+          suppressMovableColumns={true}
         />
       </div>
       <div className={styles.statusBar}>

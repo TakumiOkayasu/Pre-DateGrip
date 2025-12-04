@@ -17,6 +17,7 @@ struct ConnectionProfile {
     std::string id;
     std::string name;
     std::string server;
+    int port = 1433;
     std::string database;
     std::string username;
     bool useWindowsAuth = true;
