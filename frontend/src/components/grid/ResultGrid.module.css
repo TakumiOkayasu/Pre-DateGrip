@@ -1,11 +1,17 @@
 .container {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .grid {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .message {
@@ -42,6 +48,7 @@
   border-top: 1px solid var(--border-color);
   font-size: 12px;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .nullCell {
@@ -57,6 +64,7 @@
   background-color: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   align-items: center;
+  flex-shrink: 0;
 }
 
 .toolbarButton {
@@ -130,4 +138,41 @@
   padding: 2px 8px;
   background-color: rgba(220, 220, 170, 0.2);
   border-radius: 2px;
+}
+
+.filterBar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.filterLabel {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.filterInput {
+  flex: 1;
+  padding: 4px 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.filterInput:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.filterInput::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
 }

@@ -15,9 +15,12 @@
   background: var(--bg-secondary, #2b2b2b);
   border: 1px solid var(--border-color, #3c3f41);
   border-radius: 6px;
-  width: 450px;
+  width: 700px;
   max-width: 90vw;
+  max-height: 80vh;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
 }
 
 .header {
@@ -26,6 +29,7 @@
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color, #3c3f41);
+  flex-shrink: 0;
 }
 
 .header h2 {
@@ -49,8 +53,112 @@
   color: var(--text-primary, #bbbbbb);
 }
 
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left Panel - Profile List */
+.profileList {
+  width: 220px;
+  border-right: 1px solid var(--border-color, #3c3f41);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-tertiary, #313335);
+}
+
+.profileListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, #3c3f41);
+  font-size: 12px;
+  color: var(--text-secondary, #808080);
+}
+
+.profileAddButton {
+  background: none;
+  border: 1px solid var(--border-color, #3c3f41);
+  color: var(--text-secondary, #808080);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profileAddButton:hover {
+  background: var(--bg-hover, #3c3f41);
+  color: var(--text-primary, #bbbbbb);
+}
+
+.profileItems {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.profileItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color, #3c3f41);
+}
+
+.profileItem:hover {
+  background: var(--bg-hover, #3c3f41);
+}
+
+.profileItem.selected {
+  background: var(--selection-bg, #214283);
+}
+
+.profileIcon {
+  font-size: 18px;
+}
+
+.profileInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.profileName {
+  font-size: 13px;
+  color: var(--text-primary, #bbbbbb);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profileServer {
+  font-size: 11px;
+  color: var(--text-secondary, #808080);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.noProfiles {
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--text-secondary, #808080);
+  font-size: 12px;
+}
+
+/* Right Panel - Form */
 .content {
+  flex: 1;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .formGroup {
@@ -78,6 +186,44 @@
 }
 
 .formGroup input:focus {
+  outline: none;
+  border-color: var(--accent-color, #4a88c7);
+}
+
+.formRow {
+  display: flex;
+  gap: 16px;
+}
+
+.formRow .formGroup {
+  flex: 1;
+}
+
+.formGroupSmall {
+  width: 100px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.formGroupSmall label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #808080);
+}
+
+.formGroupSmall input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-input, #1e1e1e);
+  border: 1px solid var(--border-color, #3c3f41);
+  border-radius: 4px;
+  color: var(--text-primary, #bbbbbb);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.formGroupSmall input:focus {
   outline: none;
   border-color: var(--accent-color, #4a88c7);
 }
@@ -120,6 +266,7 @@
   padding: 16px 20px;
   border-top: 1px solid var(--border-color, #3c3f41);
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .spacer {
@@ -132,6 +279,24 @@
   font-size: 13px;
   cursor: pointer;
   border: none;
+}
+
+.saveButton {
+  background: #2d5a27;
+  color: white;
+}
+
+.saveButton:hover {
+  background: #3d7a37;
+}
+
+.deleteButton {
+  background: #5a2727;
+  color: white;
+}
+
+.deleteButton:hover {
+  background: #7a3737;
 }
 
 .testButton {

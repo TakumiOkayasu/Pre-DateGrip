@@ -27,9 +27,18 @@ interface ERDiagramState {
     tables: {
       name: string;
       schema: string;
-      columns: { name: string; type: string; nullable: boolean; isPrimaryKey: boolean }[];
+      columns: {
+        name: string;
+        type: string;
+        nullable: boolean;
+        isPrimaryKey: boolean;
+      }[];
     }[],
-    relations: { sourceTable: string; targetTable: string; cardinality: '1:1' | '1:N' | 'N:M' }[]
+    relations: {
+      sourceTable: string;
+      targetTable: string;
+      cardinality: '1:1' | '1:N' | 'N:M';
+    }[]
   ) => void;
 }
 

@@ -31,7 +31,7 @@ export const useSessionStore = create<SessionState>()(
       leftPanelWidth: 250,
       bottomPanelHeight: 200,
       isLeftPanelVisible: true,
-      isBottomPanelVisible: true,
+      isBottomPanelVisible: false,
       lastConnectionId: null,
       openTabs: [],
       activeTabId: null,

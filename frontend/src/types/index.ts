@@ -16,6 +16,8 @@ export interface Query {
   content: string;
   connectionId: string | null;
   isDirty: boolean;
+  sourceTable?: string; // Table name when opened from Object Tree (for WHERE filter)
+  isDataView?: boolean; // True when viewing table data (show grid instead of editor)
 }
 
 // Result types
@@ -52,6 +54,59 @@ export interface TableInfo {
   schema: string;
   name: string;
   type: 'TABLE' | 'VIEW';
+}
+
+// Table metadata types for TableViewer
+export interface IndexInfo {
+  name: string;
+  columns: string[];
+  isUnique: boolean;
+  isPrimaryKey: boolean;
+  type: string; // CLUSTERED, NONCLUSTERED, etc.
+}
+
+export interface ConstraintInfo {
+  name: string;
+  type: 'PRIMARY KEY' | 'UNIQUE' | 'CHECK' | 'DEFAULT';
+  columns: string[];
+  definition: string;
+}
+
+export interface ForeignKeyInfo {
+  name: string;
+  columns: string[];
+  referencedTable: string;
+  referencedColumns: string[];
+  onDelete: string;
+  onUpdate: string;
+}
+
+export interface ReferencingForeignKeyInfo {
+  name: string;
+  referencingTable: string;
+  referencingColumns: string[];
+  columns: string[];
+  onDelete: string;
+  onUpdate: string;
+}
+
+export interface TriggerInfo {
+  name: string;
+  type: string; // AFTER, INSTEAD OF
+  events: string[]; // INSERT, UPDATE, DELETE
+  isEnabled: boolean;
+  definition: string;
+}
+
+export interface TableMetadata {
+  schema: string;
+  name: string;
+  type: 'TABLE' | 'VIEW';
+  rowCount: number;
+  createdAt: string;
+  modifiedAt: string;
+  owner: string;
+  comment: string;
 }
 
 export interface DatabaseObject {

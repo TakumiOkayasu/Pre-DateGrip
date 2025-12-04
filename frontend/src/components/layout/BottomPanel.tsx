@@ -5,11 +5,12 @@ import styles from './BottomPanel.module.css';
 
 interface BottomPanelProps {
   height: number;
+  onClose: () => void;
 }
 
 type TabType = 'results' | 'history';
 
-export function BottomPanel({ height }: BottomPanelProps) {
+export function BottomPanel({ height, onClose }: BottomPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('results');
 
   return (
@@ -27,10 +28,14 @@ export function BottomPanel({ height }: BottomPanelProps) {
         >
           History
         </button>
+        <div className={styles.tabSpacer} />
+        <button className={styles.closeButton} onClick={onClose} title="Close panel">
+          {'\u00D7'}
+        </button>
       </div>
 
       <div className={styles.content}>
-        {activeTab === 'results' && <ResultGrid />}
+        {activeTab === 'results' && <ResultGrid excludeDataView={true} />}
         {activeTab === 'history' && <QueryHistory />}
       </div>
     </div>

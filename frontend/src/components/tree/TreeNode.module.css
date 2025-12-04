@@ -15,10 +15,23 @@
   background-color: var(--bg-hover);
 }
 
+.node.selected {
+  background-color: var(--bg-selected, #2d4f7c);
+  color: var(--text-primary);
+}
+
 .expander {
   width: 12px;
   font-size: 8px;
   color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expander:hover {
+  color: var(--text-primary);
 }
 
 .icon {

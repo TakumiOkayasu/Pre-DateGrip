@@ -20,6 +20,8 @@ interface QueryState {
   cancelQuery: (connectionId: string) => Promise<void>;
   formatQuery: (id: string) => Promise<void>;
   clearError: () => void;
+  openTableData: (connectionId: string, tableName: string, pageSize: number) => Promise<void>;
+  applyWhereFilter: (id: string, connectionId: string, whereClause: string) => Promise<void>;
 }
 
 let queryCounter = 0;
@@ -186,6 +188,107 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   clearError: () => {
     set({ error: null });
   },
+
+  openTableData: async (connectionId, tableName, pageSize) => {
+    // Check if tab for this table already exists
+    const existingQuery = get().queries.find(
+      (q) => q.sourceTable === tableName && q.connectionId === connectionId && q.isDataView
+    );
+
+    if (existingQuery) {
+      // Just activate the existing tab
+      set({ activeQueryId: existingQuery.id });
+      return;
+    }
+
+    const id = `query-${++queryCounter}`;
+    const sql = `SELECT TOP ${pageSize} * FROM ${tableName}`;
+    const newQuery: Query = {
+      id,
+      name: tableName,
+      content: sql,
+      connectionId,
+      isDirty: false,
+      sourceTable: tableName,
+      isDataView: true,
+    };
+
+    set((state) => ({
+      queries: [...state.queries, newQuery],
+      activeQueryId: id,
+      isExecuting: true,
+      error: null,
+    }));
+
+    try {
+      const result = await bridge.executeQuery(connectionId, sql);
+
+      const resultSet: ResultSet = {
+        columns: result.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          size: 0,
+          nullable: true,
+          isPrimaryKey: false,
+        })),
+        rows: result.rows,
+        affectedRows: result.affectedRows,
+        executionTimeMs: result.executionTimeMs,
+      };
+
+      set((state) => ({
+        results: { ...state.results, [id]: resultSet },
+        isExecuting: false,
+      }));
+    } catch (error) {
+      set({
+        isExecuting: false,
+        error: error instanceof Error ? error.message : 'Failed to load table data',
+      });
+    }
+  },
+
+  applyWhereFilter: async (id, connectionId, whereClause) => {
+    const query = get().queries.find((q) => q.id === id);
+    if (!query?.sourceTable) return;
+
+    const pageSize = 1000; // Default, could be fetched from settings
+    const baseSql = `SELECT TOP ${pageSize} * FROM ${query.sourceTable}`;
+    const sql = whereClause.trim() ? `${baseSql} WHERE ${whereClause}` : baseSql;
+
+    set((state) => ({
+      queries: state.queries.map((q) => (q.id === id ? { ...q, content: sql, isDirty: true } : q)),
+      isExecuting: true,
+      error: null,
+    }));
+
+    try {
+      const result = await bridge.executeQuery(connectionId, sql);
+
+      const resultSet: ResultSet = {
+        columns: result.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          size: 0,
+          nullable: true,
+          isPrimaryKey: false,
+        })),
+        rows: result.rows,
+        affectedRows: result.affectedRows,
+        executionTimeMs: result.executionTimeMs,
+      };
+
+      set((state) => ({
+        results: { ...state.results, [id]: resultSet },
+        isExecuting: false,
+      }));
+    } catch (error) {
+      set({
+        isExecuting: false,
+        error: error instanceof Error ? error.message : 'Failed to apply filter',
+      });
+    }
+  },
 }));
 
 // Optimized selectors to prevent unnecessary re-renders
@@ -213,5 +316,7 @@ export const useQueryActions = () =>
       cancelQuery: state.cancelQuery,
       formatQuery: state.formatQuery,
       clearError: state.clearError,
+      openTableData: state.openTableData,
+      applyWhereFilter: state.applyWhereFilter,
     }))
   );

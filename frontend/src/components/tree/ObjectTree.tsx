@@ -7,13 +7,15 @@ import { TreeNode } from './TreeNode';
 
 interface ObjectTreeProps {
   filter: string;
+  onTableOpen?: (tableName: string, tableType: 'table' | 'view') => void;
 }
 
-export function ObjectTree({ filter }: ObjectTreeProps) {
+export function ObjectTree({ filter, onTableOpen }: ObjectTreeProps) {
   const { connections, activeConnectionId } = useConnectionStore();
   const [treeData, setTreeData] = useState<DatabaseObject[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [loadingNodes, setLoadingNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
 
@@ -187,6 +189,16 @@ export function ObjectTree({ filter }: ObjectTreeProps) {
 
   const filteredData = filterTree(treeData);
 
+  const handleTableOpen = useCallback(
+    (nodeId: string, tableName: string, tableType: 'table' | 'view') => {
+      setSelectedNodeId(nodeId);
+      if (onTableOpen) {
+        onTableOpen(tableName, tableType);
+      }
+    },
+    [onTableOpen]
+  );
+
   if (!activeConnectionId) {
     return <div className={styles.noConnection}>No active connection</div>;
   }
@@ -204,7 +216,9 @@ export function ObjectTree({ filter }: ObjectTreeProps) {
           level={0}
           expandedNodes={expandedNodes}
           loadingNodes={loadingNodes}
-          onToggle={(id) => toggleNode(id, node)}
+          selectedNodeId={selectedNodeId}
+          onToggle={toggleNode}
+          onTableOpen={handleTableOpen}
         />
       ))}
     </div>

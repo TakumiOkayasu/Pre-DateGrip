@@ -147,7 +147,12 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
             <label>Format</label>
             <select
               value={options.format}
-              onChange={(e) => setOptions({ ...options, format: e.target.value as ExportFormat })}
+              onChange={(e) =>
+                setOptions({
+                  ...options,
+                  format: e.target.value as ExportFormat,
+                })
+              }
             >
               <option value="csv">CSV</option>
               <option value="json">JSON</option>

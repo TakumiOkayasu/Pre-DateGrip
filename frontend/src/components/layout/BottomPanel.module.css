@@ -11,6 +11,26 @@
   gap: 0;
   background-color: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
+  align-items: center;
+}
+
+.tabSpacer {
+  flex: 1;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 12px;
+  line-height: 1;
+}
+
+.closeButton:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
 }
 
 .tab {
@@ -34,6 +54,9 @@
 }
 
 .content {
-  flex: 1;
+  flex: 1 1 0;
   overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }

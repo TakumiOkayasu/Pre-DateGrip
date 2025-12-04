@@ -143,7 +143,11 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
 }
 
 // Parse A5:ER XML format
-function parseA5ERContent(content: string): { tables: A5ERTable[]; relations: A5ERRelation[] } {
+// A5:ER uses 'Entity' and 'Attribute' elements (not 'ENTITY' and 'ATTR')
+function parseA5ERContent(content: string): {
+  tables: A5ERTable[];
+  relations: A5ERRelation[];
+} {
   const tables: A5ERTable[] = [];
   const relations: A5ERRelation[] = [];
 
@@ -151,56 +155,74 @@ function parseA5ERContent(content: string): { tables: A5ERTable[]; relations: A5
     const parser = new DOMParser();
     const doc = parser.parseFromString(content, 'text/xml');
 
+    // Check for XML parse errors
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      throw new Error(`XML parse error: ${parseError.textContent}`);
+    }
+
+    // A5:ER root element
+    const root = doc.querySelector('A5ER');
+    if (!root) {
+      throw new Error('Invalid A5:ER file: missing A5ER root element');
+    }
+
     // Parse tables (Entity elements)
-    const entityElements = doc.querySelectorAll('ENTITY');
-    entityElements.forEach((entity) => {
-      const tableName = entity.getAttribute('Name') || entity.getAttribute('name') || '';
-      const schema = entity.getAttribute('Schema') || entity.getAttribute('schema') || 'dbo';
+    const entityElements = doc.querySelectorAll('Entity');
+    for (const entity of entityElements) {
+      const tableName = entity.getAttribute('Name') || '';
+      const schema = entity.getAttribute('Schema') || 'dbo';
 
       const columns: A5ERColumn[] = [];
-      const attrElements = entity.querySelectorAll('ATTR');
+      const attrElements = entity.querySelectorAll('Attribute');
 
-      attrElements.forEach((attr) => {
-        const colName = attr.getAttribute('Name') || attr.getAttribute('name') || '';
-        const colType = attr.getAttribute('Type') || attr.getAttribute('type') || 'varchar(255)';
-        const isPK =
-          attr.getAttribute('PrimaryKey') === '1' || attr.getAttribute('primarykey') === 'true';
+      for (const attr of attrElements) {
+        const colName = attr.getAttribute('Name') || '';
+        const colType = attr.getAttribute('Type') || 'NVARCHAR(255)';
+        const isPK = attr.getAttribute('PK') === 'true' || attr.getAttribute('PK') === '1';
         const isNullable =
-          attr.getAttribute('NotNull') !== '1' && attr.getAttribute('notnull') !== 'true';
+          attr.getAttribute('Nullable') !== 'false' && attr.getAttribute('Nullable') !== '0';
 
-        columns.push({
-          name: colName,
-          type: colType,
-          nullable: isNullable,
-          isPrimaryKey: isPK,
-          isForeignKey: false,
-        });
-      });
+        if (colName) {
+          columns.push({
+            name: colName,
+            type: colType,
+            nullable: isNullable,
+            isPrimaryKey: isPK,
+            isForeignKey: false,
+          });
+        }
+      }
 
       if (tableName) {
         tables.push({ name: tableName, schema, columns });
       }
-    });
+    }
 
     // Parse relations (Relation elements)
-    const relationElements = doc.querySelectorAll('RELATION');
-    relationElements.forEach((rel) => {
-      const sourceTable = rel.getAttribute('Entity1') || rel.getAttribute('entity1') || '';
-      const targetTable = rel.getAttribute('Entity2') || rel.getAttribute('entity2') || '';
+    const relationElements = doc.querySelectorAll('Relation');
+    for (const rel of relationElements) {
+      const sourceTable = rel.getAttribute('ParentEntity') || '';
+      const targetTable = rel.getAttribute('ChildEntity') || '';
+      const sourceColumn = rel.getAttribute('ParentAttribute') || 'id';
+      const targetColumn = rel.getAttribute('ChildAttribute') || `${sourceTable.toLowerCase()}_id`;
       const cardinality = rel.getAttribute('Cardinality') || '1:N';
 
       if (sourceTable && targetTable) {
         relations.push({
           sourceTable,
           targetTable,
-          sourceColumn: 'id',
-          targetColumn: `${sourceTable.toLowerCase()}_id`,
+          sourceColumn,
+          targetColumn,
           cardinality: cardinality as '1:1' | '1:N' | 'N:M',
         });
       }
-    });
+    }
+
+    console.log('[A5ER] Parsed tables:', tables.length, 'relations:', relations.length);
   } catch (err) {
     console.error('Failed to parse A5:ER content:', err);
+    throw err;
   }
 
   return { tables, relations };

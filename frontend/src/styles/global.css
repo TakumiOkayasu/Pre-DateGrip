@@ -72,15 +72,3 @@ button {
 input {
   font-family: inherit;
 }
-
-/* AG Grid Dark Theme Overrides */
-.ag-theme-alpine-dark {
-  --ag-background-color: var(--bg-primary);
-  --ag-header-background-color: var(--bg-secondary);
-  --ag-odd-row-background-color: var(--bg-tertiary);
-  --ag-row-hover-color: var(--bg-hover);
-  --ag-selected-row-background-color: var(--selection-bg);
-  --ag-border-color: var(--border-color);
-  --ag-foreground-color: var(--text-primary);
-  --ag-header-foreground-color: var(--text-primary);
-}

@@ -9,12 +9,11 @@ import type {
 import { AgGridReact } from 'ag-grid-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
+import { darkTheme } from '../../main';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useEditStore } from '../../store/editStore';
-import { useQueryStore } from '../../store/queryStore';
+import { useActiveQuery, useQueryActions, useQueryStore } from '../../store/queryStore';
 import { ExportDialog } from '../export/ExportDialog';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
 import styles from './ResultGrid.module.css';
 
 type RowData = Record<string, string | null>;
@@ -29,9 +28,24 @@ function getRowData(node: IRowNode): RowData | null {
   return null;
 }
 
-export function ResultGrid() {
-  const { activeQueryId, results, isExecuting, error } = useQueryStore();
+interface ResultGridProps {
+  queryId?: string; // Optional: if provided, shows result for this specific query instead of active query
+  excludeDataView?: boolean; // If true, don't show results when active query is a data view
+}
+
+export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps = {}) {
+  const { activeQueryId, queries, results, isExecuting, error } = useQueryStore();
   const activeConnectionId = useConnectionStore((state) => state.activeConnectionId);
+  const activeQueryFromStore = useActiveQuery();
+
+  // When excludeDataView is true, check if the active query is a data view
+  const currentActiveQuery = queries.find((q) => q.id === activeQueryId);
+  const isActiveDataView = currentActiveQuery?.isDataView === true;
+
+  // If excludeDataView and active query is a data view, don't show any result
+  const targetQueryId = excludeDataView && isActiveDataView ? null : (queryId ?? activeQueryId);
+  const { applyWhereFilter } = useQueryActions();
+  const [whereClause, setWhereClause] = useState('');
   const {
     isEditMode,
     setEditMode,
@@ -53,14 +67,38 @@ export function ResultGrid() {
   const [isApplying, setIsApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
-  const resultSet = activeQueryId ? (results[activeQueryId] ?? null) : null;
+  const resultSet = targetQueryId ? (results[targetQueryId] ?? null) : null;
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!resultSet) return [];
-    return resultSet.columns.map((col) => ({
+
+    // Calculate optimal width for each column based on content
+    const calculateColumnWidth = (colName: string, colIndex: number): number => {
+      const CHAR_WIDTH = 8; // Approximate character width in pixels
+      const PADDING = 24; // Cell padding
+      const MIN_WIDTH = 80;
+      const MAX_WIDTH = 400;
+
+      // Start with header length
+      let maxLength = colName.length;
+
+      // Sample first 100 rows to find max content length
+      const sampleSize = Math.min(resultSet.rows.length, 100);
+      for (let i = 0; i < sampleSize; i++) {
+        const cellValue = resultSet.rows[i][colIndex];
+        const displayValue = cellValue === null || cellValue === '' ? 'NULL' : cellValue;
+        maxLength = Math.max(maxLength, displayValue.length);
+      }
+
+      const calculatedWidth = maxLength * CHAR_WIDTH + PADDING;
+      return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
+    };
+
+    return resultSet.columns.map((col, colIndex) => ({
       field: col.name,
       headerName: col.name,
       headerTooltip: `${col.name} (${col.type})`,
+      width: calculateColumnWidth(col.name, colIndex),
       sortable: true,
       filter: true,
       resizable: true,
@@ -99,7 +137,9 @@ export function ResultGrid() {
   const rowData = useMemo(() => {
     if (!resultSet) return [];
     return resultSet.rows.map((row, rowIndex) => {
-      const obj: Record<string, string | null> = { __rowIndex: String(rowIndex + 1) };
+      const obj: Record<string, string | null> = {
+        __rowIndex: String(rowIndex + 1),
+      };
       resultSet.columns.forEach((col, idx) => {
         const value = row[idx];
         obj[col.name] = value === '' || value === undefined ? null : value;
@@ -109,9 +149,16 @@ export function ResultGrid() {
   }, [resultSet]);
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
-    params.api.sizeColumnsToFit();
     setGridApi(params.api);
   }, []);
+
+  const handleAutoSizeColumns = useCallback(() => {
+    if (!gridApi) return;
+    const allColumnIds = gridApi.getColumns()?.map((col) => col.getColId()) ?? [];
+    if (allColumnIds.length > 0) {
+      gridApi.autoSizeColumns(allColumnIds, false);
+    }
+  }, [gridApi]);
 
   const onCellValueChanged = useCallback(
     (event: CellValueChangedEvent) => {
@@ -318,6 +365,27 @@ export function ResultGrid() {
     }
   }, [gridApi, isEditMode, updateCell]);
 
+  const handleApplyWhereFilter = useCallback(() => {
+    if (activeQueryId && activeConnectionId && activeQueryFromStore?.sourceTable) {
+      applyWhereFilter(activeQueryId, activeConnectionId, whereClause);
+    }
+  }, [
+    activeQueryId,
+    activeConnectionId,
+    activeQueryFromStore?.sourceTable,
+    whereClause,
+    applyWhereFilter,
+  ]);
+
+  const handleWhereKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleApplyWhereFilter();
+      }
+    },
+    [handleApplyWhereFilter]
+  );
+
   // Keyboard shortcuts for copy/paste
   useEffect(() => {
     const currentGridApi = gridApi;
@@ -412,6 +480,13 @@ export function ResultGrid() {
         {applyError && <span className={styles.errorIndicator}>{applyError}</span>}
         <div className={styles.toolbarSpacer} />
         <button
+          onClick={handleAutoSizeColumns}
+          className={styles.toolbarButton}
+          title="Auto-size columns to fit content"
+        >
+          Resize
+        </button>
+        <button
           onClick={() => setIsExportDialogOpen(true)}
           className={styles.toolbarButton}
           title="Export Data"
@@ -419,17 +494,52 @@ export function ResultGrid() {
           Export
         </button>
       </div>
-      <div ref={gridContainerRef} className={`ag-theme-alpine-dark ${styles.grid}`}>
+      {activeQueryFromStore?.sourceTable && (
+        <div className={styles.filterBar}>
+          <span className={styles.filterLabel}>WHERE</span>
+          <input
+            type="text"
+            className={styles.filterInput}
+            placeholder="e.g. id > 100 AND name LIKE '%test%'"
+            value={whereClause}
+            onChange={(e) => setWhereClause(e.target.value)}
+            onKeyDown={handleWhereKeyDown}
+          />
+          <button
+            onClick={handleApplyWhereFilter}
+            className={styles.toolbarButton}
+            disabled={isExecuting}
+            title="Apply WHERE filter (Enter)"
+          >
+            Apply
+          </button>
+          <button
+            onClick={() => {
+              setWhereClause('');
+              if (activeQueryId && activeConnectionId) {
+                applyWhereFilter(activeQueryId, activeConnectionId, '');
+              }
+            }}
+            className={styles.toolbarButton}
+            disabled={isExecuting || !whereClause}
+            title="Clear filter"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      <div ref={gridContainerRef} className={styles.grid}>
         <AgGridReact
           ref={gridRef}
+          theme={darkTheme}
           columnDefs={columnDefs}
           rowData={rowData}
           defaultColDef={{
-            flex: 1,
-            minWidth: 100,
+            minWidth: 80,
             sortable: true,
             filter: true,
             resizable: true,
+            suppressSizeToFit: true,
           }}
           onGridReady={onGridReady}
           onCellValueChanged={onCellValueChanged}
@@ -445,6 +555,7 @@ export function ResultGrid() {
           suppressCopyRowsToClipboard={false}
           stopEditingWhenCellsLoseFocus={true}
           singleClickEdit={false}
+          suppressColumnVirtualisation={true}
         />
       </div>
       <div className={styles.statusBar}>

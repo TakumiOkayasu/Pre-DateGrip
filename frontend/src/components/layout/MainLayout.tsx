@@ -18,17 +18,16 @@ export function MainLayout() {
     leftPanelWidth: savedLeftPanelWidth,
     bottomPanelHeight: savedBottomPanelHeight,
     isLeftPanelVisible: savedLeftPanelVisible,
-    isBottomPanelVisible: savedBottomPanelVisible,
     setLeftPanelWidth: saveLeftPanelWidth,
     setBottomPanelHeight: saveBottomPanelHeight,
     setLeftPanelVisible: saveLeftPanelVisible,
-    setBottomPanelVisible: saveBottomPanelVisible,
   } = useSessionStore();
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(savedLeftPanelWidth);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(savedBottomPanelHeight);
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(savedLeftPanelVisible);
-  const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(savedBottomPanelVisible);
+  // Bottom panel is hidden by default on startup, shown when query is executed
+  const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(false);
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false);
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -63,6 +62,8 @@ export function MainLayout() {
   const handleExecute = useCallback(() => {
     if (activeQueryId && activeConnectionId) {
       executeQuery(activeQueryId, activeConnectionId);
+      // Show bottom panel when executing query
+      setIsBottomPanelVisible(true);
     }
   }, [activeQueryId, activeConnectionId, executeQuery]);
 
@@ -105,9 +106,7 @@ export function MainLayout() {
     saveLeftPanelVisible(isLeftPanelVisible);
   }, [isLeftPanelVisible, saveLeftPanelVisible]);
 
-  useEffect(() => {
-    saveBottomPanelVisible(isBottomPanelVisible);
-  }, [isBottomPanelVisible, saveBottomPanelVisible]);
+  // Note: isBottomPanelVisible is NOT persisted - it's always hidden on startup
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -259,7 +258,10 @@ export function MainLayout() {
                   document.addEventListener('mouseup', onMouseUp);
                 }}
               />
-              <BottomPanel height={bottomPanelHeight} />
+              <BottomPanel
+                height={bottomPanelHeight}
+                onClose={() => setIsBottomPanelVisible(false)}
+              />
             </>
           )}
         </div>

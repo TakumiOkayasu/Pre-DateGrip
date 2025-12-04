@@ -59,8 +59,20 @@ export const mockData: Record<string, unknown> = {
   ],
   getColumns: [
     { name: 'id', type: 'int', size: 4, nullable: false, isPrimaryKey: true },
-    { name: 'name', type: 'nvarchar', size: 255, nullable: false, isPrimaryKey: false },
-    { name: 'created_at', type: 'datetime', size: 8, nullable: true, isPrimaryKey: false },
+    {
+      name: 'name',
+      type: 'nvarchar',
+      size: 255,
+      nullable: false,
+      isPrimaryKey: false,
+    },
+    {
+      name: 'created_at',
+      type: 'datetime',
+      size: 8,
+      nullable: true,
+      isPrimaryKey: false,
+    },
   ],
   formatSQL: { sql: 'SELECT\n    *\nFROM\n    users\nWHERE\n    id = 1;' },
   getQueryHistory: [],

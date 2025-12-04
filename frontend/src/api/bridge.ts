@@ -14,10 +14,28 @@ class Bridge {
     };
 
     if (window.invoke) {
-      const responseStr = await window.invoke(JSON.stringify(request));
-      const response: IPCResponse<T> = JSON.parse(responseStr);
+      const requestStr = JSON.stringify(request);
+      console.log('[Bridge] Sending request:', requestStr);
+
+      const responseRaw = await window.invoke(requestStr);
+      console.log('[Bridge] Received response (raw):', responseRaw);
+      console.log('[Bridge] Response type:', typeof responseRaw);
+
+      // If response is already an object, webview may have parsed it
+      let response: IPCResponse<T>;
+      if (typeof responseRaw === 'string') {
+        response = JSON.parse(responseRaw);
+      } else if (typeof responseRaw === 'object' && responseRaw !== null) {
+        // webview already parsed the JSON for us
+        response = responseRaw as IPCResponse<T>;
+      } else {
+        throw new Error(`Unexpected response type: ${typeof responseRaw}`);
+      }
+
+      console.log('[Bridge] Parsed response:', response);
 
       if (!response.success) {
+        console.error('[Bridge] Error response:', response.error);
         throw new Error(response.error || 'Unknown error');
       }
 
@@ -69,7 +87,10 @@ class Bridge {
       connectionInfo.port && connectionInfo.port !== 1433
         ? `${connectionInfo.server},${connectionInfo.port}`
         : connectionInfo.server;
-    return this.call('testConnection', { ...connectionInfo, server: serverWithPort });
+    return this.call('testConnection', {
+      ...connectionInfo,
+      server: serverWithPort,
+    });
   }
 
   // Query methods
@@ -437,6 +458,103 @@ class Bridge {
 
   async quickSearch(connectionId: string, prefix: string, limit = 20): Promise<string[]> {
     return this.call('quickSearch', { connectionId, prefix, limit });
+  }
+
+  // Table metadata methods
+  async getIndexes(
+    connectionId: string,
+    table: string
+  ): Promise<
+    {
+      name: string;
+      columns: string[];
+      isUnique: boolean;
+      isPrimaryKey: boolean;
+      type: string;
+    }[]
+  > {
+    return this.call('getIndexes', { connectionId, table });
+  }
+
+  async getConstraints(
+    connectionId: string,
+    table: string
+  ): Promise<
+    {
+      name: string;
+      type: string;
+      columns: string[];
+      definition: string;
+    }[]
+  > {
+    return this.call('getConstraints', { connectionId, table });
+  }
+
+  async getForeignKeys(
+    connectionId: string,
+    table: string
+  ): Promise<
+    {
+      name: string;
+      columns: string[];
+      referencedTable: string;
+      referencedColumns: string[];
+      onDelete: string;
+      onUpdate: string;
+    }[]
+  > {
+    return this.call('getForeignKeys', { connectionId, table });
+  }
+
+  async getReferencingForeignKeys(
+    connectionId: string,
+    table: string
+  ): Promise<
+    {
+      name: string;
+      referencingTable: string;
+      referencingColumns: string[];
+      columns: string[];
+      onDelete: string;
+      onUpdate: string;
+    }[]
+  > {
+    return this.call('getReferencingForeignKeys', { connectionId, table });
+  }
+
+  async getTriggers(
+    connectionId: string,
+    table: string
+  ): Promise<
+    {
+      name: string;
+      type: string;
+      events: string[];
+      isEnabled: boolean;
+      definition: string;
+    }[]
+  > {
+    return this.call('getTriggers', { connectionId, table });
+  }
+
+  async getTableMetadata(
+    connectionId: string,
+    table: string
+  ): Promise<{
+    schema: string;
+    name: string;
+    type: string;
+    rowCount: number;
+    createdAt: string;
+    modifiedAt: string;
+    owner: string;
+    comment: string;
+  }> {
+    return this.call('getTableMetadata', { connectionId, table });
+  }
+
+  async getTableDDL(connectionId: string, table: string): Promise<{ ddl: string }> {
+    return this.call('getTableDDL', { connectionId, table });
   }
 }
 
