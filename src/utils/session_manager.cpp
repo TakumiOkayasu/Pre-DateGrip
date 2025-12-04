@@ -3,11 +3,13 @@
 #include "json_utils.h"
 #include "simdjson.h"
 
-#include <ShlObj.h>
 #include <Windows.h>
+
 #include <format>
 #include <fstream>
 #include <sstream>
+
+#include <ShlObj.h>
 
 namespace predategrip {
 
@@ -79,7 +81,8 @@ void SessionManager::updateTab(const EditorTab& tab) {
 void SessionManager::removeTab(const std::string& tabId) {
     std::lock_guard lock(m_mutex);
     auto& tabs = m_state.openTabs;
-    tabs.erase(std::remove_if(tabs.begin(), tabs.end(), [&tabId](const EditorTab& t) { return t.id == tabId; }), tabs.end());
+    tabs.erase(std::remove_if(tabs.begin(), tabs.end(), [&tabId](const EditorTab& t) { return t.id == tabId; }),
+               tabs.end());
 }
 
 void SessionManager::setActiveTab(const std::string& tabId) {

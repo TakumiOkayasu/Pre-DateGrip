@@ -56,7 +56,8 @@ AsyncQueryResult AsyncQueryExecutor::getQueryResult(std::string_view queryId) {
 
     auto iter = m_queries.find(std::string(queryId));
     if (iter == m_queries.end()) {
-        return AsyncQueryResult{.queryId = std::string(queryId), .status = QueryStatus::Failed, .errorMessage = "Query not found"};
+        return AsyncQueryResult{
+            .queryId = std::string(queryId), .status = QueryStatus::Failed, .errorMessage = "Query not found"};
     }
 
     auto& task = iter->second;

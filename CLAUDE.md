@@ -290,6 +290,8 @@ uv run scripts/run_lint.py
 - **clang-format 21**でフォーマット（Google style base）
   - CI環境: LLVM 21 (apt.llvm.org)
   - ローカル: `winget install LLVM.LLVM`
+  - **警告もエラーとして扱う** (`--Werror` フラグ使用)
+  - CIでフォーマットチェックが通らない場合は `clang-format -i` で自動修正
 - RAII原則に従う（スマートポインタ使用）
 - ODBCの戻り値は必ずチェック
 

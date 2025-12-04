@@ -147,8 +147,8 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
         SQLSMALLINT decimalDigits = 0;
         SQLSMALLINT nullable = 0;
 
-        ret = SQLDescribeColA(m_stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen, &dataType,
-                              &colSize, &decimalDigits, &nullable);
+        ret = SQLDescribeColA(m_stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen,
+                              &dataType, &colSize, &decimalDigits, &nullable);
         if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
             storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
             throw std::runtime_error(std::string("Failed to describe column: ") + m_lastError);
@@ -183,8 +183,8 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
                 // Get remaining data
                 SQLLEN remainingIndicator = 0;
                 size_t alreadyRead = buffer.size() - 1;
-                ret = SQLGetData(m_stmt, i, SQL_C_CHAR, largeBuffer.data() + alreadyRead,
-                                 requiredSize - alreadyRead, &remainingIndicator);
+                ret = SQLGetData(m_stmt, i, SQL_C_CHAR, largeBuffer.data() + alreadyRead, requiredSize - alreadyRead,
+                                 &remainingIndicator);
                 row.values.emplace_back(reinterpret_cast<char*>(largeBuffer.data()));
             } else if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
                 row.values.emplace_back(reinterpret_cast<char*>(buffer.data()));

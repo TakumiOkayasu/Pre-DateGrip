@@ -3,10 +3,6 @@
 #include "database/async_query_executor.h"
 #include "database/connection_pool.h"
 #include "database/query_history.h"
-#include "utils/global_search.h"
-#include "utils/session_manager.h"
-#include "utils/settings_manager.h"
-#include "utils/simd_filter.h"
 #include "database/result_cache.h"
 #include "database/schema_inspector.h"
 #include "database/sqlserver_driver.h"
@@ -17,7 +13,11 @@
 #include "parsers/a5er_parser.h"
 #include "parsers/sql_formatter.h"
 #include "simdjson.h"
+#include "utils/global_search.h"
 #include "utils/json_utils.h"
+#include "utils/session_manager.h"
+#include "utils/settings_manager.h"
+#include "utils/simd_filter.h"
 
 #include <chrono>
 #include <format>
@@ -252,7 +252,8 @@ std::string IPCHandler::executeSQL(std::string_view params) {
         std::string cacheKey = connectionId + ":" + sqlQuery;
 
         // Check cache for SELECT queries
-        bool isSelectQuery = sqlQuery.find("SELECT") != std::string::npos || sqlQuery.find("select") != std::string::npos;
+        bool isSelectQuery =
+            sqlQuery.find("SELECT") != std::string::npos || sqlQuery.find("select") != std::string::npos;
         if (useCache && isSelectQuery) {
             if (auto cachedResult = m_resultCache->get(cacheKey); cachedResult.has_value()) {
                 // Return cached result
@@ -263,9 +264,9 @@ std::string IPCHandler::executeSQL(std::string_view params) {
                 for (size_t i = 0; i < queryResult.columns.size(); ++i) {
                     if (i > 0)
                         jsonResponse += ',';
-                    jsonResponse += std::format(R"({{"name":"{}","type":"{}"}})",
-                                                JsonUtils::escapeString(queryResult.columns[i].name),
-                                                queryResult.columns[i].type);
+                    jsonResponse +=
+                        std::format(R"({{"name":"{}","type":"{}"}})",
+                                    JsonUtils::escapeString(queryResult.columns[i].name), queryResult.columns[i].type);
                 }
                 jsonResponse += "],";
 
@@ -277,8 +278,8 @@ std::string IPCHandler::executeSQL(std::string_view params) {
                     for (size_t colIndex = 0; colIndex < queryResult.rows[rowIndex].values.size(); ++colIndex) {
                         if (colIndex > 0)
                             jsonResponse += ',';
-                        jsonResponse += std::format(R"("{}")",
-                                                    JsonUtils::escapeString(queryResult.rows[rowIndex].values[colIndex]));
+                        jsonResponse += std::format(
+                            R"("{}")", JsonUtils::escapeString(queryResult.rows[rowIndex].values[colIndex]));
                     }
                     jsonResponse += ']';
                 }
@@ -328,8 +329,8 @@ std::string IPCHandler::executeSQL(std::string_view params) {
         }
         jsonResponse += "],";
 
-        jsonResponse += std::format(R"("affectedRows":{},"executionTimeMs":{},"cached":false}})", queryResult.affectedRows,
-                                    queryResult.executionTimeMs);
+        jsonResponse += std::format(R"("affectedRows":{},"executionTimeMs":{},"cached":false}})",
+                                    queryResult.affectedRows, queryResult.executionTimeMs);
 
         // Record in query history
         HistoryItem historyEntry{
@@ -815,9 +816,9 @@ std::string IPCHandler::getCacheStats(std::string_view) {
     auto currentSize = m_resultCache->getCurrentSize();
     auto maxSize = m_resultCache->getMaxSize();
 
-    std::string jsonResponse = std::format(
-        R"({{"currentSizeBytes":{},"maxSizeBytes":{},"usagePercent":{:.1f}}})", currentSize, maxSize,
-        maxSize > 0 ? (static_cast<double>(currentSize) / static_cast<double>(maxSize)) * 100.0 : 0.0);
+    std::string jsonResponse =
+        std::format(R"({{"currentSizeBytes":{},"maxSizeBytes":{},"usagePercent":{:.1f}}})", currentSize, maxSize,
+                    maxSize > 0 ? (static_cast<double>(currentSize) / static_cast<double>(maxSize)) * 100.0 : 0.0);
 
     return JsonUtils::successResponse(jsonResponse);
 }
@@ -860,21 +861,21 @@ std::string IPCHandler::getAsyncQueryResult(std::string_view params) {
 
         std::string statusStr;
         switch (asyncResult.status) {
-        case QueryStatus::Pending:
-            statusStr = "pending";
-            break;
-        case QueryStatus::Running:
-            statusStr = "running";
-            break;
-        case QueryStatus::Completed:
-            statusStr = "completed";
-            break;
-        case QueryStatus::Cancelled:
-            statusStr = "cancelled";
-            break;
-        case QueryStatus::Failed:
-            statusStr = "failed";
-            break;
+            case QueryStatus::Pending:
+                statusStr = "pending";
+                break;
+            case QueryStatus::Running:
+                statusStr = "running";
+                break;
+            case QueryStatus::Completed:
+                statusStr = "completed";
+                break;
+            case QueryStatus::Cancelled:
+                statusStr = "cancelled";
+                break;
+            case QueryStatus::Failed:
+                statusStr = "failed";
+                break;
         }
 
         std::string jsonResponse = "{";
@@ -891,9 +892,9 @@ std::string IPCHandler::getAsyncQueryResult(std::string_view params) {
             for (size_t i = 0; i < queryResult.columns.size(); ++i) {
                 if (i > 0)
                     jsonResponse += ',';
-                jsonResponse += std::format(R"({{"name":"{}","type":"{}"}})",
-                                            JsonUtils::escapeString(queryResult.columns[i].name),
-                                            queryResult.columns[i].type);
+                jsonResponse +=
+                    std::format(R"({{"name":"{}","type":"{}"}})", JsonUtils::escapeString(queryResult.columns[i].name),
+                                queryResult.columns[i].type);
             }
             jsonResponse += "],";
 
@@ -912,8 +913,8 @@ std::string IPCHandler::getAsyncQueryResult(std::string_view params) {
             }
             jsonResponse += "],";
 
-            jsonResponse +=
-                std::format(R"("affectedRows":{},"executionTimeMs":{})", queryResult.affectedRows, queryResult.executionTimeMs);
+            jsonResponse += std::format(R"("affectedRows":{},"executionTimeMs":{})", queryResult.affectedRows,
+                                        queryResult.executionTimeMs);
         }
 
         jsonResponse += "}";
@@ -998,8 +999,9 @@ std::string IPCHandler::filterResultSet(std::string_view params) {
         for (size_t i = 0; i < queryResult.columns.size(); ++i) {
             if (i > 0)
                 jsonResponse += ',';
-            jsonResponse += std::format(R"({{"name":"{}","type":"{}"}})",
-                                        JsonUtils::escapeString(queryResult.columns[i].name), queryResult.columns[i].type);
+            jsonResponse +=
+                std::format(R"({{"name":"{}","type":"{}"}})", JsonUtils::escapeString(queryResult.columns[i].name),
+                            queryResult.columns[i].type);
         }
         jsonResponse += "],";
 
