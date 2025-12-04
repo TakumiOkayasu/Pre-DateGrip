@@ -2,6 +2,7 @@
 
 #include "database/async_query_executor.h"
 #include "database/connection_pool.h"
+#include "database/odbc_driver_detector.h"
 #include "database/query_history.h"
 #include "database/result_cache.h"
 #include "database/schema_inspector.h"
@@ -35,8 +36,7 @@ struct DatabaseConnectionParams {
 };
 
 [[nodiscard]] std::string buildODBCConnectionString(const DatabaseConnectionParams& params) {
-    auto connectionString =
-        std::format("Driver={{ODBC Driver 17 for SQL Server}};Server={};Database={};", params.server, params.database);
+    auto connectionString = buildDriverConnectionPrefix(params.server, params.database);
 
     if (params.useWindowsAuth) {
         connectionString += "Trusted_Connection=yes;";

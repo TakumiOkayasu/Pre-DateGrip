@@ -17,7 +17,10 @@ TransactionManager::~TransactionManager() {
 }
 
 void TransactionManager::begin() {
-    if (!m_driver || !m_driver->isConnected()) [[unlikely]] {
+    if (!m_driver) [[unlikely]] {
+        throw std::runtime_error("TransactionManager: driver not set. Call setDriver() first.");
+    }
+    if (!m_driver->isConnected()) [[unlikely]] {
         throw std::runtime_error("Not connected to database");
     }
 
@@ -33,7 +36,10 @@ void TransactionManager::begin() {
 }
 
 void TransactionManager::commit() {
-    if (!m_driver || !m_driver->isConnected()) [[unlikely]] {
+    if (!m_driver) [[unlikely]] {
+        throw std::runtime_error("TransactionManager: driver not set. Call setDriver() first.");
+    }
+    if (!m_driver->isConnected()) [[unlikely]] {
         throw std::runtime_error("Not connected to database");
     }
 
@@ -49,7 +55,10 @@ void TransactionManager::commit() {
 }
 
 void TransactionManager::rollback() {
-    if (!m_driver || !m_driver->isConnected()) [[unlikely]] {
+    if (!m_driver) [[unlikely]] {
+        throw std::runtime_error("TransactionManager: driver not set. Call setDriver() first.");
+    }
+    if (!m_driver->isConnected()) [[unlikely]] {
         throw std::runtime_error("Not connected to database");
     }
 

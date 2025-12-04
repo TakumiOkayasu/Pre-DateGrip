@@ -9,6 +9,7 @@ set(LIB_SOURCES
     database/schema_inspector.cpp
     database/query_history.cpp
     database/transaction_manager.cpp
+    database/odbc_driver_detector.cpp
     parsers/a5er_parser.cpp
     parsers/sql_formatter.cpp
     exporters/csv_exporter.cpp
@@ -20,6 +21,7 @@ set(LIB_SOURCES
     utils/settings_manager.cpp
     utils/session_manager.cpp
     utils/global_search.cpp
+    utils/credential_protector.cpp
 )
 
 set(HEADERS
@@ -32,6 +34,7 @@ set(HEADERS
     database/schema_inspector.h
     database/query_history.h
     database/transaction_manager.h
+    database/odbc_driver_detector.h
     parsers/a5er_parser.h
     parsers/sql_formatter.h
     exporters/csv_exporter.h
@@ -44,6 +47,7 @@ set(HEADERS
     utils/settings_manager.h
     utils/session_manager.h
     utils/global_search.h
+    utils/credential_protector.h
 )
 
 # Create a static library for the core functionality
@@ -60,6 +64,7 @@ target_link_libraries(PreDateGripCore PUBLIC
     pugixml
     odbc32
     odbccp32
+    crypt32
 )
 
 # Main executable

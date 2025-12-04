@@ -1,5 +1,6 @@
 ﻿#include "settings_manager.h"
 
+#include "credential_protector.h"
 #include "json_utils.h"
 #include "simdjson.h"
 
@@ -104,6 +105,48 @@ std::optional<ConnectionProfile> SettingsManager::getConnectionProfile(const std
 
 const std::vector<ConnectionProfile>& SettingsManager::getConnectionProfiles() const {
     return m_settings.connectionProfiles;
+}
+
+std::expected<void, std::string> SettingsManager::setProfilePassword(const std::string& profileId,
+                                                                     std::string_view plainPassword) {
+    std::lock_guard lock(m_mutex);
+
+    for (auto& profile : m_settings.connectionProfiles) {
+        if (profile.id == profileId) {
+            if (plainPassword.empty()) {
+                profile.encryptedPassword.clear();
+                profile.savePassword = false;
+                return {};
+            }
+
+            auto encryptResult = CredentialProtector::encrypt(plainPassword);
+            if (!encryptResult) {
+                return std::unexpected(encryptResult.error());
+            }
+
+            profile.encryptedPassword = encryptResult.value();
+            profile.savePassword = true;
+            return {};
+        }
+    }
+
+    return std::unexpected("Profile not found: " + profileId);
+}
+
+std::expected<std::string, std::string> SettingsManager::getProfilePassword(const std::string& profileId) const {
+    std::lock_guard lock(m_mutex);
+
+    for (const auto& profile : m_settings.connectionProfiles) {
+        if (profile.id == profileId) {
+            if (profile.encryptedPassword.empty()) {
+                return std::string{};
+            }
+
+            return CredentialProtector::decrypt(profile.encryptedPassword);
+        }
+    }
+
+    return std::unexpected("Profile not found: " + profileId);
 }
 
 std::filesystem::path SettingsManager::getSettingsPath() const {

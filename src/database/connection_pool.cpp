@@ -1,5 +1,6 @@
 ﻿#include "connection_pool.h"
 
+#include "odbc_driver_detector.h"
 #include "sqlserver_driver.h"
 
 #include <algorithm>
@@ -79,8 +80,7 @@ bool ConnectionPool::testConnection(const ConnectionInfo& info) {
 }
 
 std::string ConnectionPool::buildConnectionString(const ConnectionInfo& info) const {
-    auto connStr =
-        std::format("Driver={{ODBC Driver 17 for SQL Server}};Server={};Database={};", info.server, info.database);
+    auto connStr = buildDriverConnectionPrefix(info.server, info.database);
 
     if (info.useWindowsAuth) {
         connStr += "Trusted_Connection=yes;";

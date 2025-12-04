@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <expected>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -84,6 +85,18 @@ public:
     void removeConnectionProfile(const std::string& id);
     [[nodiscard]] std::optional<ConnectionProfile> getConnectionProfile(const std::string& id) const;
     [[nodiscard]] const std::vector<ConnectionProfile>& getConnectionProfiles() const;
+
+    /// Password management using DPAPI encryption
+    /// @param profileId The profile to set password for
+    /// @param plainPassword The plaintext password to encrypt and store
+    /// @return true on success, error message on failure
+    [[nodiscard]] std::expected<void, std::string> setProfilePassword(const std::string& profileId,
+                                                                      std::string_view plainPassword);
+
+    /// Get decrypted password for a connection profile
+    /// @param profileId The profile to get password for
+    /// @return Decrypted password, or error message if decryption fails
+    [[nodiscard]] std::expected<std::string, std::string> getProfilePassword(const std::string& profileId) const;
 
     /// Get settings file path
     [[nodiscard]] std::filesystem::path getSettingsPath() const;
