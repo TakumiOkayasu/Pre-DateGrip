@@ -28,6 +28,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const result = await bridge.connect({
         server: connection.server,
+        port: connection.port,
         database: connection.database,
         username: connection.username,
         password: connection.password,
@@ -78,6 +79,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const result = await bridge.testConnection({
         server: connection.server,
+        port: connection.port,
         database: connection.database,
         username: connection.username,
         password: connection.password,

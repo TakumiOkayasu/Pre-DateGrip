@@ -49,6 +49,7 @@ export function MainLayout() {
       await addConnection({
         name: config.name,
         server: config.server,
+        port: config.port,
         database: config.database,
         username: config.username,
         password: config.password,

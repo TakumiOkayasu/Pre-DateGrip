@@ -3,6 +3,7 @@ export interface Connection {
   id: string;
   name: string;
   server: string;
+  port: number;
   database: string;
   username: string;
   password: string;

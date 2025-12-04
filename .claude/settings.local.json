@@ -72,7 +72,8 @@
       "Bash(C:nvm4wnodejsnpx.cmd biome lint --error-on-warnings ./src)",
       "Bash(gh issue create:*)",
       "Bash(gh label list:*)",
-      "Bash(gh label create:*)"
+      "Bash(gh label create:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []
