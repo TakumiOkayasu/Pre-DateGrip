@@ -39,6 +39,10 @@ export function MainLayout() {
   const { importFromA5ER } = useERDiagramStore();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
   const activeQuery = queries.find((q) => q.id === activeQueryId);
+  const isDataView = activeQuery?.isDataView === true;
+
+  // Hide bottom panel when in data view mode (table display)
+  const shouldShowBottomPanel = isBottomPanelVisible && !isDataView;
 
   const handleConnect = async (config: ConnectionConfig) => {
     try {
@@ -192,8 +196,9 @@ export function MainLayout() {
           <button
             onClick={() => setIsBottomPanelVisible(!isBottomPanelVisible)}
             title="Toggle Results Panel"
+            disabled={isDataView}
           >
-            {isBottomPanelVisible ? icons.down : icons.up} Results
+            {isBottomPanelVisible && !isDataView ? icons.down : icons.up} Results
           </button>
         </div>
         <div className={styles.toolbarGroup}>
@@ -236,7 +241,7 @@ export function MainLayout() {
         <div className={styles.rightSection}>
           <CenterPanel />
 
-          {isBottomPanelVisible && (
+          {shouldShowBottomPanel && (
             <>
               <div
                 className={styles.horizontalResizer}
