@@ -74,7 +74,15 @@ std::string detectBestSqlServerDriver() {
 }
 
 std::string buildDriverConnectionPrefix(std::string_view server, std::string_view database) {
-    return std::format("Driver={{{}}};Server={};Database={};", detectBestSqlServerDriver(), server, database);
+    auto driver = detectBestSqlServerDriver();
+    // ODBC Driver 18+ requires explicit SSL settings
+    // TrustServerCertificate=yes allows self-signed certificates (common in dev environments)
+    if (driver.find("18") != std::string::npos || driver.find("19") != std::string::npos ||
+        driver.find("20") != std::string::npos) {
+        return std::format("Driver={{{}}};Server={};Database={};Encrypt=yes;TrustServerCertificate=yes;", driver,
+                           server, database);
+    }
+    return std::format("Driver={{{}}};Server={};Database={};", driver, server, database);
 }
 
 }  // namespace predategrip

@@ -102,6 +102,15 @@ private:
     [[nodiscard]] std::string searchObjects(std::string_view params);
     [[nodiscard]] std::string quickSearch(std::string_view params);
 
+    // Table metadata operations
+    [[nodiscard]] std::string fetchIndexes(std::string_view params);
+    [[nodiscard]] std::string fetchConstraints(std::string_view params);
+    [[nodiscard]] std::string fetchForeignKeys(std::string_view params);
+    [[nodiscard]] std::string fetchReferencingForeignKeys(std::string_view params);
+    [[nodiscard]] std::string fetchTriggers(std::string_view params);
+    [[nodiscard]] std::string fetchTableMetadata(std::string_view params);
+    [[nodiscard]] std::string fetchTableDDL(std::string_view params);
+
     std::unique_ptr<ConnectionPool> m_connectionPool;
     std::unique_ptr<SchemaInspector> m_schemaInspector;
     std::unique_ptr<TransactionManager> m_transactionManager;

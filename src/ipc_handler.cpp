@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <format>
+#include <fstream>
 
 namespace predategrip {
 
@@ -149,16 +150,33 @@ void IPCHandler::registerRequestRoutes() {
     m_requestRoutes["saveSessionState"] = [this](std::string_view p) { return saveSessionState(p); };
     m_requestRoutes["searchObjects"] = [this](std::string_view p) { return searchObjects(p); };
     m_requestRoutes["quickSearch"] = [this](std::string_view p) { return quickSearch(p); };
+    m_requestRoutes["getIndexes"] = [this](std::string_view p) { return fetchIndexes(p); };
+    m_requestRoutes["getConstraints"] = [this](std::string_view p) { return fetchConstraints(p); };
+    m_requestRoutes["getForeignKeys"] = [this](std::string_view p) { return fetchForeignKeys(p); };
+    m_requestRoutes["getReferencingForeignKeys"] = [this](std::string_view p) {
+        return fetchReferencingForeignKeys(p);
+    };
+    m_requestRoutes["getTriggers"] = [this](std::string_view p) { return fetchTriggers(p); };
+    m_requestRoutes["getTableMetadata"] = [this](std::string_view p) { return fetchTableMetadata(p); };
+    m_requestRoutes["getTableDDL"] = [this](std::string_view p) { return fetchTableDDL(p); };
 }
 
 std::string IPCHandler::dispatchRequest(std::string_view request) {
+    // DEBUG
+    {
+        std::ofstream debugLog("predategrip_debug.log", std::ios::app);
+        debugLog << "[dispatchRequest] Input: " << request << "\n";
+    }
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(request);
 
         auto methodResult = doc["method"].get_string();
         if (methodResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing method field");
+            auto err = JsonUtils::errorResponse("Missing method field");
+            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
+            debugLog << "[dispatchRequest] Error: Missing method field\n";
+            return err;
         }
         std::string_view method = methodResult.value();
 
@@ -167,12 +185,23 @@ std::string IPCHandler::dispatchRequest(std::string_view request) {
             params = std::string(paramsResult.value());
         }
 
+        {
+            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
+            debugLog << "[dispatchRequest] Method: " << method << "\n";
+            debugLog << "[dispatchRequest] Params: " << params << "\n";
+        }
+
         if (auto route = m_requestRoutes.find(std::string(method)); route != m_requestRoutes.end()) [[likely]] {
-            return route->second(params);
+            auto result = route->second(params);
+            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
+            debugLog << "[dispatchRequest] Result: " << result << "\n\n";
+            return result;
         }
 
         return JsonUtils::errorResponse(std::format("Unknown method: {}", method));
     } catch (const std::exception& e) {
+        std::ofstream debugLog("predategrip_debug.log", std::ios::app);
+        debugLog << "[dispatchRequest] Exception: " << e.what() << "\n\n";
         return JsonUtils::errorResponse(e.what());
     }
 }
@@ -1391,6 +1420,667 @@ std::string IPCHandler::quickSearch(std::string_view params) {
         }
         json += "]";
 
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchIndexes(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto indexQuery = std::format(R"(
+            SELECT
+                i.name AS IndexName,
+                i.type_desc AS IndexType,
+                i.is_unique AS IsUnique,
+                i.is_primary_key AS IsPrimaryKey,
+                STUFF((
+                    SELECT ',' + c.name
+                    FROM sys.index_columns ic
+                    JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                    WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id
+                    ORDER BY ic.key_ordinal
+                    FOR XML PATH('')
+                ), 1, 1, '') AS Columns
+            FROM sys.indexes i
+            WHERE i.object_id = OBJECT_ID('{}')
+              AND i.name IS NOT NULL
+            ORDER BY i.is_primary_key DESC, i.name
+        )",
+                                      JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(indexQuery);
+
+        std::string json = "[";
+        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& row = queryResult.rows[i];
+            json += "{";
+            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            json += std::format("\"isUnique\":{},", row.values[2] == "1" ? "true" : "false");
+            json += std::format("\"isPrimaryKey\":{},", row.values[3] == "1" ? "true" : "false");
+            // Convert comma-separated columns to array
+            json += "\"columns\":[";
+            if (!row.values[4].empty()) {
+                std::string cols = row.values[4];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "]";
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchConstraints(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto constraintQuery = std::format(R"(
+            SELECT
+                tc.CONSTRAINT_NAME,
+                tc.CONSTRAINT_TYPE,
+                STUFF((
+                    SELECT ',' + kcu.COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                    WHERE kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                      AND kcu.TABLE_NAME = tc.TABLE_NAME
+                    ORDER BY kcu.ORDINAL_POSITION
+                    FOR XML PATH('')
+                ), 1, 1, '') AS Columns,
+                ISNULL(cc.CHECK_CLAUSE, dc.definition) AS Definition
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                ON tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+            LEFT JOIN sys.default_constraints dc
+                ON dc.name = tc.CONSTRAINT_NAME
+            WHERE tc.TABLE_NAME = '{}'
+            ORDER BY tc.CONSTRAINT_TYPE, tc.CONSTRAINT_NAME
+        )",
+                                           JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(constraintQuery);
+
+        std::string json = "[";
+        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& row = queryResult.rows[i];
+            json += "{";
+            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            // Convert comma-separated columns to array
+            json += "\"columns\":[";
+            if (!row.values[2].empty()) {
+                std::string cols = row.values[2];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "],";
+            json += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[3]));
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchForeignKeys(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto fkQuery = std::format(R"(
+            SELECT
+                fk.name AS FKName,
+                STUFF((
+                    SELECT ',' + COL_NAME(fkc.parent_object_id, fkc.parent_column_id)
+                    FROM sys.foreign_key_columns fkc
+                    WHERE fkc.constraint_object_id = fk.object_id
+                    ORDER BY fkc.constraint_column_id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS Columns,
+                OBJECT_SCHEMA_NAME(fk.referenced_object_id) + '.' + OBJECT_NAME(fk.referenced_object_id) AS ReferencedTable,
+                STUFF((
+                    SELECT ',' + COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id)
+                    FROM sys.foreign_key_columns fkc
+                    WHERE fkc.constraint_object_id = fk.object_id
+                    ORDER BY fkc.constraint_column_id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ReferencedColumns,
+                fk.delete_referential_action_desc AS OnDelete,
+                fk.update_referential_action_desc AS OnUpdate
+            FROM sys.foreign_keys fk
+            WHERE fk.parent_object_id = OBJECT_ID('{}')
+            ORDER BY fk.name
+        )",
+                                   JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(fkQuery);
+
+        std::string json = "[";
+        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& row = queryResult.rows[i];
+            json += "{";
+            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            // Columns array
+            json += "\"columns\":[";
+            if (!row.values[1].empty()) {
+                std::string cols = row.values[1];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "],";
+            json += std::format("\"referencedTable\":\"{}\",", JsonUtils::escapeString(row.values[2]));
+            // Referenced columns array
+            json += "\"referencedColumns\":[";
+            if (!row.values[3].empty()) {
+                std::string cols = row.values[3];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "],";
+            json += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
+            json += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchReferencingForeignKeys(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto refFkQuery = std::format(R"(
+            SELECT
+                fk.name AS FKName,
+                OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) AS ReferencingTable,
+                STUFF((
+                    SELECT ',' + COL_NAME(fkc.parent_object_id, fkc.parent_column_id)
+                    FROM sys.foreign_key_columns fkc
+                    WHERE fkc.constraint_object_id = fk.object_id
+                    ORDER BY fkc.constraint_column_id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ReferencingColumns,
+                STUFF((
+                    SELECT ',' + COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id)
+                    FROM sys.foreign_key_columns fkc
+                    WHERE fkc.constraint_object_id = fk.object_id
+                    ORDER BY fkc.constraint_column_id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS Columns,
+                fk.delete_referential_action_desc AS OnDelete,
+                fk.update_referential_action_desc AS OnUpdate
+            FROM sys.foreign_keys fk
+            WHERE fk.referenced_object_id = OBJECT_ID('{}')
+            ORDER BY fk.name
+        )",
+                                      JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(refFkQuery);
+
+        std::string json = "[";
+        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& row = queryResult.rows[i];
+            json += "{";
+            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            json += std::format("\"referencingTable\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            // Referencing columns array
+            json += "\"referencingColumns\":[";
+            if (!row.values[2].empty()) {
+                std::string cols = row.values[2];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "],";
+            // Referenced columns (on this table)
+            json += "\"columns\":[";
+            if (!row.values[3].empty()) {
+                std::string cols = row.values[3];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = cols.find(',')) != std::string::npos || !cols.empty()) {
+                    std::string col;
+                    if (pos != std::string::npos) {
+                        col = cols.substr(0, pos);
+                        cols = cols.substr(pos + 1);
+                    } else {
+                        col = cols;
+                        cols.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(col));
+                    first = false;
+                    if (cols.empty())
+                        break;
+                }
+            }
+            json += "],";
+            json += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
+            json += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchTriggers(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto triggerQuery = std::format(R"(
+            SELECT
+                t.name AS TriggerName,
+                CASE
+                    WHEN t.is_instead_of_trigger = 1 THEN 'INSTEAD OF'
+                    ELSE 'AFTER'
+                END AS TriggerType,
+                STUFF((
+                    SELECT ',' +
+                        CASE te.type
+                            WHEN 1 THEN 'INSERT'
+                            WHEN 2 THEN 'UPDATE'
+                            WHEN 3 THEN 'DELETE'
+                        END
+                    FROM sys.trigger_events te
+                    WHERE te.object_id = t.object_id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS Events,
+                CASE WHEN t.is_disabled = 0 THEN 1 ELSE 0 END AS IsEnabled,
+                OBJECT_DEFINITION(t.object_id) AS Definition
+            FROM sys.triggers t
+            WHERE t.parent_id = OBJECT_ID('{}')
+            ORDER BY t.name
+        )",
+                                        JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(triggerQuery);
+
+        std::string json = "[";
+        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& row = queryResult.rows[i];
+            json += "{";
+            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            // Events array
+            json += "\"events\":[";
+            if (!row.values[2].empty()) {
+                std::string events = row.values[2];
+                size_t pos = 0;
+                bool first = true;
+                while ((pos = events.find(',')) != std::string::npos || !events.empty()) {
+                    std::string evt;
+                    if (pos != std::string::npos) {
+                        evt = events.substr(0, pos);
+                        events = events.substr(pos + 1);
+                    } else {
+                        evt = events;
+                        events.clear();
+                    }
+                    if (!first)
+                        json += ',';
+                    json += std::format("\"{}\"", JsonUtils::escapeString(evt));
+                    first = false;
+                    if (events.empty())
+                        break;
+                }
+            }
+            json += "],";
+            json += std::format("\"isEnabled\":{},", row.values[3] == "1" ? "true" : "false");
+            json += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[4]));
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchTableMetadata(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        auto metadataQuery = std::format(R"(
+            SELECT
+                OBJECT_SCHEMA_NAME(o.object_id) AS SchemaName,
+                o.name AS TableName,
+                o.type_desc AS ObjectType,
+                ISNULL(p.rows, 0) AS RowCount,
+                CONVERT(varchar, o.create_date, 120) AS CreatedAt,
+                CONVERT(varchar, o.modify_date, 120) AS ModifiedAt,
+                ISNULL(USER_NAME(o.principal_id), 'dbo') AS Owner,
+                ISNULL(ep.value, '') AS Comment
+            FROM sys.objects o
+            LEFT JOIN sys.partitions p ON o.object_id = p.object_id AND p.index_id IN (0, 1)
+            LEFT JOIN sys.extended_properties ep ON ep.major_id = o.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
+            WHERE o.object_id = OBJECT_ID('{}')
+        )",
+                                         JsonUtils::escapeString(tableName));
+
+        ResultSet queryResult = driver->execute(metadataQuery);
+
+        if (queryResult.rows.empty()) {
+            return JsonUtils::errorResponse("Table not found");
+        }
+
+        const auto& row = queryResult.rows[0];
+        std::string json = "{";
+        json += std::format("\"schema\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+        json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+        json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[2]));
+        json += std::format("\"rowCount\":{},", row.values[3]);
+        json += std::format("\"createdAt\":\"{}\",", JsonUtils::escapeString(row.values[4]));
+        json += std::format("\"modifiedAt\":\"{}\",", JsonUtils::escapeString(row.values[5]));
+        json += std::format("\"owner\":\"{}\",", JsonUtils::escapeString(row.values[6]));
+        json += std::format("\"comment\":\"{}\"", JsonUtils::escapeString(row.values[7]));
+        json += "}";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string IPCHandler::fetchTableDDL(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto tableName = std::string(tableNameResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto& driver = connection->second;
+
+        // Build CREATE TABLE DDL from column information
+        auto columnQuery = std::format(R"(
+            SELECT
+                c.COLUMN_NAME,
+                c.DATA_TYPE,
+                c.CHARACTER_MAXIMUM_LENGTH,
+                c.NUMERIC_PRECISION,
+                c.NUMERIC_SCALE,
+                c.IS_NULLABLE,
+                c.COLUMN_DEFAULT
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_NAME = '{}'
+            ORDER BY c.ORDINAL_POSITION
+        )",
+                                       JsonUtils::escapeString(tableName));
+
+        ResultSet columnResult = driver->execute(columnQuery);
+
+        std::string ddl = "CREATE TABLE " + tableName + " (\n";
+        for (size_t i = 0; i < columnResult.rows.size(); ++i) {
+            const auto& row = columnResult.rows[i];
+            if (i > 0)
+                ddl += ",\n";
+            ddl += "    " + row.values[0] + " " + row.values[1];
+
+            // Add size/precision
+            if (!row.values[2].empty() && row.values[2] != "-1") {
+                ddl += "(" + row.values[2] + ")";
+            } else if (!row.values[3].empty() && row.values[3] != "0") {
+                ddl += "(" + row.values[3];
+                if (!row.values[4].empty() && row.values[4] != "0") {
+                    ddl += "," + row.values[4];
+                }
+                ddl += ")";
+            }
+
+            // Nullable
+            if (row.values[5] == "NO") {
+                ddl += " NOT NULL";
+            }
+
+            // Default value
+            if (!row.values[6].empty()) {
+                ddl += " DEFAULT " + row.values[6];
+            }
+        }
+
+        // Add primary key constraint
+        auto pkQuery = std::format(R"(
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE TABLE_NAME = '{}'
+              AND CONSTRAINT_NAME = (
+                  SELECT CONSTRAINT_NAME
+                  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                  WHERE TABLE_NAME = '{}' AND CONSTRAINT_TYPE = 'PRIMARY KEY'
+              )
+            ORDER BY ORDINAL_POSITION
+        )",
+                                   JsonUtils::escapeString(tableName), JsonUtils::escapeString(tableName));
+
+        ResultSet pkResult = driver->execute(pkQuery);
+        if (!pkResult.rows.empty()) {
+            ddl += ",\n    CONSTRAINT PK_" + tableName + " PRIMARY KEY (";
+            for (size_t i = 0; i < pkResult.rows.size(); ++i) {
+                if (i > 0)
+                    ddl += ", ";
+                ddl += pkResult.rows[i].values[0];
+            }
+            ddl += ")";
+        }
+
+        ddl += "\n);";
+
+        std::string json = std::format("{{\"ddl\":\"{}\"}}", JsonUtils::escapeString(ddl));
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
