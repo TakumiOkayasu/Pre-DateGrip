@@ -73,10 +73,18 @@ struct DatabaseConnectionParams {
     }
 }
 
-[[nodiscard]] std::string extractConnectionId(std::string_view jsonParams) {
-    simdjson::dom::parser parser;
-    simdjson::dom::element doc = parser.parse(jsonParams);
-    return std::string(doc["connectionId"].get_string().value());
+[[nodiscard]] std::expected<std::string, std::string> extractConnectionId(std::string_view jsonParams) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(jsonParams);
+        auto result = doc["connectionId"].get_string();
+        if (result.error()) {
+            return std::unexpected("Missing connectionId field");
+        }
+        return std::string(result.value());
+    } catch (const std::exception& e) {
+        return std::unexpected(e.what());
+    }
 }
 
 }  // namespace
@@ -184,18 +192,18 @@ std::string IPCHandler::openDatabaseConnection(std::string_view params) {
 }
 
 std::string IPCHandler::closeDatabaseConnection(std::string_view params) {
-    try {
-        auto connectionId = extractConnectionId(params);
-
-        if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
-            connection->second->disconnect();
-            m_activeConnections.erase(connection);
-        }
-
-        return JsonUtils::successResponse("{}");
-    } catch (const std::exception& e) {
-        return JsonUtils::errorResponse(e.what());
+    auto connectionIdResult = extractConnectionId(params);
+    if (!connectionIdResult) {
+        return JsonUtils::errorResponse(connectionIdResult.error());
     }
+    auto connectionId = *connectionIdResult;
+
+    if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
+        connection->second->disconnect();
+        m_activeConnections.erase(connection);
+    }
+
+    return JsonUtils::successResponse("{}");
 }
 
 std::string IPCHandler::verifyDatabaseConnection(std::string_view params) {
@@ -221,8 +229,13 @@ std::string IPCHandler::executeSQL(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string sqlQuery = std::string(doc["sql"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto sqlQueryResult = doc["sql"].get_string();
+        if (connectionIdResult.error() || sqlQueryResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or sql");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string sqlQuery = std::string(sqlQueryResult.value());
 
         // Check if cache should be used (default: true for SELECT queries)
         bool useCache = true;
@@ -335,23 +348,27 @@ std::string IPCHandler::executeSQL(std::string_view params) {
 }
 
 std::string IPCHandler::cancelRunningQuery(std::string_view params) {
-    try {
-        auto connectionId = extractConnectionId(params);
-
-        if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
-            connection->second->cancel();
-        }
-
-        return JsonUtils::successResponse("{}");
-    } catch (const std::exception& e) {
-        return JsonUtils::errorResponse(e.what());
+    auto connectionIdResult = extractConnectionId(params);
+    if (!connectionIdResult) {
+        return JsonUtils::errorResponse(connectionIdResult.error());
     }
+    auto connectionId = *connectionIdResult;
+
+    if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
+        connection->second->cancel();
+    }
+
+    return JsonUtils::successResponse("{}");
 }
 
 std::string IPCHandler::fetchTableList(std::string_view params) {
-    try {
-        auto connectionId = extractConnectionId(params);
+    auto connectionIdResult = extractConnectionId(params);
+    if (!connectionIdResult) {
+        return JsonUtils::errorResponse(connectionIdResult.error());
+    }
+    auto connectionId = *connectionIdResult;
 
+    try {
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
@@ -389,8 +406,31 @@ std::string IPCHandler::fetchColumnDefinitions(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        std::string connectionId = std::string(doc["connectionId"].get_string().value());
-        std::string tableName = std::string(doc["table"].get_string().value());
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto tableNameResult = doc["table"].get_string();
+        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
+        }
+        std::string connectionId = std::string(connectionIdResult.value());
+        std::string tableName = std::string(tableNameResult.value());
+
+        // Validate table name to prevent SQL injection
+        // Only allow alphanumeric, underscore, and common schema prefixes
+        auto isValidIdentifier = [](const std::string& name) -> bool {
+            if (name.empty() || name.length() > 128) {
+                return false;
+            }
+            for (char c : name) {
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '.' && c != '[' && c != ']') {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
 
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
@@ -398,6 +438,17 @@ std::string IPCHandler::fetchColumnDefinitions(std::string_view params) {
         }
 
         auto& driver = connection->second;
+
+        // Escape single quotes in table name for safety
+        std::string escapedTableName;
+        escapedTableName.reserve(tableName.size() * 2);
+        for (char c : tableName) {
+            if (c == '\'') {
+                escapedTableName += "''";
+            } else {
+                escapedTableName += c;
+            }
+        }
 
         auto columnQuery = std::format(R"(
             SELECT
@@ -417,7 +468,7 @@ std::string IPCHandler::fetchColumnDefinitions(std::string_view params) {
             WHERE c.TABLE_NAME = '{}'
             ORDER BY c.ORDINAL_POSITION
         )",
-                                       tableName);
+                                       escapedTableName);
 
         ResultSet queryResult = driver->execute(columnQuery);
 
@@ -441,9 +492,13 @@ std::string IPCHandler::fetchColumnDefinitions(std::string_view params) {
 }
 
 std::string IPCHandler::fetchDatabaseList(std::string_view params) {
-    try {
-        auto connectionId = extractConnectionId(params);
+    auto connectionIdResult = extractConnectionId(params);
+    if (!connectionIdResult) {
+        return JsonUtils::errorResponse(connectionIdResult.error());
+    }
+    auto connectionId = *connectionIdResult;
 
+    try {
         auto connection = m_activeConnections.find(connectionId);
         if (connection == m_activeConnections.end()) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));

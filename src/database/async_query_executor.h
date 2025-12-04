@@ -65,7 +65,7 @@ private:
     };
 
     mutable std::mutex m_mutex;
-    std::unordered_map<std::string, std::unique_ptr<QueryTask>> m_queries;
+    std::unordered_map<std::string, std::shared_ptr<QueryTask>> m_queries;
     std::atomic<int> m_queryIdCounter{1};
 };
 

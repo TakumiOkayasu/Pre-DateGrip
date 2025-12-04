@@ -1,8 +1,10 @@
 ﻿#include "sqlserver_driver.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <stdexcept>
+#include <vector>
 
 namespace predategrip {
 
@@ -130,7 +132,11 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
     }
 
     SQLSMALLINT numCols = 0;
-    SQLNumResultCols(m_stmt, &numCols);
+    ret = SQLNumResultCols(m_stmt, &numCols);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
+        storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
+        throw std::runtime_error(std::string("Failed to get column count: ") + m_lastError);
+    }
 
     result.columns.reserve(static_cast<size_t>(numCols));
     for (SQLSMALLINT i = 1; i <= numCols; ++i) {
@@ -141,8 +147,12 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
         SQLSMALLINT decimalDigits = 0;
         SQLSMALLINT nullable = 0;
 
-        SQLDescribeColA(m_stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen, &dataType,
-                        &colSize, &decimalDigits, &nullable);
+        ret = SQLDescribeColA(m_stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen, &dataType,
+                              &colSize, &decimalDigits, &nullable);
+        if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
+            storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
+            throw std::runtime_error(std::string("Failed to describe column: ") + m_lastError);
+        }
 
         result.columns.push_back({.name = std::string(reinterpret_cast<char*>(colName.data()), colNameLen),
                                   .type = convertSQLTypeToDisplayName(dataType),
@@ -151,10 +161,12 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
                                   .isPrimaryKey = false});
     }
 
-    std::array<SQLCHAR, 4096> buffer{};
+    // Dynamic buffer for large column values
+    constexpr size_t INITIAL_BUFFER_SIZE = 4096;
+    std::vector<SQLCHAR> buffer(INITIAL_BUFFER_SIZE);
     SQLLEN indicator = 0;
 
-    while (SQLFetch(m_stmt) == SQL_SUCCESS) {
+    while ((ret = SQLFetch(m_stmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         ResultRow row;
         row.values.reserve(static_cast<size_t>(numCols));
 
@@ -162,16 +174,35 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
             ret = SQLGetData(m_stmt, i, SQL_C_CHAR, buffer.data(), buffer.size(), &indicator);
             if (indicator == SQL_NULL_DATA) {
                 row.values.emplace_back();
-            } else {
+            } else if (ret == SQL_SUCCESS_WITH_INFO && indicator > static_cast<SQLLEN>(buffer.size() - 1)) {
+                // Data was truncated, need a larger buffer
+                size_t requiredSize = static_cast<size_t>(indicator) + 1;
+                std::vector<SQLCHAR> largeBuffer(requiredSize);
+                // Copy already retrieved data
+                std::copy(buffer.begin(), buffer.end(), largeBuffer.begin());
+                // Get remaining data
+                SQLLEN remainingIndicator = 0;
+                size_t alreadyRead = buffer.size() - 1;
+                ret = SQLGetData(m_stmt, i, SQL_C_CHAR, largeBuffer.data() + alreadyRead,
+                                 requiredSize - alreadyRead, &remainingIndicator);
+                row.values.emplace_back(reinterpret_cast<char*>(largeBuffer.data()));
+            } else if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
                 row.values.emplace_back(reinterpret_cast<char*>(buffer.data()));
+            } else {
+                // Error getting data - add empty value and continue
+                row.values.emplace_back();
             }
         }
         result.rows.push_back(std::move(row));
     }
 
     SQLLEN rowCount = 0;
-    SQLRowCount(m_stmt, &rowCount);
-    result.affectedRows = rowCount;
+    ret = SQLRowCount(m_stmt, &rowCount);
+    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+        result.affectedRows = rowCount;
+    } else {
+        result.affectedRows = 0;
+    }
 
     const auto endTime = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);

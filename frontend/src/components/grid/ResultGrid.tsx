@@ -172,16 +172,40 @@ export function ResultGrid() {
         return;
       }
 
-      // Execute each statement
-      for (const sql of allStatements) {
-        await bridge.executeQuery(activeConnectionId, sql);
-      }
+      // Begin transaction for atomicity
+      await bridge.beginTransaction(activeConnectionId);
 
-      // Clear pending changes on success
-      revertAll();
+      try {
+        // Execute each statement within transaction
+        for (let i = 0; i < allStatements.length; i++) {
+          const sql = allStatements[i];
+          try {
+            await bridge.executeQuery(activeConnectionId, sql, false);
+          } catch (stmtError) {
+            // Provide detailed error with statement index
+            throw new Error(
+              `Statement ${i + 1}/${allStatements.length} failed: ${stmtError instanceof Error ? stmtError.message : 'Unknown error'}`
+            );
+          }
+        }
 
-      if (gridApi) {
-        gridApi.refreshCells({ force: true });
+        // Commit transaction on success
+        await bridge.commit(activeConnectionId);
+
+        // Clear pending changes on success
+        revertAll();
+
+        if (gridApi) {
+          gridApi.refreshCells({ force: true });
+        }
+      } catch (txError) {
+        // Rollback transaction on any error
+        try {
+          await bridge.rollback(activeConnectionId);
+        } catch (rollbackError) {
+          console.error('Rollback failed:', rollbackError);
+        }
+        throw txError;
       }
     } catch (error) {
       setApplyError(error instanceof Error ? error.message : 'Failed to apply changes');

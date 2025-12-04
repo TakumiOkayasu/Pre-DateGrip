@@ -22,32 +22,31 @@ AsyncQueryExecutor::~AsyncQueryExecutor() {
 std::string AsyncQueryExecutor::submitQuery(SQLServerDriver* driver, std::string_view sql) {
     auto queryId = std::format("query_{}", m_queryIdCounter++);
 
-    auto task = std::make_unique<QueryTask>();
+    auto task = std::make_shared<QueryTask>();
     task->driver = driver;
     task->sql = std::string(sql);
     task->startTime = std::chrono::steady_clock::now();
     task->status = QueryStatus::Running;
 
-    // Capture raw pointer for lambda (safe because we wait in destructor)
-    QueryTask* taskPtr = task.get();
     std::string sqlCopy(sql);
 
-    task->future = std::async(std::launch::async, [driver, sqlCopy, taskPtr]() -> ResultSet {
+    // Capture shared_ptr by value to ensure task lifetime extends through async execution
+    task->future = std::async(std::launch::async, [driver, sqlCopy, task]() -> ResultSet {
         try {
             ResultSet result = driver->execute(sqlCopy);
-            taskPtr->endTime = std::chrono::steady_clock::now();
-            taskPtr->status = QueryStatus::Completed;
+            task->endTime = std::chrono::steady_clock::now();
+            task->status = QueryStatus::Completed;
             return result;
         } catch (const std::exception& e) {
-            taskPtr->endTime = std::chrono::steady_clock::now();
-            taskPtr->errorMessage = e.what();
-            taskPtr->status = QueryStatus::Failed;
+            task->endTime = std::chrono::steady_clock::now();
+            task->errorMessage = e.what();
+            task->status = QueryStatus::Failed;
             return ResultSet{};
         }
     });
 
     std::lock_guard lock(m_mutex);
-    m_queries[queryId] = std::move(task);
+    m_queries[queryId] = task;
 
     return queryId;
 }
