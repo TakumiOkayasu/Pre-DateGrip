@@ -5,8 +5,7 @@
 #include <numeric>
 
 #ifdef _MSC_VER
-    #include <intrin.h>
-    #include <immintrin.h>
+#include <immintrin.h>
 #endif
 
 namespace predategrip {

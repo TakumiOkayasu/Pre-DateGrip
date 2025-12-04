@@ -263,19 +263,21 @@ interface RelationEdge {
 ### 禁止事項
 - **git commit, git push は絶対禁止**。コミットメッセージを考えるだけにすること。
 
-### 作業完了時の必須チェック
+### 作業完了時の必須チェック（コミット前に必ず実行）
 作業が終わったら、以下のLinter/Formatterでエラーが出ないか**必ずチェック**すること：
 
 ```bash
 # フロントエンド (Biome)
 cd frontend && npm run lint
 
-# C++ (clang-format)
-clang-format --style=file --dry-run --Werror src/**/*.cpp src/**/*.h
+# C++ (clang-format) - 全ファイルをチェック
+uv run scripts/cpp_check.py format
 
-# または一括チェック
+# または一括チェック（フロントエンド + C++）
 uv run scripts/run_lint.py
 ```
+
+**重要**: CIは Ubuntu 上で clang-format を実行するため、改行コード(CRLF/LF)の違いでエラーが出ることがある。ローカルで `clang-format -i` を実行してもCIで失敗する場合は、`.clang-format` の設定を確認すること。
 
 ### コーディング規約
 
@@ -294,6 +296,10 @@ uv run scripts/run_lint.py
   - CIでフォーマットチェックが通らない場合は `clang-format -i` で自動修正
 - RAII原則に従う（スマートポインタ使用）
 - ODBCの戻り値は必ずチェック
+- **ヘッダーファイルのルール**:
+  - C-Like（C互換）ヘッダー（`<intrin.h>`, `<malloc.h>`等）は標準C++ヘッダーで代替できる場合は使用しない
+  - 例: `<intrin.h>` → `<immintrin.h>` (SIMD), `<malloc.h>` → `<cstdlib>`
+  - Windows SDKヘッダー（`<Windows.h>`, `<sql.h>`等）は必要に応じて使用可
 
 ### 改行コード
 - **CRLF (Windows)** で統一
