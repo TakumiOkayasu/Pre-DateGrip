@@ -157,6 +157,9 @@ bun run typecheck
 # テスト
 bun run test
 
+# キャッシュ削除
+bun pm cache rm
+
 # C++ Lint/Format/Build（一括）
 uv run scripts/cpp_check.py all Release
 
