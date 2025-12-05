@@ -214,13 +214,13 @@ std::string IPCHandler::openDatabaseConnection(std::string_view params) {
 
     auto odbcString = buildODBCConnectionString(*connectionParams);
 
-    auto driver = std::make_unique<SQLServerDriver>();
+    auto driver = std::make_shared<SQLServerDriver>();
     if (!driver->connect(odbcString)) {
         return JsonUtils::errorResponse(std::format("Connection failed: {}", driver->getLastError()));
     }
 
     auto connectionId = std::format("conn_{}", m_connectionIdCounter++);
-    m_activeConnections[connectionId] = std::move(driver);
+    m_activeConnections[connectionId] = driver;
 
     return JsonUtils::successResponse(std::format(R"({{"connectionId":"{}"}})", connectionId));
 }
@@ -515,7 +515,7 @@ std::string IPCHandler::startTransaction(std::string_view params) {
         // Create TransactionManager for this connection if not exists
         if (m_transactionManagers.find(connectionId) == m_transactionManagers.end()) {
             auto txManager = std::make_unique<TransactionManager>();
-            txManager->setDriver(std::shared_ptr<SQLServerDriver>(connection->second.get(), [](SQLServerDriver*) {}));
+            txManager->setDriver(connection->second);  // shared_ptr directly
             m_transactionManagers[connectionId] = std::move(txManager);
         }
 
@@ -904,8 +904,8 @@ std::string IPCHandler::executeAsyncQuery(std::string_view params) {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
-        std::string queryId = m_asyncExecutor->submitQuery(driver.get(), sqlQuery);
+        auto driver = connection->second;  // Copy shared_ptr to extend lifetime during async execution
+        std::string queryId = m_asyncExecutor->submitQuery(driver, sqlQuery);
 
         return JsonUtils::successResponse(std::format(R"({{"queryId":"{}"}})", queryId));
     } catch (const std::exception& e) {
