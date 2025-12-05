@@ -98,7 +98,6 @@ struct DatabaseConnectionParams {
 IPCHandler::IPCHandler()
     : m_connectionPool(std::make_unique<ConnectionPool>())
     , m_schemaInspector(std::make_unique<SchemaInspector>())
-    , m_transactionManager(std::make_unique<TransactionManager>())
     , m_queryHistory(std::make_unique<QueryHistory>())
     , m_resultCache(std::make_unique<ResultCache>())
     , m_asyncExecutor(std::make_unique<AsyncQueryExecutor>())
@@ -236,6 +235,8 @@ std::string IPCHandler::closeDatabaseConnection(std::string_view params) {
     if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
         connection->second->disconnect();
         m_activeConnections.erase(connection);
+        // Clean up TransactionManager for this connection
+        m_transactionManagers.erase(connectionId);
     }
 
     return JsonUtils::successResponse("{}");
@@ -495,19 +496,80 @@ std::string IPCHandler::fetchDatabaseList(std::string_view params) {
     }
 }
 
-std::string IPCHandler::startTransaction(std::string_view) {
-    m_transactionManager->begin();
-    return JsonUtils::successResponse("{}");
+std::string IPCHandler::startTransaction(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        if (connectionIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: connectionId");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+
+        auto connection = m_activeConnections.find(connectionId);
+        if (connection == m_activeConnections.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        // Create TransactionManager for this connection if not exists
+        if (m_transactionManagers.find(connectionId) == m_transactionManagers.end()) {
+            auto txManager = std::make_unique<TransactionManager>();
+            txManager->setDriver(std::shared_ptr<SQLServerDriver>(connection->second.get(), [](SQLServerDriver*) {}));
+            m_transactionManagers[connectionId] = std::move(txManager);
+        }
+
+        m_transactionManagers[connectionId]->begin();
+        return JsonUtils::successResponse("{}");
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
 }
 
-std::string IPCHandler::commitTransaction(std::string_view) {
-    m_transactionManager->commit();
-    return JsonUtils::successResponse("{}");
+std::string IPCHandler::commitTransaction(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        if (connectionIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: connectionId");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+
+        auto txManager = m_transactionManagers.find(connectionId);
+        if (txManager == m_transactionManagers.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        }
+
+        txManager->second->commit();
+        return JsonUtils::successResponse("{}");
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
 }
 
-std::string IPCHandler::rollbackTransaction(std::string_view) {
-    m_transactionManager->rollback();
-    return JsonUtils::successResponse("{}");
+std::string IPCHandler::rollbackTransaction(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        if (connectionIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: connectionId");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+
+        auto txManager = m_transactionManagers.find(connectionId);
+        if (txManager == m_transactionManagers.end()) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        }
+
+        txManager->second->rollback();
+        return JsonUtils::successResponse("{}");
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
 }
 
 std::string IPCHandler::exportToCSV(std::string_view params) {

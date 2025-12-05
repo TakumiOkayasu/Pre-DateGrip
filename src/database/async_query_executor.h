@@ -56,6 +56,7 @@ public:
 private:
     struct QueryTask {
         std::future<ResultSet> future;
+        std::optional<ResultSet> cachedResult;  // Cache result after first get()
         std::atomic<QueryStatus> status{QueryStatus::Pending};
         SQLServerDriver* driver = nullptr;
         std::string sql;

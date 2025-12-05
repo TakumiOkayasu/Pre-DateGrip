@@ -114,7 +114,7 @@ private:
 
     std::unique_ptr<ConnectionPool> m_connectionPool;
     std::unique_ptr<SchemaInspector> m_schemaInspector;
-    std::unique_ptr<TransactionManager> m_transactionManager;
+    std::unordered_map<std::string, std::unique_ptr<TransactionManager>> m_transactionManagers;
     std::unique_ptr<QueryHistory> m_queryHistory;
     std::unique_ptr<ResultCache> m_resultCache;
     std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;

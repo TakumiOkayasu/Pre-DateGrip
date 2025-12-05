@@ -68,13 +68,18 @@ AsyncQueryResult AsyncQueryExecutor::getQueryResult(std::string_view queryId) {
     result.endTime = task->endTime;
     result.errorMessage = task->errorMessage;
 
-    // If completed, get the result
-    if (result.status == QueryStatus::Completed && task->future.valid()) {
-        try {
-            result.result = task->future.get();
-        } catch (...) {
-            result.status = QueryStatus::Failed;
-            result.errorMessage = "Failed to retrieve result";
+    // If completed, get the result (cache it to avoid double future.get() call)
+    if (result.status == QueryStatus::Completed) {
+        if (!task->cachedResult.has_value() && task->future.valid()) {
+            try {
+                task->cachedResult = task->future.get();
+            } catch (...) {
+                result.status = QueryStatus::Failed;
+                result.errorMessage = "Failed to retrieve result";
+            }
+        }
+        if (task->cachedResult.has_value()) {
+            result.result = task->cachedResult;
         }
     }
 
