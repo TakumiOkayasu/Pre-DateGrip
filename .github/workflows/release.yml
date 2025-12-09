@@ -11,7 +11,7 @@ jobs:
     name: Build Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -25,7 +25,7 @@ jobs:
           bun run build
 
       - name: Upload frontend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -36,7 +36,7 @@ jobs:
     name: Build Backend
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup MSVC Developer Environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -60,7 +60,7 @@ jobs:
           cmake --build build --parallel
 
       - name: Upload backend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-exe
           path: build/src/PreDateGrip.exe
@@ -75,13 +75,13 @@ jobs:
       contents: write
     steps:
       - name: Download frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: frontend-dist
           path: dist/frontend
 
       - name: Download backend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: backend-exe
           path: dist
