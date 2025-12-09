@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bridge } from '../../api/bridge';
-import { useConnectionStore } from '../../store/connectionStore';
+import { useConnectionActions, useConnectionStore } from '../../store/connectionStore';
 import type { DatabaseObject } from '../../types';
 import styles from './ObjectTree.module.css';
 import { TreeNode } from './TreeNode';
@@ -12,6 +12,7 @@ interface ObjectTreeProps {
 
 export function ObjectTree({ filter, onTableOpen }: ObjectTreeProps) {
   const { connections, activeConnectionId } = useConnectionStore();
+  const { setTableListLoadTime } = useConnectionActions();
   const [treeData, setTreeData] = useState<DatabaseObject[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [loadingNodes, setLoadingNodes] = useState<Set<string>>(new Set());
@@ -20,47 +21,54 @@ export function ObjectTree({ filter, onTableOpen }: ObjectTreeProps) {
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
 
   // Load tables for a connection
-  const loadTables = useCallback(async (connectionId: string): Promise<DatabaseObject[]> => {
-    try {
-      const tables = await bridge.getTables(connectionId, '');
+  const loadTables = useCallback(
+    async (connectionId: string): Promise<DatabaseObject[]> => {
+      try {
+        // Call updated API that returns timing info
+        const { tables, loadTimeMs } = await bridge.getTables(connectionId, '');
 
-      const tableNodes: DatabaseObject[] = [];
-      const viewNodes: DatabaseObject[] = [];
+        // Store the load time in connection store
+        setTableListLoadTime(connectionId, loadTimeMs);
 
-      for (const table of tables) {
-        const node: DatabaseObject = {
-          id: `${connectionId}-${table.schema}-${table.name}`,
-          name: table.schema !== 'dbo' ? `${table.schema}.${table.name}` : table.name,
-          type: table.type === 'VIEW' ? 'view' : 'table',
-          children: [], // Will be loaded on expand
-        };
+        const tableNodes: DatabaseObject[] = [];
+        const viewNodes: DatabaseObject[] = [];
 
-        if (table.type === 'VIEW') {
-          viewNodes.push(node);
-        } else {
-          tableNodes.push(node);
+        for (const table of tables) {
+          const node: DatabaseObject = {
+            id: `${connectionId}-${table.schema}-${table.name}`,
+            name: table.schema !== 'dbo' ? `${table.schema}.${table.name}` : table.name,
+            type: table.type === 'VIEW' ? 'view' : 'table',
+            children: [], // Will be loaded on expand
+          };
+
+          if (table.type === 'VIEW') {
+            viewNodes.push(node);
+          } else {
+            tableNodes.push(node);
+          }
         }
-      }
 
-      return [
-        {
-          id: `${connectionId}-tables`,
-          name: 'Tables',
-          type: 'folder' as const,
-          children: tableNodes,
-        },
-        {
-          id: `${connectionId}-views`,
-          name: 'Views',
-          type: 'folder' as const,
-          children: viewNodes,
-        },
-      ];
-    } catch (error) {
-      console.error('Failed to load tables:', error);
-      return [];
-    }
-  }, []);
+        return [
+          {
+            id: `${connectionId}-tables`,
+            name: 'Tables',
+            type: 'folder' as const,
+            children: tableNodes,
+          },
+          {
+            id: `${connectionId}-views`,
+            name: 'Views',
+            type: 'folder' as const,
+            children: viewNodes,
+          },
+        ];
+      } catch (error) {
+        console.error('Failed to load tables:', error);
+        return [];
+      }
+    },
+    [setTableListLoadTime]
+  );
 
   // Load columns for a table
   const loadColumns = useCallback(
