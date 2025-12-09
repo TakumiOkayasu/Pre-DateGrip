@@ -8,26 +8,29 @@ Pre-DateGrip is a Windows-only high-performance RDBMS management tool with DataG
 
 ## Build Commands
 
+**重要**: ビルドには必ず `uv run scripts/` のビルドスクリプトを使用すること。直接 `cmake`, `bun`, `npm` 等を実行しないこと。
+
 All build scripts are Python-based (requires Python 3.14+) and auto-detect MSVC environment.
 Scripts use [uv](https://docs.astral.sh/uv/) for execution (install: `winget install astral-sh.uv`).
 
 ```bash
 # Backend (C++ with CMake)
-uv run scripts/build.py Debug       # Debug build
-uv run scripts/build.py Release     # Release build
+uv run scripts/build_backend.py Release          # Release build (incremental)
+uv run scripts/build_backend.py Release --clean  # Release build (clean)
+uv run scripts/build_backend.py Debug            # Debug build (incremental)
+uv run scripts/build_backend.py Debug --clean    # Debug build (clean)
 
 # Run tests
-uv run scripts/test.py Debug
-uv run scripts/test.py Release
+uv run scripts/test_backend.py Release
+uv run scripts/test_backend.py Debug
 
-# Frontend (React) - uses Bun or npm
+# Frontend (React) - uses Bun
 uv run scripts/build_frontend.py      # Build frontend (auto-detects Bun/npm)
 
-# Or manually with Bun/npm:
+# Only for frontend development (hot reload) - direct Bun usage allowed
 cd frontend
 bun install                   # Install dependencies
 bun run dev                   # Development server (localhost:5173)
-bun run build                 # Production build
 bun run test                  # Run tests
 bun run lint                  # Lint code (Biome)
 bun run lint:fix              # Auto-fix lint issues
@@ -47,6 +50,26 @@ uv run scripts/convert_eol.py crlf src          # Convert C++ to CRLF
 # Package for distribution
 uv run scripts/package.py
 ```
+
+### ビルドスクリプト使用ガイドライン
+
+**必ずビルドスクリプトを使用する場合:**
+- バックエンド (C++) のビルド → `uv run scripts/build_backend.py`
+- バックエンドのテスト → `uv run scripts/test_backend.py`
+- フロントエンドのビルド（本番用） → `uv run scripts/build_frontend.py`
+- パッケージング → `uv run scripts/package.py`
+- 全体チェック → `uv run scripts/check_all.py`, `uv run scripts/run_lint.py`
+
+**直接実行が許可される場合:**
+- フロントエンド開発サーバー: `cd frontend && bun run dev`
+- フロントエンドのテスト: `cd frontend && bun run test`
+- フロントエンドのLint: `cd frontend && bun run lint`
+
+**理由:**
+- ビルドスクリプトはMSVC環境を自動検出・設定
+- インクリメンタルビルドとクリーンビルドの管理
+- Precompiled Headers (PCH) と ccache の最適化を適用
+- CI/CD環境との一貫性を保証
 
 ## Current Status
 

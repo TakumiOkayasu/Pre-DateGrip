@@ -96,27 +96,28 @@ CPUがAVX2に対応しているか確認するには：
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/your-username/Pre-DateGrip.git
+git clone https://github.com/TakumiOkayasu/Pre-DateGrip.git
 cd Pre-DateGrip
 
-# Developer Command Promptを開く（MSVCコンパイラが必要）
-# または: "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
-
 # フロントエンドのビルド
-cd frontend
-bun install
-bun run build
-cd ..
+uv run scripts/build_frontend.py
 
-# バックエンドのビルド（Ninja使用）
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+# バックエンドのビルド（初回）
+uv run scripts/build_backend.py Release --clean
+
+# バックエンドのビルド（2回目以降：インクリメンタル）
+uv run scripts/build_backend.py Release
 
 # パッケージ作成
 uv run scripts/package.py
 ```
 
-ビルド成果物は `dist/` フォルダに出力されます。
+**ビルドパフォーマンス:**
+- 初回ビルド: 1.5-2分
+- インクリメンタルビルド（変更なし）: 5-10秒
+- インクリメンタルビルド（1ファイル変更）: 20-30秒
+
+ビルド成果物は `build/[Debug|Release]/PreDateGrip.exe` に出力されます。
 
 ## 開発
 
