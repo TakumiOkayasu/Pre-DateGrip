@@ -31,7 +31,8 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
+          allow-prereleases: true
 
       - name: Install Semgrep
         run: pip install semgrep
@@ -208,7 +209,6 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
-          upload: false
 
   # Summary job
   security-summary:
