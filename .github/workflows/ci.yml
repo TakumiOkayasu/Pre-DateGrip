@@ -155,6 +155,8 @@ jobs:
     name: Package Application
     runs-on: windows-latest
     needs: [build-frontend, build-backend]
+    permissions:
+      contents: read
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     steps:
       - uses: actions/checkout@v6
