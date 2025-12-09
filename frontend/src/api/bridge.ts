@@ -127,14 +127,28 @@ class Bridge {
   async getTables(
     connectionId: string,
     database: string
-  ): Promise<
-    {
+  ): Promise<{
+    tables: {
       schema: string;
       name: string;
       type: string;
-    }[]
-  > {
-    return this.call('getTables', { connectionId, database });
+    }[];
+    loadTimeMs: number;
+  }> {
+    const startTime = performance.now();
+    const tables = await this.call<
+      {
+        schema: string;
+        name: string;
+        type: string;
+      }[]
+    >('getTables', { connectionId, database });
+    const endTime = performance.now();
+
+    return {
+      tables,
+      loadTimeMs: endTime - startTime,
+    };
   }
 
   async getColumns(
