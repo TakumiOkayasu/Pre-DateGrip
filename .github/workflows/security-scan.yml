@@ -1,7 +1,10 @@
 name: Security Scan
 
 on:
-  # Manual trigger only to save minutes (remove daily schedule)
+  # Daily security scan at 00:00 JST (15:00 UTC)
+  schedule:
+    - cron: '0 15 * * *'
+  # Manual trigger for on-demand scans
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
