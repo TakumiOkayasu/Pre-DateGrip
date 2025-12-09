@@ -1,8 +1,8 @@
 #include "webview_app.h"
 
 #include "ipc_handler.h"
-#include "settings_manager.h"
 #include "simdjson.h"
+#include "utils/settings_manager.h"
 #include "webview.h"
 
 #include <array>
