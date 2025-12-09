@@ -128,21 +128,53 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
+      - name: Install ccache
+        run: choco install ccache -y
+
+      - name: Setup ccache
+        run: |
+          echo "CC=cl.exe" >> $env:GITHUB_ENV
+          echo "CXX=cl.exe" >> $env:GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $env:GITHUB_ENV
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $env:GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~\.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
           path: |
             build/_deps
             build/third_party
+            build/CMakeCache.txt
+            build/CMakeFiles
+            build/**/*.dir
           key: cmake-ninja-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/CMakeLists.txt', 'third_party/CMakeLists.txt') }}
           restore-keys: |
             cmake-ninja-${{ runner.os }}-
 
       - name: Configure CMake
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_TESTS=ON `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+
+      - name: ccache stats (before)
+        run: ccache -s
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: ccache stats (after)
+        run: ccache -s
 
       - name: Run Tests
         run: ctest --test-dir build --output-on-failure --parallel

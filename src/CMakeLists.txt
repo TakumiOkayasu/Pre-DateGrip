@@ -67,6 +67,24 @@ target_link_libraries(PreDateGripCore PUBLIC
     crypt32
 )
 
+# Precompiled Headers for faster compilation
+target_precompile_headers(PreDateGripCore PRIVATE
+    <string>
+    <string_view>
+    <vector>
+    <memory>
+    <format>
+    <expected>
+    <chrono>
+    <unordered_map>
+    <functional>
+    <optional>
+    <fstream>
+    <sstream>
+    <algorithm>
+    "${CMAKE_SOURCE_DIR}/third_party/simdjson.h"
+)
+
 # Main executable
 add_executable(PreDateGrip WIN32 main.cpp)
 

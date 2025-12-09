@@ -250,11 +250,14 @@ def main():
     os.chdir(project_root)
     print(f"\nProject root: {project_root}")
 
-    # Clean build directory if requested or always clean for fresh builds
-    if build_dir.exists():
+    # Clean build directory only if explicitly requested
+    if clean_build and build_dir.exists():
         print(f"\n[0/4] Cleaning build directory...")
         shutil.rmtree(build_dir)
         print(f"  Removed: {build_dir}")
+    elif build_dir.exists():
+        print(f"\n[0/4] Using existing build directory (incremental build)...")
+        print(f"  Use --clean flag to force clean build")
 
     # Setup MSVC environment
     print("\n[1/4] Setting up MSVC environment...")
