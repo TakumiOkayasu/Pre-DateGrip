@@ -48,6 +48,12 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
 # Node.js
 node_modules/
 npm-debug.log*

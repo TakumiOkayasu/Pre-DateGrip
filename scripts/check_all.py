@@ -30,6 +30,39 @@ def run_command(cmd: list[str], description: str, cwd: Path | None = None) -> bo
     return result.returncode == 0
 
 
+def find_package_manager() -> tuple[str, Path] | None:
+    """Find available package manager (Bun or npm)."""
+    # Try Bun first (preferred)
+    bun_path = shutil.which("bun")
+    if bun_path:
+        try:
+            result = subprocess.run(
+                [bun_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return ("bun", Path(bun_path))
+        except Exception:
+            pass
+
+    # Try npm as fallback
+    npm_path = shutil.which("npm")
+    if npm_path:
+        try:
+            result = subprocess.run(
+                [npm_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return ("npm", Path(npm_path))
+        except Exception:
+            pass
+
+    return None
+
+
 def main():
     build_type = sys.argv[1] if len(sys.argv) > 1 else "Release"
     if build_type not in ("Debug", "Release"):
@@ -46,6 +79,16 @@ def main():
     print(f"*  Pre-DateGrip - Full Project Check")
     print(f"*  Build Type: {build_type}")
     print(f"{'*'*60}")
+
+    # Detect package manager
+    pkg_info = find_package_manager()
+    if pkg_info:
+        pkg_manager, pkg_path = pkg_info
+        print(f"\nPackage manager: {pkg_manager}")
+    else:
+        pkg_manager = "npm"
+        pkg_path = Path("npm")
+        print("\nWARNING: No package manager found, will try npm as fallback")
 
     total_errors = 0
 
@@ -118,8 +161,8 @@ def main():
     print("\n[Frontend] Running TypeScript type check...")
     tsc = frontend_dir / "node_modules" / ".bin" / "tsc"
     if not tsc.exists():
-        # Fallback: try npx or npm run
-        if not run_command(["npm", "run", "typecheck"], "TypeScript", cwd=frontend_dir):
+        # Fallback: try package manager run
+        if not run_command([str(pkg_path), "run", "typecheck"], "TypeScript", cwd=frontend_dir):
             print("WARNING: TypeScript type check found issues")
             total_errors += 1
         else:
@@ -135,7 +178,7 @@ def main():
     print("\n[Frontend] Building frontend...")
     vite = frontend_dir / "node_modules" / ".bin" / "vite"
     if not vite.exists():
-        if not run_command(["npm", "run", "build"], "Frontend build", cwd=frontend_dir):
+        if not run_command([str(pkg_path), "run", "build"], "Frontend build", cwd=frontend_dir):
             print("ERROR: Frontend build failed")
             total_errors += 1
         else:

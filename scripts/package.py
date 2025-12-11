@@ -89,6 +89,43 @@ def run_command(cmd: list[str], description: str, cwd: Path | None = None, env: 
     return result.returncode == 0
 
 
+def find_package_manager() -> tuple[str, Path] | None:
+    """Find available package manager (Bun or npm)."""
+    # Try Bun first (preferred)
+    bun_path = shutil.which("bun")
+    if bun_path:
+        try:
+            result = subprocess.run(
+                [bun_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                print(f"Found Bun: {version}")
+                return ("bun", Path(bun_path))
+        except Exception:
+            pass
+
+    # Try npm as fallback
+    npm_path = shutil.which("npm")
+    if npm_path:
+        try:
+            result = subprocess.run(
+                [npm_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                print(f"Found npm: {version}")
+                return ("npm", Path(npm_path))
+        except Exception:
+            pass
+
+    return None
+
+
 def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
@@ -110,13 +147,26 @@ def main():
     print("[1/3] Building frontend...")
     print("=" * 60)
 
+    # Find package manager
+    pkg_info = find_package_manager()
+    if not pkg_info:
+        print("ERROR: No package manager found (Bun or npm)")
+        print("\nInstall options:")
+        print("  1. Bun (recommended):")
+        print("     powershell -c \"irm bun.sh/install.ps1 | iex\"")
+        print("  2. npm:")
+        print("     winget install OpenJS.NodeJS")
+        sys.exit(1)
+
+    pkg_manager, pkg_path = pkg_info
+
     if not (frontend_dir / "node_modules").exists():
-        print("Installing npm dependencies...")
-        if not run_command(["npm", "install"], "npm install", cwd=frontend_dir):
-            print("ERROR: npm install failed")
+        print(f"Installing {pkg_manager} dependencies...")
+        if not run_command([str(pkg_path), "install"], f"{pkg_manager} install", cwd=frontend_dir):
+            print(f"ERROR: {pkg_manager} install failed")
             sys.exit(1)
 
-    if not run_command(["npm", "run", "build"], "Frontend build", cwd=frontend_dir):
+    if not run_command([str(pkg_path), "run", "build"], "Frontend build", cwd=frontend_dir):
         print("ERROR: Frontend build failed")
         sys.exit(1)
 

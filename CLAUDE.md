@@ -8,64 +8,84 @@ Pre-DateGrip is a Windows-only high-performance RDBMS management tool with DataG
 
 ## Build Commands
 
-**重要**: ビルドには必ず `uv run scripts/` のビルドスクリプトを使用すること。直接 `cmake`, `bun`, `npm` 等を実行しないこと。
+**重要**: ビルドには必ず `uv run scripts/pdg.py` のCLIを使用すること。直接 `cmake`, `bun`, `npm` 等を実行しないこと。
 
 All build scripts are Python-based (requires Python 3.14+) and auto-detect MSVC environment.
 Scripts use [uv](https://docs.astral.sh/uv/) for execution (install: `winget install astral-sh.uv`).
 
+### Unified CLI (推奨)
+
 ```bash
-# Backend (C++ with CMake)
-uv run scripts/build_backend.py Release          # Release build (incremental)
-uv run scripts/build_backend.py Release --clean  # Release build (clean)
-uv run scripts/build_backend.py Debug            # Debug build (incremental)
-uv run scripts/build_backend.py Debug --clean    # Debug build (clean)
+# Build commands
+uv run scripts/pdg.py build backend              # Build C++ backend (Release)
+uv run scripts/pdg.py build backend --clean      # Clean build backend
+uv run scripts/pdg.py build backend --type Debug # Debug build
+uv run scripts/pdg.py build frontend             # Build frontend (Bun/npm)
+uv run scripts/pdg.py build frontend --clean     # Clean build frontend
+uv run scripts/pdg.py build all                  # Build both (frontend + backend)
 
-# Run tests
-uv run scripts/test_backend.py Release
-uv run scripts/test_backend.py Debug
+# Short aliases
+uv run scripts/pdg.py b backend                  # Same as 'build backend'
+uv run scripts/pdg.py b all --clean              # Clean build all
 
-# Frontend (React) - uses Bun
-uv run scripts/build_frontend.py        # Build frontend (auto-detects Bun/npm)
-uv run scripts/build_frontend.py --clean # Clean build (clear all caches)
+# Test commands
+uv run scripts/pdg.py test frontend              # Run frontend tests
+uv run scripts/pdg.py test frontend --watch      # Run tests in watch mode
+uv run scripts/pdg.py test backend               # Run C++ tests (Release)
+uv run scripts/pdg.py test backend --type Debug  # Run C++ tests (Debug)
 
-# Frontend development - Python scripts (recommended)
-uv run scripts/dev.py                 # Development server (localhost:5173)
-uv run scripts/test_frontend.py       # Run tests
-uv run scripts/test_frontend.py --watch # Run tests (watch mode)
-uv run scripts/lint_frontend.py       # Lint code (Biome)
-uv run scripts/lint_frontend.py --fix # Auto-fix lint issues
+# Short aliases
+uv run scripts/pdg.py t frontend                 # Same as 'test frontend'
 
-# Full project checks
-uv run scripts/check_all.py Release   # All checks (EOL, format, lint, build)
-uv run scripts/run_lint.py            # Lint only (frontend + C++)
-uv run scripts/cpp_check.py all       # C++ only (format, lint, build)
-uv run scripts/cpp_check.py format    # C++ format only
-uv run scripts/cpp_check.py lint      # C++ lint only
-uv run scripts/cpp_check.py build     # C++ build only
+# Lint commands
+uv run scripts/pdg.py lint                       # Lint all (frontend + C++)
+uv run scripts/pdg.py lint --fix                 # Auto-fix lint issues
 
-# EOL conversion
-uv run scripts/convert_eol.py lf frontend/src   # Convert frontend to LF
-uv run scripts/convert_eol.py crlf src          # Convert C++ to CRLF
+# Short alias
+uv run scripts/pdg.py l --fix                    # Same as 'lint --fix'
+
+# Development server
+uv run scripts/pdg.py dev                        # Start frontend dev server (localhost:5173)
 
 # Package for distribution
+uv run scripts/pdg.py package                    # Build + package for release
+
+# Comprehensive check
+uv run scripts/pdg.py check Release              # Lint + test + build (all checks)
+
+# Help
+uv run scripts/pdg.py --help                     # Show all commands
+uv run scripts/pdg.py build --help               # Show build options
+```
+
+### Legacy Scripts (後方互換性のために残存)
+
+```bash
+# These still work but pdg.py is recommended
+uv run scripts/build_backend.py Release
+uv run scripts/build_frontend.py
+uv run scripts/test_frontend.py
 uv run scripts/package.py
+uv run scripts/convert_eol.py lf frontend/src   # EOL conversion (utility)
 ```
 
 ### ビルドスクリプト使用ガイドライン
 
-**必ずビルドスクリプトを使用する場合:**
+**必ず pdg.py を使用する場合:**
 
-- バックエンド (C++) のビルド → `uv run scripts/build_backend.py`
-- バックエンドのテスト → `uv run scripts/test_backend.py`
-- フロントエンドのビルド（本番用） → `uv run scripts/build_frontend.py`
-- パッケージング → `uv run scripts/package.py`
-- 全体チェック → `uv run scripts/check_all.py`, `uv run scripts/run_lint.py`
+- バックエンド (C++) のビルド → `uv run scripts/pdg.py build backend`
+- バックエンドのテスト → `uv run scripts/pdg.py test backend`
+- フロントエンドのビルド（本番用） → `uv run scripts/pdg.py build frontend`
+- パッケージング → `uv run scripts/pdg.py package`
+- 全体チェック → `uv run scripts/pdg.py check Release`
+- Lint → `uv run scripts/pdg.py lint`
 
-**Pythonスクリプト推奨（フロントエンド開発）:**
+**統一CLI（推奨）:**
 
-- 開発サーバー: `uv run scripts/dev.py`
-- テスト: `uv run scripts/test_frontend.py`
-- Lint: `uv run scripts/lint_frontend.py`
+- 開発サーバー: `uv run scripts/pdg.py dev`
+- テスト: `uv run scripts/pdg.py test frontend`
+- Lint: `uv run scripts/pdg.py lint`
+- ビルド: `uv run scripts/pdg.py build all`
 
 **直接実行が許可される場合（オプション）:**
 
@@ -463,6 +483,24 @@ interface RelationEdge {
 ### 禁止事項
 
 - **git commit, git push は絶対禁止**。コミットメッセージを考えるだけにすること。
+
+### 変更時の必須確認事項
+
+何か変更を加えた場合は、以下を必ず確認すること：
+
+1. **ドキュメントの更新**
+   - CLAUDE.md、README.md、コードコメント等の関連ドキュメントを更新
+   - 新しいコマンド、オプション、機能を追加した場合は必ず記載
+   - 削除・非推奨化した機能も明記
+
+2. **CI/CDの確認**
+   - `.github/workflows/` 内のワークフローファイルの更新が必要か確認
+   - 新しい依存関係、ビルドステップ、テストコマンドを追加した場合は反映
+   - CI でビルド・テストが通ることを確認
+
+3. **後方互換性**
+   - 既存のスクリプトやコマンドが動作し続けるか確認
+   - 破壊的変更の場合は移行ガイドを CLAUDE.md に追加
 
 ### 作業完了時の必須チェック（コミット前に必ず実行）
 
