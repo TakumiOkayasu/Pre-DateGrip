@@ -6,7 +6,7 @@ Windows向け高性能RDBMSマネジメントツール。DataGripライクなUI/
 
 - **DataGripライクなUI** - 3ペインレイアウト（オブジェクトエクスプローラー、エディタ、結果）
 - **高速なクエリ実行** - 非同期実行、結果キャッシュ、AVX2 SIMDフィルタリング
-- **インライン編集** - AG Gridによるセル編集とUPDATE/INSERT/DELETE SQL自動生成
+- **インライン編集** - TanStack Tableによるセル編集とUPDATE/INSERT/DELETE SQL自動生成
 - **Monaco Editor** - VS Code同等のSQL編集体験
 - **ER図表示** - React Flowによるテーブル関連の可視化、A5:ERファイルインポート対応
 - **エクスポート** - CSV/JSON/Excel形式でのデータ出力
@@ -169,12 +169,16 @@ uv run scripts/pdg.py test frontend --watch      # Watchモード
 # 短縮形
 uv run scripts/pdg.py t frontend                 # 'test' の代わりに 't'
 
-# Lint
-uv run scripts/pdg.py lint                       # 全体Lint（C++ + Frontend）
+# Lint (プロダクトコード: Frontend + C++)
+uv run scripts/pdg.py lint                       # 全体Lint
 uv run scripts/pdg.py lint --fix                 # 自動修正
 
 # 短縮形
 uv run scripts/pdg.py l --fix                    # 'lint' の代わりに 'l'
+
+# Lint (ビルドスクリプト: Python) - 別途実行
+ruff check scripts/                              # チェックのみ
+ruff check --fix scripts/ && ruff format scripts/  # 自動修正
 
 # 開発サーバー
 uv run scripts/pdg.py dev                        # フロントエンド開発サーバー
@@ -272,28 +276,39 @@ bun pm cache rm      # キャッシュ削除
 
 ### 技術スタック
 
+#### ビルドスクリプト（Python 3.14+）
+
+| カテゴリ | ツール/技術 |
+|---------|------------|
+| ランタイム | uv |
+| Lint/Format | Ruff |
+| 設定 | pyproject.toml |
+
 #### バックエンド（C++23）
 
 | カテゴリ | ライブラリ/技術 |
 |---------|----------------|
+| ビルド | CMake + Ninja (MSVC) |
 | WebView | webview/webview (WebView2) |
 | データベース | ODBC Native API |
 | JSON | simdjson |
 | XML | pugixml |
 | 最適化 | SIMD (AVX2)、メモリマップドファイル |
+| Lint/Format | clang-format 21, clang-tidy |
 
 #### フロントエンド（React + TypeScript）
 
 | カテゴリ | ライブラリ |
 |---------|-----------|
+| ランタイム | Bun |
 | ビルド | Vite |
 | UI | React 18 |
 | エディタ | Monaco Editor |
-| テーブル | AG Grid（仮想スクロール） |
+| テーブル | TanStack Table（仮想スクロール） |
 | スタイル | CSS Modules |
 | 状態管理 | Zustand |
 | ER図 | React Flow |
-| Linter/Formatter | Biome |
+| Linter/Formatter | Biome 2.3.8 |
 | テスト | Vitest |
 
 ### パフォーマンス目標と実装
@@ -303,8 +318,8 @@ bun pm cache rm      # キャッシュ削除
 | アプリ起動 | < 0.3秒 | WebView2軽量初期化 |
 | SQL Server接続 | < 50ms | ODBC直接接続、接続プール |
 | SELECT（100万行） | < 500ms | 非同期クエリ実行、ストリーミング |
-| 結果表示開始 | < 100ms | AG Grid仮想スクロール |
-| 仮想スクロール | 60fps安定 | AG Grid仮想化 |
+| 結果表示開始 | < 100ms | TanStack Table仮想スクロール |
+| 仮想スクロール | 60fps安定 | TanStack Table仮想化 |
 | SQLフォーマット | < 50ms | 軽量カスタムパーサー |
 | CSVエクスポート（10万行） | < 2秒 | ストリーム書き込み |
 | A5:ERロード（100テーブル） | < 1秒 | pugixml高速XMLパース |
@@ -330,7 +345,7 @@ bun pm cache rm      # キャッシュ削除
 - ✅ DataGripライクな3ペインレイアウト
 - ✅ オブジェクトエクスプローラー（データベース・テーブル・ビュー）
 - ✅ Monaco Editor統合（SQLエディタ）
-- ✅ AG Grid結果表示（サーバーサイドモデル、仮想スクロール）
+- ✅ TanStack Table結果表示（仮想スクロール）
 - ✅ タブ管理（クエリ・データビュー）
 - ✅ セッション永続化（ウィンドウ状態・開いているタブ）
 
@@ -403,7 +418,7 @@ bun pm cache rm      # キャッシュ削除
 - [simdjson](https://github.com/simdjson/simdjson)
 - [pugixml](https://github.com/zeux/pugixml)
 - [Monaco Editor](https://github.com/microsoft/monaco-editor)
-- [AG Grid](https://www.ag-grid.com/)
+- [TanStack Table](https://tanstack.com/table)
 - [React Flow](https://reactflow.dev/)
 - [Zustand](https://github.com/pmndrs/zustand)
 - [Biome](https://biomejs.dev/)
