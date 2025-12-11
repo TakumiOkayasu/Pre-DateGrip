@@ -194,11 +194,22 @@ def build_backend(build_type: str = "Release", clean: bool = False) -> bool:
     # Clear WebView2 cache
     utils.clear_webview2_cache(project_root)
 
+    # Final output: Show binary location
+    if exe_path.exists():
+        print(f"\n{'='*60}")
+        print(f"  BINARY LOCATION")
+        print(f"{'='*60}")
+        print(f"\n  {exe_path.absolute()}")
+        print()
+
     return True
 
 
 def build_all(build_type: str = "Release", clean: bool = False) -> bool:
     """Build both frontend and backend."""
+    project_root = utils.get_project_root()
+    build_dir = project_root / "build"
+
     print(f"\n{'='*60}")
     print("  Building All (Frontend + Backend)")
     print(f"{'='*60}")
@@ -214,5 +225,11 @@ def build_all(build_type: str = "Release", clean: bool = False) -> bool:
     print(f"\n{'='*60}")
     print("  ALL BUILDS SUCCESSFUL")
     print(f"{'='*60}")
+
+    # Show final binary location
+    exe_path = build_dir / build_type / "PreDateGrip.exe"
+    if exe_path.exists():
+        print(f"\n  Binary: {exe_path.absolute()}")
+        print(f"  Run: {exe_path.name}")
 
     return True

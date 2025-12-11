@@ -33,9 +33,13 @@ uv run scripts/pdg.py test backend               # C++テスト
 uv run scripts/pdg.py test frontend              # フロントエンドテスト
 uv run scripts/pdg.py test frontend --watch      # Watchモード
 
-# Lint
+# Lint (プロダクトコード: Frontend + C++)
 uv run scripts/pdg.py lint                       # 全体Lint
 uv run scripts/pdg.py lint --fix                 # 自動修正
+
+# Lint (ビルドスクリプト: Python) - 別途実行
+ruff check scripts/                              # チェックのみ
+ruff check --fix scripts/ && ruff format scripts/  # 自動修正
 
 # 開発
 uv run scripts/pdg.py dev                        # 開発サーバー (localhost:5173)
@@ -85,11 +89,25 @@ bun run lint         # Lint
 4. **作業完了時の必須チェック**
 
    ```bash
-   uv run scripts/pdg.py lint          # または
+   # プロダクトコード (Frontend + C++)
+   uv run scripts/pdg.py lint
+
+   # ビルドスクリプト (Python) - 別途実行
+   ruff check scripts/ && ruff format --check scripts/
+
+   # または個別に
    cd frontend && bun run lint         # フロントエンドのみ
    ```
 
 ### コーディング規約
+
+#### Python (Build Scripts)
+
+- **Ruff** で Lint + Format (`uv pip install ruff`)
+- Python 3.14+ の型ヒントを使用
+- pyproject.toml で設定管理
+- 行長: 100文字
+- インデント: スペース4個
 
 #### フロントエンド (TypeScript/React)
 
@@ -133,6 +151,12 @@ Pre-DateGrip/
 
 ## Technology Stack
 
+### Build Scripts (Python 3.14+)
+
+- Runtime: uv
+- Lint/Format: Ruff
+- Config: pyproject.toml
+
 ### Backend (C++23)
 
 - Build: CMake + Ninja (MSVC)
@@ -157,7 +181,7 @@ Pre-DateGrip/
 
 ### CI/CD
 
-- GitHub Actions (LLVM 21, Bun, Biome)
+- GitHub Actions (LLVM 21, Bun, Biome, Ruff)
 - Google Test (C++), Vitest (Frontend)
 
 ## Development Guidelines
