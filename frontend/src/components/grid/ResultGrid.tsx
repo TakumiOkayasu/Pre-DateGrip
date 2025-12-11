@@ -1,9 +1,4 @@
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
+import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
@@ -156,7 +151,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
 
-  const paddingTop = virtualRows.length > 0 ? virtualRows[0]?.start ?? 0 : 0;
+  const paddingTop = virtualRows.length > 0 ? (virtualRows[0]?.start ?? 0) : 0;
   const paddingBottom =
     virtualRows.length > 0 ? totalSize - (virtualRows[virtualRows.length - 1]?.end ?? 0) : 0;
 
@@ -489,7 +484,8 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
                     const change = field !== '__rowIndex' ? getCellChange(rowIndex, field) : null;
                     const isChanged = change !== null;
                     const isNull = value === null || value === '';
-                    const align = (cell.column.columnDef.meta as { align?: string })?.align ?? 'left';
+                    const align =
+                      (cell.column.columnDef.meta as { align?: string })?.align ?? 'left';
 
                     return (
                       <td
