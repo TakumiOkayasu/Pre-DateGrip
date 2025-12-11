@@ -154,3 +154,37 @@ export const log = {
   warning: (message: string) => logger.warning(message),
   error: (message: string) => logger.error(message),
 };
+
+// Override console methods to capture browser console logs
+if (typeof window !== 'undefined') {
+  const originalConsole = {
+    log: console.log,
+    info: console.info,
+    warn: console.warn,
+    error: console.error,
+  };
+
+  console.log = (...args: unknown[]) => {
+    originalConsole.log(...args);
+    const message = args.map((arg) => String(arg)).join(' ');
+    logger.debug(`[Console] ${message}`);
+  };
+
+  console.info = (...args: unknown[]) => {
+    originalConsole.info(...args);
+    const message = args.map((arg) => String(arg)).join(' ');
+    logger.info(`[Console] ${message}`);
+  };
+
+  console.warn = (...args: unknown[]) => {
+    originalConsole.warn(...args);
+    const message = args.map((arg) => String(arg)).join(' ');
+    logger.warning(`[Console] ${message}`);
+  };
+
+  console.error = (...args: unknown[]) => {
+    originalConsole.error(...args);
+    const message = args.map((arg) => String(arg)).join(' ');
+    logger.error(`[Console] ${message}`);
+  };
+}

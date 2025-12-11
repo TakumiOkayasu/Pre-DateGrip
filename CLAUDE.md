@@ -175,6 +175,73 @@ uv run scripts/build_backend.py Release
 
 **重要:** 手動でビルドディレクトリを削除したり、直接コマンドを実行したりする必要はありません。すべてビルドスクリプトが自動処理します。
 
+---
+
+**フロントエンドのデバッグ・トラブルシューティング:**
+
+UI の問題（テーブルが表示されない、ローディングが終わらない等）が発生した場合：
+
+**重要: ログの解析は Claude の仕事です。**
+- ユーザーは問題を報告するだけでOK（例: "テーブルが表示されない"）
+- Claude が自動的に `log/frontend.log` と `log/backend.log` を読み取り、分析
+- ユーザーがログを手動で確認・解析する必要はありません
+
+1. **ログファイルの場所:**
+   ```bash
+   # フロントエンドログ（Claude が自動解析）
+   log/frontend.log
+
+   # バックエンドログ（Claude が自動解析）
+   log/backend.log
+   ```
+
+2. **重要なログパターン:**
+   - `[QueryStore] openTableData called` - テーブルを開く操作開始
+   - `[QueryStore] Column metadata loaded: X columns` - メタデータフェッチ完了
+   - `[ResultGrid] columnDefs computed: X columns` - カラム定義生成完了
+   - `[ResultGrid] onGridReady called` - AG Grid 初期化完了（**これが出ない場合は問題あり**）
+   - `[ResultGrid] Fetching rows X - Y` - データフェッチ開始
+   - `[ResultGrid] Fetched X rows in Yms` - データフェッチ完了
+
+3. **よくある問題と解決方法:**
+
+   **問題: テーブルが表示されない**
+   - ログで `onGridReady called` が出力されているか確認
+   - 出力されていない → AG Grid が初期化されていない
+   - `columnDefs computed: 0 columns` → メタデータフェッチに失敗
+   - バックエンドログでエラーがないか確認
+
+   **問題: Loading が終わらない**
+   - `Column metadata loaded` が出力されているか確認
+   - 出力されている → フロントエンドの問題
+   - 出力されていない → バックエンドの問題（接続、クエリ実行）
+
+   **問題: データが表示されない**
+   - `Fetching rows 0 - 100` が出力されているか確認
+   - 出力されていない → データソースが設定されていない
+   - 出力されているが `Fetched X rows` がない → バックエンドエラー
+
+4. **WebView2 キャッシュのクリア:**
+
+   フロントエンドの変更が反映されない場合：
+   ```bash
+   # ビルドスクリプトが自動的にキャッシュを削除
+   uv run scripts/build_frontend.py
+
+   # 手動で削除する場合（非推奨）
+   Remove-Item -Recurse -Force build\Release\PreDateGrip.exe.WebView2
+   Remove-Item -Recurse -Force build\Debug\PreDateGrip.exe.WebView2
+   ```
+
+5. **完全なクリーンビルド:**
+   ```bash
+   # フロントエンド
+   uv run scripts/build_frontend.py --clean
+
+   # バックエンド
+   uv run scripts/build_backend.py Release --clean
+   ```
+
 ## Current Status
 
 All phases (0-7) are complete. The project includes:

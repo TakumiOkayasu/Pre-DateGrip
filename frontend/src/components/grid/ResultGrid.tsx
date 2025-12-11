@@ -235,6 +235,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         try {
           const startRow = params.request.startRow ?? 0;
           const endRow = params.request.endRow ?? 100;
+          const fetchStart = performance.now();
           log.debug(`[ResultGrid] Fetching rows ${startRow} - ${endRow}`);
 
           // Convert AG Grid sort model to backend format
@@ -250,6 +251,11 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
             startRow,
             endRow,
             sortModel.length > 0 ? sortModel : undefined
+          );
+
+          const fetchEnd = performance.now();
+          log.debug(
+            `[ResultGrid] Fetched ${result.rows.length} rows in ${(fetchEnd - fetchStart).toFixed(2)}ms`
           );
 
           // Store columns in resultSet for the first request
@@ -329,15 +335,15 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const onGridReady = useCallback(
     (params: GridReadyEvent) => {
       log.debug(
-        `[ResultGrid] onGridReady called, useServerSide: ${useServerSide}, queryId: ${targetQueryId}`
+        `[ResultGrid] onGridReady called, useServerSide: ${useServerSide}, queryId: ${targetQueryId}, hasResultSet: ${!!resultSet}`
       );
       setGridApi(params.api);
 
       // Set server-side datasource for server-side row model
       if (useServerSide) {
         log.debug('[ResultGrid] Setting server-side datasource');
-        params.api.setGridOption('serverSideDatasource', createServerSideDatasource());
         params.api.showLoadingOverlay();
+        params.api.setGridOption('serverSideDatasource', createServerSideDatasource());
       } else {
         // Auto-size all columns to fit content after grid is ready
         // Skip auto-size for large datasets (>10000 rows) to improve performance
@@ -351,13 +357,13 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
 
   // Auto-size columns when data changes (only for small datasets)
   useEffect(() => {
-    if (gridApi && resultSet && resultSet.rows.length <= 10000) {
+    if (gridApi && resultSet && !useServerSide && resultSet.rows.length <= 10000) {
       // Wait for rendering to complete, then auto-size all columns
       requestAnimationFrame(() => {
         gridApi.autoSizeAllColumns();
       });
     }
-  }, [gridApi, resultSet]);
+  }, [gridApi, resultSet, useServerSide]);
 
   // Cleanup gridApi on unmount to prevent memory leaks
   useEffect(() => {
@@ -759,47 +765,50 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         </div>
       )}
       <div ref={gridContainerRef} className={styles.grid}>
-        {useServerSide && isExecuting && !resultSet && (
+        {useServerSide && !resultSet && (
           <div className={styles.loadingOverlay}>
             <span className={styles.spinner}>{'\u23F3'}</span>
             <span>Loading table schema...</span>
           </div>
         )}
-        <AgGridReact
-          ref={gridRef}
-          theme={darkTheme}
-          columnDefs={columnDefs}
-          rowData={useServerSide ? undefined : rowData}
-          rowModelType={useServerSide ? 'serverSide' : 'clientSide'}
-          cacheBlockSize={100}
-          maxBlocksInCache={10}
-          defaultColDef={{
-            sortable: true,
-            filter: !useServerSide,
-            resizable: true,
-            suppressMovable: true,
-          }}
-          onGridReady={onGridReady}
-          onCellValueChanged={onCellValueChanged}
-          enableCellTextSelection={!isEditMode}
-          ensureDomOrder={false}
-          animateRows={false}
-          rowBuffer={20}
-          rowSelection="multiple"
-          suppressRowClickSelection={false}
-          suppressCellFocus={true}
-          enableRangeSelection={false}
-          copyHeadersToClipboard={true}
-          suppressCopyRowsToClipboard={false}
-          stopEditingWhenCellsLoseFocus={true}
-          singleClickEdit={false}
-          suppressColumnVirtualisation={false}
-          suppressMovableColumns={true}
-          suppressRowVirtualisation={false}
-          debounceVerticalScrollbar={true}
-          suppressRowHoverHighlight={false}
-          suppressAnimationFrame={true}
-        />
+        {/* Only render AG Grid when we have column definitions */}
+        {columnDefs.length > 0 || !useServerSide ? (
+          <AgGridReact
+            ref={gridRef}
+            theme={darkTheme}
+            columnDefs={columnDefs}
+            rowData={useServerSide ? undefined : rowData}
+            rowModelType={useServerSide ? 'serverSide' : 'clientSide'}
+            cacheBlockSize={100}
+            maxBlocksInCache={10}
+            defaultColDef={{
+              sortable: true,
+              filter: !useServerSide,
+              resizable: true,
+              suppressMovable: true,
+            }}
+            onGridReady={onGridReady}
+            onCellValueChanged={onCellValueChanged}
+            enableCellTextSelection={!isEditMode}
+            ensureDomOrder={false}
+            animateRows={false}
+            rowBuffer={20}
+            rowSelection="multiple"
+            suppressRowClickSelection={false}
+            suppressCellFocus={true}
+            enableRangeSelection={false}
+            copyHeadersToClipboard={true}
+            suppressCopyRowsToClipboard={false}
+            stopEditingWhenCellsLoseFocus={true}
+            singleClickEdit={false}
+            suppressColumnVirtualisation={false}
+            suppressMovableColumns={true}
+            suppressRowVirtualisation={false}
+            debounceVerticalScrollbar={true}
+            suppressRowHoverHighlight={false}
+            suppressAnimationFrame={true}
+          />
+        ) : null}
       </div>
       <div className={styles.statusBar}>
         {useServerSide ? (

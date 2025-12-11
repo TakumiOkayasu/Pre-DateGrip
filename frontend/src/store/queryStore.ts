@@ -250,16 +250,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       isDirty: false,
       sourceTable: tableName,
       isDataView: true,
-      useServerSideRowModel: true, // Enable server-side row model for large tables
+      useServerSideRowModel: false, // Use client-side model (server-side requires Enterprise license)
     };
 
-    log.info(
-      `[QueryStore] Creating new query tab with server-side row model: ${id} for table ${tableName}`
-    );
-
-    // Fetch column metadata first to initialize AG Grid properly
-    // Use TOP 0 to get only schema without data (SQL Server syntax)
-    const metadataQuery = `SELECT TOP 0 * FROM ${tableName}`;
+    log.info(`[QueryStore] Creating new query tab: ${id} for table ${tableName}`);
 
     set((state) => ({
       queries: [...state.queries, newQuery],
@@ -269,36 +263,37 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     }));
 
     try {
-      log.debug(`[QueryStore] Fetching column metadata for ${tableName}`);
-      const metadataResult = await bridge.executeQuery(connectionId, metadataQuery, false);
+      log.debug(`[QueryStore] Fetching table data for ${tableName}`);
+      const fetchStart = performance.now();
+      const result = await bridge.executeQuery(connectionId, sql);
+      const fetchEnd = performance.now();
 
-      // Create empty ResultSet with just column definitions
-      const initialResultSet: ResultSet = {
-        columns: metadataResult.columns.map((c) => ({
+      const resultSet: ResultSet = {
+        columns: result.columns.map((c) => ({
           name: c.name,
           type: c.type,
           size: 0,
           nullable: true,
           isPrimaryKey: false,
         })),
-        rows: [], // Empty rows - AG Grid will fetch data via server-side datasource
-        affectedRows: 0,
-        executionTimeMs: metadataResult.executionTimeMs,
+        rows: result.rows,
+        affectedRows: result.affectedRows,
+        executionTimeMs: result.executionTimeMs,
       };
 
       set((state) => ({
-        results: { ...state.results, [id]: initialResultSet },
+        results: { ...state.results, [id]: resultSet },
         isExecuting: false,
       }));
 
-      log.debug(
-        `[QueryStore] Column metadata loaded: ${initialResultSet.columns.length} columns. AG Grid will fetch data on-demand.`
+      log.info(
+        `[QueryStore] Loaded ${result.rows.length} rows with ${result.columns.length} columns in ${(fetchEnd - fetchStart).toFixed(2)}ms`
       );
     } catch (error) {
-      log.error(`[QueryStore] Failed to fetch column metadata: ${error}`);
+      log.error(`[QueryStore] Failed to fetch table data: ${error}`);
       set({
         isExecuting: false,
-        error: error instanceof Error ? error.message : 'Failed to load table schema',
+        error: error instanceof Error ? error.message : 'Failed to load table data',
       });
     }
   },
