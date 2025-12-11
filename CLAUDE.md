@@ -25,7 +25,8 @@ uv run scripts/test_backend.py Release
 uv run scripts/test_backend.py Debug
 
 # Frontend (React) - uses Bun
-uv run scripts/build_frontend.py      # Build frontend (auto-detects Bun/npm)
+uv run scripts/build_frontend.py        # Build frontend (auto-detects Bun/npm)
+uv run scripts/build_frontend.py --clean # Clean build (clear all caches)
 
 # Frontend development - Python scripts (recommended)
 uv run scripts/dev.py                 # Development server (localhost:5173)
@@ -33,14 +34,6 @@ uv run scripts/test_frontend.py       # Run tests
 uv run scripts/test_frontend.py --watch # Run tests (watch mode)
 uv run scripts/lint_frontend.py       # Lint code (Biome)
 uv run scripts/lint_frontend.py --fix # Auto-fix lint issues
-
-# Frontend development - direct Bun usage (optional)
-cd frontend
-bun install                   # Install dependencies
-bun run dev                   # Development server (localhost:5173)
-bun run test                  # Run tests
-bun run lint                  # Lint code (Biome)
-bun run lint:fix              # Auto-fix lint issues
 
 # Full project checks
 uv run scripts/check_all.py Release   # All checks (EOL, format, lint, build)
@@ -61,6 +54,7 @@ uv run scripts/package.py
 ### ビルドスクリプト使用ガイドライン
 
 **必ずビルドスクリプトを使用する場合:**
+
 - バックエンド (C++) のビルド → `uv run scripts/build_backend.py`
 - バックエンドのテスト → `uv run scripts/test_backend.py`
 - フロントエンドのビルド（本番用） → `uv run scripts/build_frontend.py`
@@ -68,22 +62,31 @@ uv run scripts/package.py
 - 全体チェック → `uv run scripts/check_all.py`, `uv run scripts/run_lint.py`
 
 **Pythonスクリプト推奨（フロントエンド開発）:**
+
 - 開発サーバー: `uv run scripts/dev.py`
 - テスト: `uv run scripts/test_frontend.py`
 - Lint: `uv run scripts/lint_frontend.py`
 
 **直接実行が許可される場合（オプション）:**
+
 - フロントエンド開発サーバー: `cd frontend && bun run dev`
 - フロントエンドのテスト: `cd frontend && bun run test`
 - フロントエンドのLint: `cd frontend && bun run lint`
 
 **理由:**
+
 - ビルドスクリプトはMSVC環境を自動検出・設定
 - インクリメンタルビルドとクリーンビルドの管理
 - Precompiled Headers (PCH) と ccache の最適化を適用
 - Bunの存在確認と依存関係の自動インストール
+- **ビルド後にWebView2キャッシュを自動削除**（フロントエンドの変更を確実に反映）
 - CI/CD環境との一貫性を保証
 - プロジェクトルートからの統一的な実行方法
+
+**CI/CD環境での例外:**
+
+- GitHub ActionsなどのCI環境では、直接 `cmake` や `bun run build` を実行してもOK
+- CI環境では環境変数やキャッシュが適切に管理されているため
 
 ### VSCode CMake Tools使用時の注意事項
 
@@ -93,6 +96,7 @@ uv run scripts/package.py
 
 1. **スタートメニュー** → **Visual Studio 2022** → **Developer Command Prompt for VS 2022** を起動
 2. プロンプトで以下を実行:
+
    ```cmd
    cd D:\prog\Pre-DateGrip
    code .
@@ -112,11 +116,14 @@ uv run scripts/package.py
 #### トラブルシューティング
 
 通常のコマンドプロンプトやPowerShellからVSCodeを起動すると、以下のエラーが発生します：
-```
+
+```text
 CMake Error: Generator Visual Studio 17 2022 could not find any instance of Visual Studio.
 ```
+
 または
-```
+
+```text
 lld-link: error: could not open 'msvcrtd.lib': no such file or directory
 ```
 
@@ -127,6 +134,7 @@ lld-link: error: could not open 'msvcrtd.lib': no such file or directory
 All phases (0-7) are complete. The project includes:
 
 ### Backend (C++)
+
 - ODBC SQL Server driver with connection pooling
 - IPC handler with 40+ API routes
 - Result caching (LRU) and async query execution
@@ -136,15 +144,18 @@ All phases (0-7) are complete. The project includes:
 - CSV/JSON/Excel exporters
 - Settings and session persistence
 - Global database object search
+- **Automatic log file management** (cleared on app startup)
 
 ### Frontend (React/TypeScript)
+
 - Monaco Editor integration
-- AG Grid with virtual scrolling
+- AG Grid with virtual scrolling (**server-side row model** for large tables)
 - Zustand state management
 - ER diagram with React Flow
 - Complete API bridge to backend
 
 ### Infrastructure
+
 - GitHub Actions CI/CD (LLVM 21, Bun, Biome 2.3.8)
 - Google Test for C++, Vitest for frontend
 - Python build scripts with uv
@@ -152,6 +163,7 @@ All phases (0-7) are complete. The project includes:
 ## Technology Stack
 
 ### Backend (C++23)
+
 - **Build**: CMake + Ninja (MSVC)
 - **WebView**: webview/webview (OS WebView2)
 - **Database**: ODBC Native API (SQL Server)
@@ -162,6 +174,7 @@ All phases (0-7) are complete. The project includes:
 - **Linter/Formatter**: clang-format, clang-tidy
 
 ### Frontend (React + TypeScript)
+
 - **Runtime**: Bun (install: `powershell -c "irm bun.sh/install.ps1 | iex"`)
 - **Build**: Vite
 - **UI**: React 18
@@ -173,16 +186,18 @@ All phases (0-7) are complete. The project includes:
 - **Linter/Formatter**: Biome 2.3.8 (`winget install biomejs.biome`)
 
 ### Testing
+
 - **C++**: Google Test
 - **Frontend**: Vitest
 
 ### Development Tools
+
 - **Git Hooks**: Husky (pre-commit)
 - **EOL Normalization**: convert_eol.py (CRLF for Windows)
 
 ## Project Structure
 
-```
+```text
 Pre-DateGrip/
 ├── src/                               # C++ Backend
 │   ├── main.cpp
@@ -267,6 +282,7 @@ Pre-DateGrip/
 ## Key Interfaces
 
 ### SchemaInspector (C++)
+
 ```cpp
 class SchemaInspector {
 public:
@@ -279,6 +295,7 @@ public:
 ```
 
 ### TransactionManager (C++)
+
 ```cpp
 class TransactionManager {
 public:
@@ -291,6 +308,7 @@ public:
 ```
 
 ### Zustand Stores (TypeScript)
+
 ```typescript
 interface ConnectionStore {
     connections: Connection[];
@@ -314,6 +332,7 @@ interface HistoryStore {
 ```
 
 ### ER Diagram Types (TypeScript)
+
 ```typescript
 interface TableNode {
     id: string;
@@ -330,17 +349,21 @@ interface RelationEdge {
     data: { cardinality: '1:1' | '1:N' | 'N:M'; sourceColumn: string; targetColumn: string; };
 }
 ```
+
 ## 重要な指示 (Instructions for Claude)
 
 ### Python実行について
+
 - **Pythonスクリプトは必ず `uv run` 経由で実行すること**
 - 例: `uv run scripts/build.py Debug`（`python scripts/build.py Debug` は使わない）
 - uvがPython環境とインラインスクリプト依存を自動管理する
 
 ### 禁止事項
+
 - **git commit, git push は絶対禁止**。コミットメッセージを考えるだけにすること。
 
 ### 作業完了時の必須チェック（コミット前に必ず実行）
+
 作業が終わったら、以下のLinter/Formatterでエラーが出ないか**必ずチェック**すること：
 
 ```bash
@@ -359,12 +382,14 @@ uv run scripts/run_lint.py
 ### コーディング規約
 
 #### フロントエンド (TypeScript/React)
+
 - **Biomeの警告は必ず修正する**（--error-on-warnings で警告もエラー扱い）
 - 非nullアサーション (`!`) は使用禁止 → 明示的なnullチェックを使用
 - CSS Modulesを使用（グローバルCSSは避ける）
 - Zustandでの状態管理
 
 #### バックエンド (C++)
+
 - **C++23**の機能を積極的に使用（std::expected, std::format, std::ranges等）
 - **clang-format 21**でフォーマット（Google style base）
   - CI環境: LLVM 21 (apt.llvm.org)
@@ -379,24 +404,64 @@ uv run scripts/run_lint.py
   - Windows SDKヘッダー（`<Windows.h>`, `<sql.h>`等）は必要に応じて使用可
 
 ### 改行コード
+
 - **CRLF (Windows)** で統一
 - コミット前にHuskyが自動でconvert_eol.pyを実行
 - 手動変換: `uv run scripts/convert_eol.py crlf`
 
 ### ビルドシステム
+
 - **Ninja**を使用（Visual Studio generatorは使用しない）
 - Developer Command Promptから実行（MSVCコンパイラが必要）
 - 変数の型は基本的には`auto`を使用し、必要な時だけ特別に型を指定すること。
 
+## Logging System
+
+### ログファイルの場所
+
+- **バックエンドログ**: `log/backend.log`
+- **フロントエンドログ**: `log/frontend.log`
+
+### 自動削除の仕組み
+
+- **バックエンドログ**: アプリ起動時に自動削除（`logger.cpp` の `FileLogOutput` コンストラクタで `std::ios::trunc`）
+- **フロントエンドログ**: 初回書き込み時に自動削除（`ipc_handler.cpp` の `writeFrontendLog` で static フラグ使用）
+
+これにより、常に最新のログのみが保持され、デバッグが容易になります。
+
+### WebView2キャッシュ管理
+
+WebView2はHTML/JSファイルをキャッシュするため、フロントエンドの変更が反映されないことがあります。
+
+**キャッシュの場所:**
+
+- `build/Debug/PreDateGrip.exe.WebView2/`
+- `build/Release/PreDateGrip.exe.WebView2/`
+
+**自動削除:**
+
+- `build_frontend.py` と `build_backend.py` はビルド後に自動でWebView2キャッシュを削除
+- `--clean` フラグ使用時は、ビルド前にも削除
+
+**手動削除:**
+
+```bash
+# PowerShell
+Remove-Item -Recurse -Force build/Debug/PreDateGrip.exe.WebView2, build/Release/PreDateGrip.exe.WebView2
+```
+
 ### Issue対応ワークフロー
 
 #### 自動セキュリティスキャン
+
 - **毎日 JST 00:00 (UTC 15:00)** に自動実行
 - Semgrepがセキュリティ問題を検出すると自動でissueを作成
 - ラベル: `semgrep`, `priority:high` or `priority:medium`
 
 #### Issue対応の手順
+
 1. **issueの取得と優先度確認**
+
    ```bash
    gh issue list --state open --json number,title,labels
    ```
@@ -413,8 +478,10 @@ uv run scripts/run_lint.py
 
 4. **Semgrep警告の抑制**
    - 意図的な`shell=True`使用など、安全が確認できる場合:
+
      ```python
      # nosemgrep: python.lang.security.audit.subprocess-shell-true
      result = subprocess.run(cmd, shell=True)  # Safe: hardcoded paths only
      ```
+
    - セキュリティコメントで理由を明記すること
