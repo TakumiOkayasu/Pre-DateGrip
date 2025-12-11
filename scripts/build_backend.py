@@ -17,8 +17,8 @@ import os
 from pathlib import Path
 
 
-def run_command(cmd: list[str], description: str, env: dict | None = None) -> bool:
-    """Run a command and return success status."""
+def run_command(cmd: list[str], description: str, env: dict | None = None) -> tuple[bool, str]:
+    """Run a command and return success status and stderr output."""
     print(f"\n{'='*60}")
     print(f"  {description}")
     print(f"  Command: {' '.join(cmd)}")
@@ -29,15 +29,21 @@ def run_command(cmd: list[str], description: str, env: dict | None = None) -> bo
         merged_env.update(env)
 
     try:
-        result = subprocess.run(cmd, env=merged_env)
-        return result.returncode == 0
+        result = subprocess.run(cmd, env=merged_env, capture_output=True, text=True)
+        if result.stderr:
+            # Print stderr only if there's content
+            print(result.stderr, end='')
+        if result.stdout:
+            # Print stdout for visibility
+            print(result.stdout, end='')
+        return (result.returncode == 0, result.stderr)
     except FileNotFoundError as e:
         print(f"ERROR: Command not found: {cmd[0]}")
         print(f"  Details: {e}")
-        return False
+        return (False, str(e))
     except Exception as e:
         print(f"ERROR: Failed to execute command: {e}")
-        return False
+        return (False, str(e))
 
 
 def find_vcvars() -> Path | None:
@@ -316,7 +322,55 @@ def main():
 
     # Configure with CMake
     print("\n[3/4] Configuring with CMake...")
-    if not run_command(cmake_cmd, "CMake Configure", env):
+    success, stderr = run_command(cmake_cmd, "CMake Configure", env)
+
+    # Auto-recovery: Detect Ninja permission error and retry with clean build
+    if not success and stderr and ("Permission denied" in stderr or "failed recompaction" in stderr):
+        print("\n[!] Detected Ninja permission error (build.ninja lock)")
+        print("    Attempting auto-recovery...")
+        print(f"    Removing build directory: {build_dir}")
+
+        # Try to remove build directory with multiple retries
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                if build_dir.exists():
+                    shutil.rmtree(build_dir)
+                print(f"    [OK] Build directory removed (attempt {attempt})")
+                break
+            except PermissionError as e:
+                if attempt < max_retries:
+                    print(f"    [RETRY] Build directory is locked (attempt {attempt}/{max_retries})")
+                    print(f"    Waiting 2 seconds before retry...")
+                    import time
+                    time.sleep(2)
+                else:
+                    print(f"    [FAIL] Failed to remove build directory after {max_retries} attempts")
+                    print("\n ERROR: Auto-recovery failed!")
+                    print("  ビルドディレクトリがロックされています。")
+                    print("  以下を確認してください:")
+                    print("    - VSCode や Visual Studio でプロジェクトが開かれている場合は閉じる")
+                    print("    - PreDateGrip.exe が実行中の場合は終了する")
+                    print("    - タスクマネージャーで ninja.exe や cl.exe が実行中でないか確認")
+                    print(f"\n  確認後、再度ビルドスクリプトを実行してください:")
+                    print(f"    uv run scripts/build_backend.py {build_type}")
+                    sys.exit(1)
+            except Exception as e:
+                print(f"    [FAIL] Unexpected error: {e}")
+                print("\n ERROR: Auto-recovery failed!")
+                print(f"  確認後、再度ビルドスクリプトを実行してください:")
+                print(f"    uv run scripts/build_backend.py {build_type}")
+                sys.exit(1)
+
+        # Recreate build directory
+        build_dir.mkdir(exist_ok=True)
+        print("    [OK] Build directory recreated")
+
+        # Retry CMake configure
+        print("\n    Retrying CMake configuration...")
+        success, stderr = run_command(cmake_cmd, "CMake Configure (Retry)", env)
+
+    if not success:
         print("\nERROR: CMake configuration failed!")
         sys.exit(1)
 
@@ -328,7 +382,8 @@ def main():
         "--parallel"
     ]
 
-    if not run_command(build_cmd, f"CMake Build ({build_type})", env):
+    success, _ = run_command(build_cmd, f"CMake Build ({build_type})", env)
+    if not success:
         print("\nERROR: Build failed!")
         sys.exit(1)
 

@@ -129,6 +129,52 @@ lld-link: error: could not open 'msvcrtd.lib': no such file or directory
 
 **解決方法**: Developer Command Promptから起動し直すか、`uv run scripts/build_backend.py`を使用してください。
 
+---
+
+**Ninja Permission Error（自動回復機能）:**
+
+ビルド中に以下のエラーが発生することがあります：
+
+```text
+ninja: error: failed recompaction: Permission denied
+```
+
+このエラーは `build.ninja` ファイルがロックされている場合に発生します。
+
+**自動回復の仕組み:**
+
+- `build_backend.py` が自動的にエラーを検出
+- ビルドディレクトリの削除を最大3回リトライ（各試行の間に2秒待機）
+- 成功したら自動的に CMake Configure を再実行
+- **手動でコマンドを実行する必要はありません**
+
+成功時のメッセージ例：
+
+```text
+[!] Detected Ninja permission error (build.ninja lock)
+    Attempting auto-recovery...
+    Removing build directory: C:\prog\Pre-DateGrip\build
+    [OK] Build directory removed (attempt 1)
+    [OK] Build directory recreated
+    Retrying CMake configuration...
+```
+
+**自動回復を成功させるために:**
+
+リトライ中にビルドディレクトリがロックされている場合、以下を確認してください：
+
+- VSCode や Visual Studio でプロジェクトが開かれている → 閉じる
+- PreDateGrip.exe が実行中 → 終了する
+- タスクマネージャーで ninja.exe や cl.exe が実行中 → 終了する
+
+確認後、スクリプトが自動的に再試行します。3回のリトライ後も失敗する場合は、上記を確認してから **ビルドスクリプトを再実行** してください：
+
+```bash
+uv run scripts/build_backend.py Release
+```
+
+**重要:** 手動でビルドディレクトリを削除したり、直接コマンドを実行したりする必要はありません。すべてビルドスクリプトが自動処理します。
+
 ## Current Status
 
 All phases (0-7) are complete. The project includes:
