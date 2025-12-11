@@ -6,14 +6,16 @@
 Pre-DateGrip Frontend Build Script
 
 Usage:
-    uv run scripts/build_frontend.py
-    python scripts/build_frontend.py
+    uv run scripts/build_frontend.py [--clean]
+
+Options:
+    --clean    Force clean build (clear all caches)
 """
 
+import argparse
 import shutil
 import subprocess
 import sys
-import os
 from pathlib import Path
 
 
@@ -95,9 +97,45 @@ def check_node_modules(frontend_dir: Path, pkg_manager: str) -> bool:
     return True
 
 
+def clear_build_caches(frontend_dir: Path, project_root: Path):
+    """Clear all build caches (Vite, dist, WebView2)."""
+    caches_to_clear = [
+        frontend_dir / "dist",
+        frontend_dir / "node_modules" / ".vite",
+        frontend_dir / ".vite",
+        project_root / "build" / "Debug" / "PreDateGrip.exe.WebView2",
+        project_root / "build" / "Release" / "PreDateGrip.exe.WebView2",
+    ]
+
+    print("\n[Cache Clearing]")
+    cleared_count = 0
+    for cache_path in caches_to_clear:
+        if cache_path.exists():
+            try:
+                shutil.rmtree(cache_path)
+                print(f"  [OK] Cleared: {cache_path.relative_to(project_root)}")
+                cleared_count += 1
+            except Exception as e:
+                print(f"  [FAIL] Failed to clear {cache_path}: {e}")
+        else:
+            print(f"  [SKIP] Not found: {cache_path.relative_to(project_root)}")
+
+    if cleared_count > 0:
+        print(f"\n  Cleared {cleared_count} cache(s)")
+    else:
+        print("  No caches to clear")
+
+
 def main():
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="Build Pre-DateGrip frontend")
+    parser.add_argument("--clean", action="store_true", help="Force clean build (clear all caches)")
+    args = parser.parse_args()
+
     print(f"\n{'#'*60}")
     print("#  Pre-DateGrip Frontend Build Script")
+    if args.clean:
+        print("#  Mode: Clean Build")
     print(f"{'#'*60}")
 
     # Get project root
@@ -111,6 +149,10 @@ def main():
 
     print(f"\nProject root: {project_root}")
     print(f"Frontend directory: {frontend_dir}")
+
+    # Clear caches if --clean flag is set
+    if args.clean:
+        clear_build_caches(frontend_dir, project_root)
 
     # Find package manager
     print("\n[1/3] Detecting package manager...")
@@ -175,6 +217,28 @@ def main():
         if file.is_file():
             size = file.stat().st_size / 1024
             print(f"    {file.name} ({size:.1f} KB)")
+
+    # Clear WebView2 cache after successful build to ensure fresh load
+    print("\n[Post-Build] Clearing WebView2 cache...")
+    webview2_caches = [
+        project_root / "build" / "Debug" / "PreDateGrip.exe.WebView2",
+        project_root / "build" / "Release" / "PreDateGrip.exe.WebView2",
+    ]
+
+    cleared = False
+    for cache_path in webview2_caches:
+        if cache_path.exists():
+            try:
+                shutil.rmtree(cache_path)
+                print(f"  [OK] Cleared: {cache_path.relative_to(project_root)}")
+                cleared = True
+            except Exception as e:
+                print(f"  [FAIL] Failed to clear {cache_path}: {e}")
+
+    if cleared:
+        print("  WebView2 will load fresh frontend files on next startup")
+    else:
+        print("  No WebView2 cache to clear")
 
     print()
 

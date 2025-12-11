@@ -662,9 +662,9 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     );
   }
 
-  // Show message when no data
-  if (!resultSet) {
-    log.debug('[ResultGrid] Showing "Execute a query" message (!resultSet)');
+  // Show message when no data (but not for server-side mode, which loads data lazily)
+  if (!resultSet && !useServerSide) {
+    log.debug('[ResultGrid] Showing "Execute a query" message (!resultSet, not serverSide)');
     return (
       <div className={styles.message}>
         <span>Execute a query to see results</span>
@@ -765,6 +765,12 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         </div>
       )}
       <div ref={gridContainerRef} className={styles.grid}>
+        {useServerSide && !resultSet && (
+          <div className={styles.loadingOverlay}>
+            <span className={styles.spinner}>{'\u23F3'}</span>
+            <span>Loading table data...</span>
+          </div>
+        )}
         <AgGridReact
           ref={gridRef}
           theme={darkTheme}

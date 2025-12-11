@@ -242,7 +242,7 @@ def main():
         sys.exit(1)
 
     print(f"\n{'#'*60}")
-    print(f"#  Pre-DateGrip Build Script")
+    print("#  Pre-DateGrip Build Script")
     print(f"#  Build Type: {build_type}")
     print(f"#  Clean Build: {clean_build}")
     print(f"{'#'*60}")
@@ -257,12 +257,12 @@ def main():
 
     # Clean build directory only if explicitly requested
     if clean_build and build_dir.exists():
-        print(f"\n[0/4] Cleaning build directory...")
+        print("\n[0/4] Cleaning build directory...")
         shutil.rmtree(build_dir)
         print(f"  Removed: {build_dir}")
     elif build_dir.exists():
-        print(f"\n[0/4] Using existing build directory (incremental build)...")
-        print(f"  Use --clean flag to force clean build")
+        print("\n[0/4] Using existing build directory (incremental build)...")
+        print("  Use --clean flag to force clean build")
 
     # Setup MSVC environment
     print("\n[1/4] Setting up MSVC environment...")
@@ -308,7 +308,7 @@ def main():
     # Check for generator mismatch
     cached_generator = get_cached_generator(build_dir)
     if cached_generator and cached_generator != generator:
-        print(f"\n[!] Generator mismatch detected:")
+        print("\n[!] Generator mismatch detected:")
         print(f"    Cached: {cached_generator}")
         print(f"    Current: {generator}")
         print("    Clearing CMake cache...")
@@ -346,11 +346,33 @@ def main():
         print("  Check build directory manually:")
         print(f"    {build_dir}")
 
-    print(f"\n  To run:")
+    print("\n  To run:")
     if exe_path:
         print(f"    {exe_path}")
     else:
-        print(f"    build\\PreDateGrip.exe")
+        print("    build\\PreDateGrip.exe")
+
+    # Clear WebView2 cache after successful build to ensure fresh frontend load
+    print("\n[Post-Build] Clearing WebView2 cache...")
+    webview2_caches = [
+        build_dir / "Debug" / "PreDateGrip.exe.WebView2",
+        build_dir / "Release" / "PreDateGrip.exe.WebView2",
+    ]
+
+    cleared = False
+    for cache_path in webview2_caches:
+        if cache_path.exists():
+            try:
+                shutil.rmtree(cache_path)
+                print(f"  [OK] Cleared: {cache_path.relative_to(project_root)}")
+                cleared = True
+            except Exception as e:
+                print(f"  [FAIL] Failed to clear {cache_path}: {e}")
+
+    if cleared:
+        print("  WebView2 will load fresh frontend files on next startup")
+    else:
+        print("  No WebView2 cache to clear")
 
     print()
 
