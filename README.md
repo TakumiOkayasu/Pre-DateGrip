@@ -100,16 +100,19 @@ git clone https://github.com/TakumiOkayasu/Pre-DateGrip.git
 cd Pre-DateGrip
 
 # フロントエンドのビルド
-uv run scripts/build_frontend.py
+uv run scripts/pdg.py build frontend
 
 # バックエンドのビルド（初回）
-uv run scripts/build_backend.py Release --clean
+uv run scripts/pdg.py build backend --clean
 
 # バックエンドのビルド（2回目以降：インクリメンタル）
-uv run scripts/build_backend.py Release
+uv run scripts/pdg.py build backend
+
+# または一括ビルド
+uv run scripts/pdg.py build all
 
 # パッケージ作成
-uv run scripts/package.py
+uv run scripts/pdg.py package
 ```
 
 **ビルドパフォーマンス:**
@@ -143,57 +146,80 @@ Pre-DateGrip/
 
 ### 開発コマンド
 
-すべての開発コマンドはPythonスクリプト経由で実行できます。
+すべての開発コマンドは統一CLI `pdg.py` で実行できます。
 
-#### バックエンド（C++）
+#### 統一CLI（推奨）
 
 ```bash
 # ビルド
-uv run scripts/build_backend.py Debug           # Debugビルド
-uv run scripts/build_backend.py Release         # Releaseビルド
-uv run scripts/build_backend.py Release --clean # クリーンビルド
+uv run scripts/pdg.py build backend              # Releaseビルド
+uv run scripts/pdg.py build backend --type Debug # Debugビルド
+uv run scripts/pdg.py build backend --clean      # クリーンビルド
+uv run scripts/pdg.py build frontend             # フロントエンドビルド
+uv run scripts/pdg.py build all                  # 一括ビルド
+
+# 短縮形
+uv run scripts/pdg.py b backend                  # 'build' の代わりに 'b'
 
 # テスト
-uv run scripts/test_backend.py Debug
-uv run scripts/test_backend.py Release
+uv run scripts/pdg.py test backend               # バックエンドテスト
+uv run scripts/pdg.py test frontend              # フロントエンドテスト
+uv run scripts/pdg.py test frontend --watch      # Watchモード
 
-# Lint/Format/Build（一括）
-uv run scripts/cpp_check.py all Release    # 全チェック
-uv run scripts/cpp_check.py format         # フォーマットのみ
-uv run scripts/cpp_check.py lint           # Lintのみ
-uv run scripts/cpp_check.py build Release  # ビルドのみ
-```
-
-#### フロントエンド（React/TypeScript）
-
-```bash
-# 開発サーバー（ホットリロード）
-uv run scripts/dev.py
-
-# テスト
-uv run scripts/test_frontend.py        # 1回実行
-uv run scripts/test_frontend.py --watch # Watchモード
+# 短縮形
+uv run scripts/pdg.py t frontend                 # 'test' の代わりに 't'
 
 # Lint
-uv run scripts/lint_frontend.py        # チェックのみ
-uv run scripts/lint_frontend.py --fix  # 自動修正
-```
+uv run scripts/pdg.py lint                       # 全体Lint（C++ + Frontend）
+uv run scripts/pdg.py lint --fix                 # 自動修正
 
-#### 全体チェック
+# 短縮形
+uv run scripts/pdg.py l --fix                    # 'lint' の代わりに 'l'
 
-```bash
-# C++ + Frontend 全体チェック
-uv run scripts/check_all.py Release
+# 開発サーバー
+uv run scripts/pdg.py dev                        # フロントエンド開発サーバー
 
-# Lint全体（C++ + Frontend）
-uv run scripts/run_lint.py
+# 短縮形
+uv run scripts/pdg.py d                          # 'dev' の代わりに 'd'
 
-# EOL変換
-uv run scripts/convert_eol.py lf frontend/src   # LFに変換
-uv run scripts/convert_eol.py crlf src          # CRLFに変換
+# 全体チェック
+uv run scripts/pdg.py check Release              # Lint + Test + Build
+
+# 短縮形
+uv run scripts/pdg.py c Release                  # 'check' の代わりに 'c'
 
 # パッケージ作成
+uv run scripts/pdg.py package                    # ビルド + パッケージング
+
+# ヘルプ
+uv run scripts/pdg.py --help                     # 全コマンド表示
+uv run scripts/pdg.py build --help               # buildコマンドのヘルプ
+```
+
+#### レガシースクリプト（後方互換性）
+
+個別のスクリプトも引き続き使用可能です：
+
+```bash
+# バックエンド
+uv run scripts/build_backend.py Release
+uv run scripts/test_backend.py Release
+uv run scripts/cpp_check.py all Release
+
+# フロントエンド
+uv run scripts/build_frontend.py
+uv run scripts/test_frontend.py
+uv run scripts/lint_frontend.py --fix
+uv run scripts/dev.py
+
+# 全体
+uv run scripts/check_all.py Release
+uv run scripts/run_lint.py
 uv run scripts/package.py
+
+# ユーティリティ
+uv run scripts/convert_eol.py lf frontend/src   # EOL変換（LF）
+uv run scripts/convert_eol.py crlf src          # EOL変換（CRLF）
 ```
 
 #### 直接Bunを使う場合（オプション）
@@ -218,23 +244,27 @@ bun pm cache rm      # キャッシュ削除
 ### 開発TODO（次のマイルストーン）
 
 #### 即座に対応
+
 - [ ] インライン編集機能の実装
 - [ ] クエリキャンセル機能のUI統合
 - [ ] トランザクション管理UIの実装
 
 #### 短期目標（1-2週間）
+
 - [ ] キーボードショートカット（Ctrl+W、F5）の実装
 - [ ] ウィンドウサイズの保持
 - [ ] ボタン配置の整理
 - [ ] テーブル作成時のDDL表示（読み取り専用）
 
 #### 中期目標（1-2ヶ月）
+
 - [ ] コード補完・IntelliSense
 - [ ] 実行計画の可視化
 - [ ] パフォーマンステストの自動化
 - [ ] E2Eテストの追加
 
 #### 継続的改善
+
 - [ ] Issue対応
 - [ ] パフォーマンス改善
 - [ ] ドキュメントの充実
@@ -288,6 +318,7 @@ bun pm cache rm      # キャッシュ削除
 ### 完了済み機能
 
 #### コア機能
+
 - ✅ SQL Server接続（ODBC）・接続プール
 - ✅ クエリ実行（同期・非同期）
 - ✅ 結果キャッシュ（LRU、100MB）
@@ -295,6 +326,7 @@ bun pm cache rm      # キャッシュ削除
 - ✅ トランザクション管理（C++実装済み、UI未実装）
 
 #### UI/UX
+
 - ✅ DataGripライクな3ペインレイアウト
 - ✅ オブジェクトエクスプローラー（データベース・テーブル・ビュー）
 - ✅ Monaco Editor統合（SQLエディタ）
@@ -303,6 +335,7 @@ bun pm cache rm      # キャッシュ削除
 - ✅ セッション永続化（ウィンドウ状態・開いているタブ）
 
 #### 高度な機能
+
 - ✅ SQLフォーマッター
 - ✅ A5:ERファイルインポート
 - ✅ ER図表示（React Flow）
@@ -311,6 +344,7 @@ bun pm cache rm      # キャッシュ削除
 - ✅ 設定管理
 
 #### 開発インフラ
+
 - ✅ GitHub Actions CI/CD（LLVM 21、Bun、Biome 2.3.8）
 - ✅ Python ビルドスクリプト（uv）・自動回復機能
 - ✅ WebView2キャッシュ自動削除
@@ -320,18 +354,21 @@ bun pm cache rm      # キャッシュ削除
 ### 未実装機能
 
 #### 高優先度
+
 - [ ] インライン編集（セル編集、UPDATE/INSERT/DELETE SQL自動生成）
 - [ ] トランザクション管理UI（BEGIN/COMMIT/ROLLBACK）
 - [ ] 実行計画の表示
 - [ ] クエリキャンセル機能のUI統合
 
 #### 中優先度
+
 - [ ] SIMDフィルタリングのUI統合
 - [ ] マルチデータベース対応（PostgreSQL、MySQL）
 - [ ] コード補完・IntelliSense
 - [ ] スキーマ比較・差分表示
 
 #### 低優先度
+
 - [ ] ダークテーマ以外のカラーテーマ
 - [ ] プラグインシステム
 - [ ] データインポート機能
@@ -339,17 +376,20 @@ bun pm cache rm      # キャッシュ削除
 ### 今後の目標
 
 #### パフォーマンス改善
+
 - [ ] 大量データ（100万行以上）の表示最適化
 - [ ] クエリ実行の並列化
 - [ ] メモリ使用量の最適化
 
 #### UI/UX改善
+
 - [ ] ボタン配置の整理
 - [ ] ウィンドウサイズの保持
 - [ ] キーボードショートカット強化（Ctrl+W、F5実行）
 - [ ] エラーメッセージの改善
 
 #### 品質向上
+
 - [ ] テストカバレッジ80%以上
 - [ ] E2Eテストの追加
 - [ ] パフォーマンステストの自動化
