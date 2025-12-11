@@ -167,24 +167,37 @@ if (typeof window !== 'undefined') {
   console.log = (...args: unknown[]) => {
     originalConsole.log(...args);
     const message = args.map((arg) => String(arg)).join(' ');
-    logger.debug(`[Console] ${message}`);
+    // Don't call logger.debug() to avoid infinite recursion
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
+    const logMessage = `[${timestamp}] [DEBUG] [Console] ${message}`;
+    logger['logQueue'].push(logMessage);
   };
 
   console.info = (...args: unknown[]) => {
     originalConsole.info(...args);
     const message = args.map((arg) => String(arg)).join(' ');
-    logger.info(`[Console] ${message}`);
+    // Don't call logger.info() to avoid infinite recursion
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
+    const logMessage = `[${timestamp}] [INFO] [Console] ${message}`;
+    logger['logQueue'].push(logMessage);
   };
 
   console.warn = (...args: unknown[]) => {
     originalConsole.warn(...args);
     const message = args.map((arg) => String(arg)).join(' ');
-    logger.warning(`[Console] ${message}`);
+    // Don't call logger.warning() to avoid infinite recursion
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
+    const logMessage = `[${timestamp}] [WARNING] [Console] ${message}`;
+    logger['logQueue'].push(logMessage);
   };
 
   console.error = (...args: unknown[]) => {
     originalConsole.error(...args);
     const message = args.map((arg) => String(arg)).join(' ');
-    logger.error(`[Console] ${message}`);
+    // Don't call logger.error() to avoid infinite recursion
+    // Instead, directly format and add to queue
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
+    const logMessage = `[${timestamp}] [ERROR] [Console] ${message}`;
+    logger['logQueue'].push(logMessage);
   };
 }

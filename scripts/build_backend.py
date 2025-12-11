@@ -407,6 +407,29 @@ def main():
     else:
         print("    build\\PreDateGrip.exe")
 
+    # Copy frontend files (always, even if C++ wasn't rebuilt)
+    print("\n[Post-Build] Copying frontend files...")
+    frontend_dist = project_root / "frontend" / "dist"
+    frontend_target = build_dir / build_type / "frontend"
+
+    if frontend_dist.exists():
+        try:
+            # Remove old frontend files
+            if frontend_target.exists():
+                shutil.rmtree(frontend_target)
+            # Copy new frontend files
+            shutil.copytree(frontend_dist, frontend_target)
+            print(f"  [OK] Copied: frontend/dist -> build/{build_type}/frontend")
+
+            # Show file count
+            file_count = sum(1 for _ in frontend_target.rglob('*') if _.is_file())
+            print(f"  Files: {file_count}")
+        except Exception as e:
+            print(f"  [FAIL] Failed to copy frontend files: {e}")
+    else:
+        print(f"  [SKIP] Frontend dist not found: {frontend_dist}")
+        print("  Run 'uv run scripts/build_frontend.py' to build frontend first")
+
     # Clear WebView2 cache after successful build to ensure fresh frontend load
     print("\n[Post-Build] Clearing WebView2 cache...")
     webview2_caches = [
