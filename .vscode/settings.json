@@ -10,7 +10,7 @@
 	"cmake.buildDirectory": "${workspaceFolder}/build",
 	"cmake.preferredGenerators": ["Ninja", "Unix Makefiles"],
 	"cmake.configureOnOpen": false,
-	"terminal.integrated.fontFamily": "MesloLGS NF",
+	"terminal.integrated.fontFamily": "'MesloLGS Nerd Font', 'MesloLGS NF', 'Hack Nerd Font', monospace",
 	"terminal.integrated.fontWeight": "normal",
 	"[markdown]": {
 		"editor.codeActionsOnSave": {
