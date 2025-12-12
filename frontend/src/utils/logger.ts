@@ -105,6 +105,18 @@ class Logger {
     }
   }
 
+  // Add message directly to queue (for console override)
+  addToQueue(message: string): void {
+    this.logQueue.push(message);
+
+    // Schedule flush
+    if (this.flushTimer === null) {
+      this.flushTimer = setTimeout(() => {
+        this.flush();
+      }, 1000);
+    }
+  }
+
   // Clear logs
   clearLogs(): void {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -170,7 +182,7 @@ if (typeof window !== 'undefined') {
     // Don't call logger.debug() to avoid infinite recursion
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
     const logMessage = `[${timestamp}] [DEBUG] [Console] ${message}`;
-    logger['logQueue'].push(logMessage);
+    logger.addToQueue(logMessage);
   };
 
   console.info = (...args: unknown[]) => {
@@ -179,7 +191,7 @@ if (typeof window !== 'undefined') {
     // Don't call logger.info() to avoid infinite recursion
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
     const logMessage = `[${timestamp}] [INFO] [Console] ${message}`;
-    logger['logQueue'].push(logMessage);
+    logger.addToQueue(logMessage);
   };
 
   console.warn = (...args: unknown[]) => {
@@ -188,7 +200,7 @@ if (typeof window !== 'undefined') {
     // Don't call logger.warning() to avoid infinite recursion
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
     const logMessage = `[${timestamp}] [WARNING] [Console] ${message}`;
-    logger['logQueue'].push(logMessage);
+    logger.addToQueue(logMessage);
   };
 
   console.error = (...args: unknown[]) => {
@@ -198,6 +210,6 @@ if (typeof window !== 'undefined') {
     // Instead, directly format and add to queue
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 23);
     const logMessage = `[${timestamp}] [ERROR] [Console] ${message}`;
-    logger['logQueue'].push(logMessage);
+    logger.addToQueue(logMessage);
   };
 }

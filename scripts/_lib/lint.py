@@ -6,7 +6,7 @@ import subprocess
 from . import utils
 
 
-def lint_frontend(fix: bool = False) -> bool:
+def lint_frontend(fix: bool = False, unsafe: bool = False) -> bool:
     """Lint frontend code with Biome."""
     project_root = utils.get_project_root()
     frontend_dir = project_root / "frontend"
@@ -14,7 +14,8 @@ def lint_frontend(fix: bool = False) -> bool:
     print(f"\n{'#'*60}")
     print("#  Linting Frontend")
     if fix:
-        print("#  Mode: Auto-fix")
+        mode = "Auto-fix (safe + unsafe)" if unsafe else "Auto-fix (safe only)"
+        print(f"#  Mode: {mode}")
     print(f"{'#'*60}")
 
     # Find package manager
@@ -30,6 +31,8 @@ def lint_frontend(fix: bool = False) -> bool:
     if fix:
         lint_cmd.append("--")
         lint_cmd.append("--write")
+        if unsafe:
+            lint_cmd.append("--unsafe")
 
     success, _ = utils.run_command(
         lint_cmd,
@@ -202,13 +205,13 @@ def lint_python(fix: bool = False) -> bool:
         return False
 
 
-def lint_all(fix: bool = False) -> bool:
+def lint_all(fix: bool = False, unsafe: bool = False) -> bool:
     """Lint frontend and C++ code (product code only)."""
     print(f"\n{'='*60}")
     print("  Linting All (Frontend + C++)")
     print(f"{'='*60}")
 
-    success1 = lint_frontend(fix=fix)
+    success1 = lint_frontend(fix=fix, unsafe=unsafe)
     success2 = lint_cpp(fix=fix)
 
     if success1 and success2:

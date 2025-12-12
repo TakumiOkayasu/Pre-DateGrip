@@ -8,7 +8,7 @@ Pre-DateGrip CLI - Unified build system interface
 Usage:
     uv run scripts/pdg.py build [backend|frontend|all] [--clean]
     uv run scripts/pdg.py test [backend|frontend] [--watch]
-    uv run scripts/pdg.py lint [--fix]
+    uv run scripts/pdg.py lint [--fix] [--unsafe]
     uv run scripts/pdg.py dev
     uv run scripts/pdg.py package
     uv run scripts/pdg.py check [build-type]
@@ -18,6 +18,7 @@ Examples:
     uv run scripts/pdg.py build all
     uv run scripts/pdg.py test frontend --watch
     uv run scripts/pdg.py lint --fix
+    uv run scripts/pdg.py lint --fix --unsafe
 """
 
 import argparse
@@ -65,7 +66,8 @@ def cmd_test(args):
 def cmd_lint(args):
     """Handle lint command."""
     fix = args.fix
-    return lint.lint_all(fix=fix)
+    unsafe = args.unsafe
+    return lint.lint_all(fix=fix, unsafe=unsafe)
 
 
 def cmd_dev(args):
@@ -245,6 +247,11 @@ def main():
         "--fix", "-f",
         action="store_true",
         help="Auto-fix issues"
+    )
+    lint_parser.add_argument(
+        "--unsafe", "-u",
+        action="store_true",
+        help="Apply unsafe fixes (requires --fix)"
     )
 
     # Dev command

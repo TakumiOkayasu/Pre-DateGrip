@@ -182,21 +182,13 @@ void IPCHandler::registerRequestRoutes() {
 }
 
 std::string IPCHandler::dispatchRequest(std::string_view request) {
-    // DEBUG
-    {
-        std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-        debugLog << "[dispatchRequest] Input: " << request << "\n";
-    }
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(request);
 
         auto methodResult = doc["method"].get_string();
         if (methodResult.error()) [[unlikely]] {
-            auto err = JsonUtils::errorResponse("Missing method field");
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "[dispatchRequest] Error: Missing method field\n";
-            return err;
+            return JsonUtils::errorResponse("Missing method field");
         }
         std::string_view method = methodResult.value();
 
@@ -205,23 +197,12 @@ std::string IPCHandler::dispatchRequest(std::string_view request) {
             params = std::string(paramsResult.value());
         }
 
-        {
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "[dispatchRequest] Method: " << method << "\n";
-            debugLog << "[dispatchRequest] Params: " << params << "\n";
-        }
-
         if (auto route = m_requestRoutes.find(std::string(method)); route != m_requestRoutes.end()) [[likely]] {
-            auto result = route->second(params);
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "[dispatchRequest] Result: " << result << "\n\n";
-            return result;
+            return route->second(params);
         }
 
         return JsonUtils::errorResponse(std::format("Unknown method: {}", method));
     } catch (const std::exception& e) {
-        std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-        debugLog << "[dispatchRequest] Exception: " << e.what() << "\n\n";
         return JsonUtils::errorResponse(e.what());
     }
 }

@@ -82,7 +82,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   }, [resultSet]);
 
   // Helper function to check if a column type is numeric
-  const isNumericType = (type: string): boolean => {
+  const isNumericType = useCallback((type: string): boolean => {
     const numericTypes = [
       'int',
       'bigint',
@@ -96,7 +96,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       'smallmoney',
     ];
     return numericTypes.some((t) => type.toLowerCase().includes(t));
-  };
+  }, []);
 
   // Define columns
   const columns = useMemo<ColumnDef<RowData>[]>(() => {
@@ -129,7 +129,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     }
 
     return cols;
-  }, [resultSet]);
+  }, [resultSet, isNumericType]);
 
   // TanStack Table instance
   const table = useReactTable({

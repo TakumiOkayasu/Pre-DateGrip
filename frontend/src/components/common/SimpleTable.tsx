@@ -26,15 +26,20 @@ export function SimpleTable({ columns, data }: SimpleTableProps) {
           </tr>
         </thead>
         <tbody>
-          {data.map((row, idx) => (
-            <tr key={idx}>
-              {columns.map((col) => {
-                const value = row[col.field];
-                const displayValue = col.formatter ? col.formatter(value) : String(value ?? '');
-                return <td key={col.field}>{displayValue}</td>;
-              })}
-            </tr>
-          ))}
+          {data.map((row, idx) => {
+            // Generate unique key by combining index and first column value
+            const firstField = columns[0]?.field ?? 'id';
+            const rowKey = `${idx}-${String(row[firstField] ?? idx)}`;
+            return (
+              <tr key={rowKey}>
+                {columns.map((col) => {
+                  const value = row[col.field];
+                  const displayValue = col.formatter ? col.formatter(value) : String(value ?? '');
+                  return <td key={col.field}>{displayValue}</td>;
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

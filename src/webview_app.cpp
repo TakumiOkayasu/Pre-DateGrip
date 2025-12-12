@@ -118,22 +118,9 @@ void WebViewApp::createAndConfigureWebView() {
     m_webview->set_disable_cache(true);
 
     m_webview->bind("invoke", [this](const std::string& request) -> std::string {
-        // DEBUG: Log raw request to file
-        {
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "Raw request: " << request << "\n";
-        }
         // webview passes arguments as a JSON array, extract the first string argument
         auto actualRequest = extractFirstArgument(request);
-        {
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "Extracted request: " << actualRequest << "\n\n";
-        }
         auto result = m_ipcHandler->dispatchRequest(actualRequest);
-        {
-            std::ofstream debugLog("predategrip_debug.log", std::ios::app);
-            debugLog << "Returning to JS: " << result << "\n\n";
-        }
         return result;
     });
 
