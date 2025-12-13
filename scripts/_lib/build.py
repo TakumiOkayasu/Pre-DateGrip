@@ -1,8 +1,6 @@
 """Build commands for Pre-DateGrip."""
 
 import shutil
-import sys
-from pathlib import Path
 
 from . import utils
 
@@ -12,11 +10,11 @@ def build_frontend(clean: bool = False) -> bool:
     project_root = utils.get_project_root()
     frontend_dir = project_root / "frontend"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print("#  Building Frontend")
     if clean:
         print("#  Mode: Clean Build")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Clear caches if --clean
     if clean:
@@ -40,7 +38,7 @@ def build_frontend(clean: bool = False) -> bool:
     if not pkg_info:
         print("\nERROR: No package manager found (Bun or npm)")
         print("\nInstall options:")
-        print("  1. Bun (recommended): powershell -c \"irm bun.sh/install.ps1 | iex\"")
+        print('  1. Bun (recommended): powershell -c "irm bun.sh/install.ps1 | iex"')
         print("  2. npm: winget install OpenJS.NodeJS")
         return False
 
@@ -62,9 +60,7 @@ def build_frontend(clean: bool = False) -> bool:
 
     if needs_install:
         success, _ = utils.run_command(
-            [str(pkg_path), "install"],
-            f"{pkg_manager} install",
-            cwd=frontend_dir
+            [str(pkg_path), "install"], f"{pkg_manager} install", cwd=frontend_dir
         )
         if not success:
             print("\nERROR: Failed to install dependencies")
@@ -75,9 +71,7 @@ def build_frontend(clean: bool = False) -> bool:
     # Build
     print("\n[3/3] Building...")
     success, _ = utils.run_command(
-        [str(pkg_path), "run", "build"],
-        f"{pkg_manager} run build",
-        cwd=frontend_dir
+        [str(pkg_path), "run", "build"], f"{pkg_manager} run build", cwd=frontend_dir
     )
 
     if not success:
@@ -86,12 +80,12 @@ def build_frontend(clean: bool = False) -> bool:
 
     # Report success
     dist_dir = frontend_dir / "dist"
-    total_size = sum(f.stat().st_size for f in dist_dir.rglob('*') if f.is_file())
-    file_count = sum(1 for _ in dist_dir.rglob('*') if _.is_file())
+    total_size = sum(f.stat().st_size for f in dist_dir.rglob("*") if f.is_file())
+    file_count = sum(1 for _ in dist_dir.rglob("*") if _.is_file())
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  BUILD SUCCESSFUL")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"\n  Output: {dist_dir}")
     print(f"  Size: {total_size / 1024 / 1024:.2f} MB")
     print(f"  Files: {file_count}")
@@ -111,11 +105,11 @@ def build_backend(build_type: str = "Release", clean: bool = False) -> bool:
     project_root = utils.get_project_root()
     build_dir = project_root / "build"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print(f"#  Building Backend ({build_type})")
     if clean:
         print("#  Mode: Clean Build")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Clean build directory if requested
     if clean and build_dir.exists():
@@ -165,9 +159,9 @@ def build_backend(build_type: str = "Release", clean: bool = False) -> bool:
             exe_path = exe
             break
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  BUILD SUCCESSFUL")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     if exe_path.exists():
         print(f"\n  Executable: {exe_path}")
         print(f"  Size: {exe_path.stat().st_size / 1024 / 1024:.2f} MB")
@@ -182,13 +176,13 @@ def build_backend(build_type: str = "Release", clean: bool = False) -> bool:
             if frontend_target.exists():
                 shutil.rmtree(frontend_target)
             shutil.copytree(frontend_dist, frontend_target)
-            file_count = sum(1 for _ in frontend_target.rglob('*') if _.is_file())
+            file_count = sum(1 for _ in frontend_target.rglob("*") if _.is_file())
             print(f"  [OK] Copied: frontend/dist -> build/{build_type}/frontend")
             print(f"  Files: {file_count}")
         except Exception as e:
             print(f"  [FAIL] {e}")
     else:
-        print(f"  [SKIP] Frontend dist not found")
+        print("  [SKIP] Frontend dist not found")
         print("  Run 'uv run scripts/pdg.py build frontend' first")
 
     # Clear WebView2 cache
@@ -196,9 +190,9 @@ def build_backend(build_type: str = "Release", clean: bool = False) -> bool:
 
     # Final output: Show binary location
     if exe_path.exists():
-        print(f"\n{'='*60}")
-        print(f"  BINARY LOCATION")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print("  BINARY LOCATION")
+        print(f"{'=' * 60}")
         print(f"\n  {exe_path.absolute()}")
         print()
 
@@ -210,9 +204,9 @@ def build_all(build_type: str = "Release", clean: bool = False) -> bool:
     project_root = utils.get_project_root()
     build_dir = project_root / "build"
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Building All (Frontend + Backend)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Build frontend first
     if not build_frontend(clean=clean):
@@ -222,9 +216,9 @@ def build_all(build_type: str = "Release", clean: bool = False) -> bool:
     if not build_backend(build_type=build_type, clean=clean):
         return False
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  ALL BUILDS SUCCESSFUL")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Show final binary location
     exe_path = build_dir / build_type / "PreDateGrip.exe"

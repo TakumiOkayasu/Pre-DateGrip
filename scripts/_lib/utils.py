@@ -18,15 +18,15 @@ def run_command(
     description: str,
     cwd: Path | None = None,
     env: dict | None = None,
-    capture_output: bool = False
+    capture_output: bool = False,
 ) -> tuple[bool, str]:
     """Run a command and return success status and output."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {description}")
     print(f"  Command: {' '.join(cmd)}")
     if cwd:
         print(f"  Working directory: {cwd}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     merged_env = os.environ.copy()
     if env:
@@ -34,13 +34,7 @@ def run_command(
 
     try:
         if capture_output:
-            result = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=merged_env,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(cmd, cwd=cwd, env=merged_env, capture_output=True, text=True)
             return result.returncode == 0, result.stderr
         else:
             result = subprocess.run(cmd, cwd=cwd, env=merged_env)
@@ -59,13 +53,8 @@ def find_package_manager() -> tuple[str, Path] | None:
     bun_path = shutil.which("bun")
     if bun_path:
         try:
-            result = subprocess.run(
-                [bun_path, "--version"],
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run([bun_path, "--version"], capture_output=True, text=True)
             if result.returncode == 0:
-                version = result.stdout.strip()
                 return ("bun", Path(bun_path))
         except Exception:
             pass
@@ -74,13 +63,8 @@ def find_package_manager() -> tuple[str, Path] | None:
     npm_path = shutil.which("npm")
     if npm_path:
         try:
-            result = subprocess.run(
-                [npm_path, "--version"],
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run([npm_path, "--version"], capture_output=True, text=True)
             if result.returncode == 0:
-                version = result.stdout.strip()
                 return ("npm", Path(npm_path))
         except Exception:
             pass
@@ -92,15 +76,31 @@ def find_vcvars() -> Path | None:
     """Find vcvars64.bat for MSVC environment setup."""
     possible_paths = [
         # VS 2022 (version 17)
-        Path(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"D:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"D:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        ),
         # VS Preview / newer versions (version 18+)
-        Path(r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"),
-        Path(r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"
+        ),
+        Path(
+            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        ),
     ]
     for path in possible_paths:
         if path.exists():
@@ -123,12 +123,11 @@ def get_msvc_env() -> dict[str, str]:
     # 1. vcvars path comes from find_vcvars() which only returns hardcoded system paths
     # 2. No user input is involved in command construction
     cmd = f'"{vcvars}" && set'
-    # nosemgrep: python.lang.security.audit.subprocess-shell-true
-    result = subprocess.run(
+    result = subprocess.run(  # nosemgrep: python.lang.security.audit.subprocess-shell-true
         cmd,
         capture_output=True,
         text=True,
-        shell=True  # Safe: vcvars path from find_vcvars() - hardcoded paths only
+        shell=True,  # Safe: vcvars path from find_vcvars() - hardcoded paths only
     )
 
     if result.returncode != 0:
@@ -137,8 +136,8 @@ def get_msvc_env() -> dict[str, str]:
 
     env = {}
     for line in result.stdout.splitlines():
-        if '=' in line:
-            key, _, value = line.partition('=')
+        if "=" in line:
+            key, _, value = line.partition("=")
             env[key] = value
     return env
 
@@ -147,14 +146,9 @@ def check_build_tools(env: dict) -> bool:
     """Check if required build tools are available."""
     # Check CMake
     try:
-        result = subprocess.run(
-            ["cmake", "--version"],
-            capture_output=True,
-            text=True,
-            env=env
-        )
+        result = subprocess.run(["cmake", "--version"], capture_output=True, text=True, env=env)
         if result.returncode == 0:
-            version = result.stdout.split('\n')[0]
+            version = result.stdout.split("\n")[0]
             print(f"CMake: {version}")
         else:
             print("ERROR: CMake not found")
@@ -165,12 +159,7 @@ def check_build_tools(env: dict) -> bool:
 
     # Check Ninja
     try:
-        result = subprocess.run(
-            ["ninja", "--version"],
-            capture_output=True,
-            text=True,
-            env=env
-        )
+        result = subprocess.run(["ninja", "--version"], capture_output=True, text=True, env=env)
         if result.returncode == 0:
             version = result.stdout.strip()
             print(f"Ninja: {version}")

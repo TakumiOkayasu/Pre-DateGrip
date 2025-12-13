@@ -17,35 +17,42 @@ Examples:
     python scripts/convert_eol.py crlf src          # Convert C++ to CRLF
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 # File extensions to process
 DEFAULT_EXTENSIONS = {
-    '.cpp', '.h', '.hpp', '.c',
-    '.ts', '.tsx', '.js', '.jsx',
-    '.json', '.css', '.html',
-    '.md', '.yml', '.yaml',
-    '.cmake', '.bat', '.ps1', '.py'
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".c",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".json",
+    ".css",
+    ".html",
+    ".md",
+    ".yml",
+    ".yaml",
+    ".cmake",
+    ".bat",
+    ".ps1",
+    ".py",
 }
 
 # Directories to skip
-SKIP_DIRS = {'node_modules', '.git', 'build', 'dist', 'build-tidy', '__pycache__'}
+SKIP_DIRS = {"node_modules", ".git", "build", "dist", "build-tidy", "__pycache__"}
 
 # Specific files to include
-SPECIFIC_FILES = {
-    'CMakeLists.txt', '.gitignore', '.gitattributes',
-    '.clang-format', '.clang-tidy'
-}
+SPECIFIC_FILES = {"CMakeLists.txt", ".gitignore", ".gitattributes", ".clang-format", ".clang-tidy"}
 
 
 def should_skip(path: Path) -> bool:
     """Check if path should be skipped."""
-    for part in path.parts:
-        if part in SKIP_DIRS:
-            return True
-    return False
+    return any(part in SKIP_DIRS for part in path.parts)
 
 
 def convert_file_eol(file_path: Path, target_eol: str) -> bool:
@@ -62,24 +69,24 @@ def convert_file_eol(file_path: Path, target_eol: str) -> bool:
 
         # Skip BOM if present
         offset = 0
-        if content_bytes.startswith(b'\xef\xbb\xbf'):
+        if content_bytes.startswith(b"\xef\xbb\xbf"):
             offset = 3
 
-        content = content_bytes[offset:].decode('utf-8', errors='replace')
+        content = content_bytes[offset:].decode("utf-8", errors="replace")
 
         if not content:
             return False
 
-        if target_eol == 'crlf':
+        if target_eol == "crlf":
             # Convert LF to CRLF (avoid double conversion)
             # First normalize to LF, then convert to CRLF
-            new_content = content.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\r\n')
+            new_content = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
         else:
             # Convert to LF
-            new_content = content.replace('\r\n', '\n').replace('\r', '\n')
+            new_content = content.replace("\r\n", "\n").replace("\r", "\n")
 
         if content != new_content:
-            file_path.write_bytes(new_content.encode('utf-8'))
+            file_path.write_bytes(new_content.encode("utf-8"))
             return True
 
         return False
@@ -99,7 +106,7 @@ def get_source_files(path: Path, extension: str | None = None) -> list[Path]:
     if path.is_file():
         return [path]
 
-    for item in path.rglob('*'):
+    for item in path.rglob("*"):
         if item.is_file() and not should_skip(item):
             if extension:
                 if item.suffix == extension:
@@ -119,7 +126,7 @@ def main():
         sys.exit(1)
 
     eol_type = sys.argv[1].lower()
-    if eol_type not in ('crlf', 'lf'):
+    if eol_type not in ("crlf", "lf"):
         print(f"ERROR: Invalid EOL type '{eol_type}'. Use 'crlf' or 'lf'")
         sys.exit(1)
 
@@ -129,10 +136,10 @@ def main():
     project_root = script_dir.parent
     os.chdir(project_root)
 
-    print(f"\n{'='*60}")
-    print(f"End-of-Line Converter")
+    print(f"\n{'=' * 60}")
+    print("End-of-Line Converter")
     print(f"Target EOL: {eol_type.upper()}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     converted_count = 0
     processed_count = 0
@@ -187,8 +194,15 @@ def main():
                     converted_count += 1
 
         # Root files
-        for filename in ['CMakeLists.txt', '.gitignore', '.gitattributes',
-                         '.clang-format', '.clang-tidy', 'CLAUDE.md', 'README.md']:
+        for filename in [
+            "CMakeLists.txt",
+            ".gitignore",
+            ".gitattributes",
+            ".clang-format",
+            ".clang-tidy",
+            "CLAUDE.md",
+            "README.md",
+        ]:
             root_file = project_root / filename
             if root_file.exists():
                 processed_count += 1
@@ -196,10 +210,10 @@ def main():
                     print(f"  {filename}")
                     converted_count += 1
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Processed: {processed_count} file(s)")
     print(f"Converted: {converted_count} file(s) to {eol_type.upper()}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

@@ -27,4 +27,4 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-line-ending = "crlf"  # Windows project
+line-ending = "cr-lf"  # Windows project

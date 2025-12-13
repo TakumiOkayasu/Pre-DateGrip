@@ -47,7 +47,7 @@ def run_gh_command(args: list[str], input_data: str | None = None) -> dict[str, 
         print(f"  Error: {e.stderr}", file=sys.stderr)
         return None
     except json.JSONDecodeError:
-        print(f"  [FAIL] Failed to parse JSON response", file=sys.stderr)
+        print("  [FAIL] Failed to parse JSON response", file=sys.stderr)
         return None
 
 
@@ -72,9 +72,7 @@ def check_gh_cli() -> bool:
 def enable_auto_merge() -> bool:
     """Enable auto-merge setting for the repository."""
     print("[1/4] Enabling auto-merge...")
-    result = run_gh_command(
-        ["api", f"repos/{REPO}", "-X", "PATCH", "-f", "allow_auto_merge=true"]
-    )
+    result = run_gh_command(["api", f"repos/{REPO}", "-X", "PATCH", "-f", "allow_auto_merge=true"])
     if result and result.get("allow_auto_merge"):
         print("  [OK] Auto-merge enabled")
         return True
@@ -88,16 +86,18 @@ def configure_actions_permissions() -> bool:
 
     # Note: This API call may fail with type error for can_approve_pull_request_reviews
     # The setting might need to be configured manually in GitHub UI
-    result = run_gh_command([
-        "api",
-        f"repos/{REPO}/actions/permissions/workflow",
-        "-X",
-        "PUT",
-        "-f",
-        "default_workflow_permissions=write",
-        "-F",
-        "can_approve_pull_request_reviews=true",
-    ])
+    result = run_gh_command(
+        [
+            "api",
+            f"repos/{REPO}/actions/permissions/workflow",
+            "-X",
+            "PUT",
+            "-f",
+            "default_workflow_permissions=write",
+            "-F",
+            "can_approve_pull_request_reviews=true",
+        ]
+    )
 
     if result is not None:
         print("  [OK] Actions permissions configured")

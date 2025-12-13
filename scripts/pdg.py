@@ -28,7 +28,7 @@ from pathlib import Path
 # Add _lib to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from _lib import build, test, lint, utils
+from _lib import build, lint, test, utils
 
 
 def cmd_build(args):
@@ -75,9 +75,9 @@ def cmd_dev(args):
     project_root = utils.get_project_root()
     frontend_dir = project_root / "frontend"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print("#  Starting Development Server")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     pkg_info = utils.find_package_manager()
     if not pkg_info:
@@ -89,9 +89,7 @@ def cmd_dev(args):
 
     # Run dev server
     success, _ = utils.run_command(
-        [str(pkg_path), "run", "dev"],
-        f"{pkg_manager} run dev",
-        cwd=frontend_dir
+        [str(pkg_path), "run", "dev"], f"{pkg_manager} run dev", cwd=frontend_dir
     )
 
     return success
@@ -102,9 +100,9 @@ def cmd_package(args):
     project_root = utils.get_project_root()
     dist_dir = project_root / "dist"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print("#  Packaging Application")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Build all first
     print("\n[1/2] Building all...")
@@ -113,7 +111,7 @@ def cmd_package(args):
         return False
 
     # Create package
-    print(f"\n[2/2] Creating package...")
+    print("\n[2/2] Creating package...")
 
     import shutil
 
@@ -135,18 +133,18 @@ def cmd_package(args):
     frontend_dist = project_root / "build" / "Release" / "frontend"
     if frontend_dist.exists():
         shutil.copytree(frontend_dist, dist_dir / "frontend")
-        file_count = sum(1 for _ in (dist_dir / "frontend").rglob('*') if _.is_file())
+        file_count = sum(1 for _ in (dist_dir / "frontend").rglob("*") if _.is_file())
         print(f"  [OK] Copied: frontend ({file_count} files)")
     else:
         print(f"  [FAIL] Frontend not found: {frontend_dist}")
         return False
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  PACKAGE CREATED")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"\n  Output: {dist_dir}")
-    total_size = sum(f.stat().st_size for f in dist_dir.rglob('*') if f.is_file())
+    total_size = sum(f.stat().st_size for f in dist_dir.rglob("*") if f.is_file())
     print(f"  Total size: {total_size / 1024 / 1024:.2f} MB")
 
     return True
@@ -156,9 +154,9 @@ def cmd_check(args):
     """Handle check command - comprehensive project check."""
     build_type = args.type
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Comprehensive Project Check ({build_type})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     errors = 0
 
@@ -178,12 +176,12 @@ def cmd_check(args):
         errors += 1
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     if errors == 0:
         print("  ALL CHECKS PASSED [OK]")
     else:
         print(f"  {errors} CHECK(S) FAILED [FAIL]")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     return errors == 0
 
@@ -194,7 +192,7 @@ def main():
         prog="pdg",
         description="Pre-DateGrip unified build system",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog=__doc__,
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -206,18 +204,17 @@ def main():
         choices=["backend", "frontend", "all"],
         default="all",
         nargs="?",
-        help="Build target (default: all)"
+        help="Build target (default: all)",
     )
     build_parser.add_argument(
-        "--clean", "-c",
-        action="store_true",
-        help="Clean build (remove old artifacts)"
+        "--clean", "-c", action="store_true", help="Clean build (remove old artifacts)"
     )
     build_parser.add_argument(
-        "--type", "-t",
+        "--type",
+        "-t",
         choices=["Debug", "Release"],
         default="Release",
-        help="Build type for backend (default: Release)"
+        help="Build type for backend (default: Release)",
     )
 
     # Test command
@@ -227,31 +224,24 @@ def main():
         choices=["backend", "frontend"],
         default="frontend",
         nargs="?",
-        help="Test target (default: frontend)"
+        help="Test target (default: frontend)",
     )
     test_parser.add_argument(
-        "--watch", "-w",
-        action="store_true",
-        help="Watch mode (frontend only)"
+        "--watch", "-w", action="store_true", help="Watch mode (frontend only)"
     )
     test_parser.add_argument(
-        "--type", "-t",
+        "--type",
+        "-t",
         choices=["Debug", "Release"],
         default="Release",
-        help="Build type for backend tests (default: Release)"
+        help="Build type for backend tests (default: Release)",
     )
 
     # Lint command
     lint_parser = subparsers.add_parser("lint", aliases=["l"], help="Lint code")
+    lint_parser.add_argument("--fix", "-f", action="store_true", help="Auto-fix issues")
     lint_parser.add_argument(
-        "--fix", "-f",
-        action="store_true",
-        help="Auto-fix issues"
-    )
-    lint_parser.add_argument(
-        "--unsafe", "-u",
-        action="store_true",
-        help="Apply unsafe fixes (requires --fix)"
+        "--unsafe", "-u", action="store_true", help="Apply unsafe fixes (requires --fix)"
     )
 
     # Dev command
@@ -267,7 +257,7 @@ def main():
         choices=["Debug", "Release"],
         default="Release",
         nargs="?",
-        help="Build type (default: Release)"
+        help="Build type (default: Release)",
     )
 
     args = parser.parse_args()
@@ -306,6 +296,7 @@ def main():
     except Exception as e:
         print(f"\nERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

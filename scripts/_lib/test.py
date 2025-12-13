@@ -1,7 +1,5 @@
 """Test commands for Pre-DateGrip."""
 
-import sys
-
 from . import utils
 
 
@@ -10,11 +8,11 @@ def test_frontend(watch: bool = False) -> bool:
     project_root = utils.get_project_root()
     frontend_dir = project_root / "frontend"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print("#  Running Frontend Tests")
     if watch:
         print("#  Mode: Watch")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Find package manager
     pkg_info = utils.find_package_manager()
@@ -32,11 +30,7 @@ def test_frontend(watch: bool = False) -> bool:
     else:
         test_cmd.append("--run")
 
-    success, _ = utils.run_command(
-        test_cmd,
-        f"{pkg_manager} run test",
-        cwd=frontend_dir
-    )
+    success, _ = utils.run_command(test_cmd, f"{pkg_manager} run test", cwd=frontend_dir)
 
     if success:
         print("\n[OK] All tests passed!")
@@ -55,9 +49,9 @@ def test_backend(build_type: str = "Release") -> bool:
     project_root = utils.get_project_root()
     build_dir = project_root / "build"
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print(f"#  Running Backend Tests ({build_type})")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     if not build_dir.exists():
         print("\nERROR: Build directory not found")
