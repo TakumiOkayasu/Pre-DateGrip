@@ -29,9 +29,11 @@ export function LeftPanel({ width }: LeftPanelProps) {
   const { openTableData } = useQueryActions();
 
   const handleTableOpen = useCallback(
-    (tableName: string, _tableType: 'table' | 'view') => {
-      if (activeConnectionId) {
-        openTableData(activeConnectionId, tableName);
+    (tableName: string, _tableType: 'table' | 'view', connectionId?: string) => {
+      // Use the provided connectionId (from the clicked table) or fall back to activeConnectionId
+      const targetConnectionId = connectionId || activeConnectionId;
+      if (targetConnectionId) {
+        openTableData(targetConnectionId, tableName);
       }
     },
     [activeConnectionId, openTableData]
