@@ -78,7 +78,10 @@ const Icons = {
   ),
 };
 
-const getIcon = (type: DatabaseObject['type'] | 'folder', isExpanded?: boolean): JSX.Element => {
+const getIcon = (
+  type: DatabaseObject['type'] | 'folder',
+  isExpanded?: boolean
+): React.ReactElement => {
   switch (type) {
     case 'database':
       return Icons.database;
