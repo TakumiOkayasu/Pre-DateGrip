@@ -5,15 +5,25 @@
 namespace predategrip {
 
 AsyncQueryExecutor::~AsyncQueryExecutor() {
-    std::lock_guard lock(m_mutex);
-    // Wait for all pending queries to complete
-    for (auto& [id, task] : m_queries) {
+    std::vector<std::shared_ptr<QueryTask>> tasks;
+
+    // Lock only to copy the task list
+    {
+        std::lock_guard lock(m_mutex);
+        tasks.reserve(m_queries.size());
+        for (auto& [id, task] : m_queries) {
+            tasks.push_back(task);
+        }
+    }
+
+    // Cancel and wait WITHOUT holding the mutex
+    for (auto& task : tasks) {
         if (task->future.valid()) {
             // Cancel if still running
             if (task->status == QueryStatus::Running && task->driver) {
                 task->driver->cancel();
             }
-            // Wait for completion
+            // Wait for completion (this can block, but we're not holding the mutex)
             task->future.wait();
         }
     }
@@ -52,14 +62,19 @@ std::string AsyncQueryExecutor::submitQuery(std::shared_ptr<SQLServerDriver> dri
 }
 
 AsyncQueryResult AsyncQueryExecutor::getQueryResult(std::string_view queryId) {
-    std::lock_guard lock(m_mutex);
+    std::shared_ptr<QueryTask> task;
 
-    auto iter = m_queries.find(std::string(queryId));
-    if (iter == m_queries.end()) {
-        return AsyncQueryResult{.queryId = std::string(queryId), .status = QueryStatus::Failed, .errorMessage = "Query not found"};
+    // Lock only to find and copy the task pointer
+    {
+        std::lock_guard lock(m_mutex);
+        auto iter = m_queries.find(std::string(queryId));
+        if (iter == m_queries.end()) {
+            return AsyncQueryResult{.queryId = std::string(queryId), .status = QueryStatus::Failed, .errorMessage = "Query not found"};
+        }
+        task = iter->second;
     }
 
-    auto& task = iter->second;
+    // Now operate on the task WITHOUT holding the mutex
     AsyncQueryResult result;
     result.queryId = std::string(queryId);
     result.status = task->status.load();
@@ -68,6 +83,7 @@ AsyncQueryResult AsyncQueryExecutor::getQueryResult(std::string_view queryId) {
     result.errorMessage = task->errorMessage;
 
     // If completed, get the result (cache it to avoid double future.get() call)
+    // This can block, but we're not holding the mutex
     if (result.status == QueryStatus::Completed) {
         if (!task->cachedResult.has_value() && task->future.valid()) {
             try {

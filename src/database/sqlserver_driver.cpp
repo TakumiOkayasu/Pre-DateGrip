@@ -253,14 +253,15 @@ void SQLServerDriver::storeODBCDiagnosticMessage(SQLRETURN returnCode, SQLSMALLI
         return;
     }
 
-    std::array<SQLCHAR, 6> sqlState{};
+    std::array<SQLWCHAR, 6> sqlState{};
     SQLINTEGER nativeErrorCode = 0;
-    std::array<SQLCHAR, 1024> diagnosticMessage{};
+    std::array<SQLWCHAR, 1024> diagnosticMessage{};
     SQLSMALLINT messageLength = 0;
 
-    SQLGetDiagRecA(odbcHandleType, odbcHandle, 1, sqlState.data(), &nativeErrorCode, diagnosticMessage.data(), static_cast<SQLSMALLINT>(diagnosticMessage.size()), &messageLength);
+    SQLGetDiagRecW(odbcHandleType, odbcHandle, 1, sqlState.data(), &nativeErrorCode, diagnosticMessage.data(), static_cast<SQLSMALLINT>(diagnosticMessage.size()), &messageLength);
 
-    m_lastError = std::string(reinterpret_cast<char*>(diagnosticMessage.data()), messageLength);
+    // Convert UTF-16 (SQLWCHAR) to UTF-8 (std::string)
+    m_lastError = wcharToUtf8(reinterpret_cast<wchar_t*>(diagnosticMessage.data()), messageLength);
 }
 
 }  // namespace predategrip
