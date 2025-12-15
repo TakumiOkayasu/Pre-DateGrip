@@ -80,9 +80,7 @@ export function ConnectionTreeSection({
       try {
         log.debug(`[ConnectionTreeSection] Loading columns for table: ${tableName}`);
         const columns = await bridge.getColumns(connection.id, tableName);
-        log.debug(
-          `[ConnectionTreeSection] Loaded ${columns.length} columns for ${tableName}`
-        );
+        log.debug(`[ConnectionTreeSection] Loaded ${columns.length} columns for ${tableName}`);
         return columns.map((col) => ({
           id: `${connection.id}-${tableName}-${col.name}`,
           name: `${col.name} (${col.type}${col.isPrimaryKey ? ', PK' : ''}${col.nullable ? '' : ', NOT NULL'})`,
