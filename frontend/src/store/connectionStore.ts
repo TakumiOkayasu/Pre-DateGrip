@@ -9,10 +9,11 @@ interface ConnectionState {
   isConnecting: boolean;
   error: string | null;
 
-  addConnection: (connection: Omit<Connection, 'id'>) => Promise<void>;
+  addConnection: (connection: Omit<Connection, 'id' | 'isActive'>) => Promise<void>;
   removeConnection: (id: string) => Promise<void>;
   setActive: (id: string | null) => void;
-  testConnection: (connection: Omit<Connection, 'id'>) => Promise<boolean>;
+  toggleActive: (id: string) => void;
+  testConnection: (connection: Omit<Connection, 'id' | 'isActive'>) => Promise<boolean>;
   clearError: () => void;
   setTableListLoadTime: (connectionId: string, loadTimeMs: number) => void;
   setTableOpenTime: (connectionId: string, loadTimeMs: number) => void;
@@ -40,6 +41,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       const newConnection: Connection = {
         ...connection,
         id: result.connectionId,
+        isActive: true, // New connections are active by default
       };
 
       set((state) => ({
@@ -73,6 +75,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
   setActive: (id) => {
     set({ activeConnectionId: id });
+  },
+
+  toggleActive: (id) => {
+    set((state) => ({
+      connections: state.connections.map((c) =>
+        c.id === id ? { ...c, isActive: !c.isActive } : c
+      ),
+    }));
   },
 
   testConnection: async (connection) => {
@@ -135,6 +145,7 @@ export const useConnectionActions = () =>
       addConnection: state.addConnection,
       removeConnection: state.removeConnection,
       setActive: state.setActive,
+      toggleActive: state.toggleActive,
       testConnection: state.testConnection,
       clearError: state.clearError,
       setTableListLoadTime: state.setTableListLoadTime,

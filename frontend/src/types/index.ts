@@ -8,6 +8,7 @@ export interface Connection {
   username: string;
   password: string;
   useWindowsAuth: boolean;
+  isActive: boolean; // Track if connection is active in ObjectTree
   tableListLoadTimeMs?: number; // Time taken to load table list
   tableOpenTimeMs?: number; // Time taken to open a table (click to display)
 }
