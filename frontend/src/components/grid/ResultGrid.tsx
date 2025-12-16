@@ -57,11 +57,12 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const currentQuery = queries.find((q) => q.id === targetQueryId);
 
   // Check if we have multiple results
-  const isMultipleResults = queryResult && 'multipleResults' in queryResult && queryResult.multipleResults === true;
+  const isMultipleResults =
+    queryResult && 'multipleResults' in queryResult && queryResult.multipleResults === true;
 
   // Filter out USE statements from results
   const filteredResults = isMultipleResults
-    ? queryResult.results.filter(r => !r.statement.trim().toUpperCase().startsWith('USE '))
+    ? queryResult.results.filter((r) => !r.statement.trim().toUpperCase().startsWith('USE '))
     : null;
 
   const hasFilteredResults = filteredResults && filteredResults.length > 0;
@@ -70,8 +71,8 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const resultSet: ResultSet | null = hasFilteredResults
     ? (filteredResults[activeResultIndex]?.data ?? null)
     : isMultipleResults
-    ? null
-    : queryResult as ResultSet | null;
+      ? null
+      : (queryResult as ResultSet | null);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
@@ -294,7 +295,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   // Reset active result index when query result changes
   useEffect(() => {
     setActiveResultIndex(0);
-  }, [targetQueryId]);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {

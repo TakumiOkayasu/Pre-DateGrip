@@ -1,12 +1,17 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { bridge } from '../api/bridge';
-import type { Query, ResultSet, QueryResult, MultipleResultSet } from '../types';
+import type { MultipleResultSet, Query, QueryResult, ResultSet } from '../types';
 import { log } from '../utils/logger';
 
 // Type guard for MultipleResultSet
 function isMultipleResultSet(result: unknown): result is MultipleResultSet {
-  return typeof result === 'object' && result !== null && 'multipleResults' in result && (result as { multipleResults: unknown }).multipleResults === true;
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'multipleResults' in result &&
+    (result as { multipleResults: unknown }).multipleResults === true
+  );
 }
 
 interface QueryState {
@@ -138,21 +143,31 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         // Multiple results format
         queryResult = {
           multipleResults: true,
-          results: result.results.map((r: { statement: string; data: { columns: { name: string; type: string }[]; rows: string[][]; affectedRows: number; executionTimeMs: number } }) => ({
-            statement: r.statement,
-            data: {
-              columns: r.data.columns.map((c) => ({
-                name: c.name,
-                type: c.type,
-                size: 0,
-                nullable: true,
-                isPrimaryKey: false,
-              })),
-              rows: r.data.rows,
-              affectedRows: r.data.affectedRows,
-              executionTimeMs: r.data.executionTimeMs,
-            },
-          })),
+          results: result.results.map(
+            (r: {
+              statement: string;
+              data: {
+                columns: { name: string; type: string }[];
+                rows: string[][];
+                affectedRows: number;
+                executionTimeMs: number;
+              };
+            }) => ({
+              statement: r.statement,
+              data: {
+                columns: r.data.columns.map((c) => ({
+                  name: c.name,
+                  type: c.type,
+                  size: 0,
+                  nullable: true,
+                  isPrimaryKey: false,
+                })),
+                rows: r.data.rows,
+                affectedRows: r.data.affectedRows,
+                executionTimeMs: r.data.executionTimeMs,
+              },
+            })
+          ),
         };
       } else {
         // Single result format
@@ -201,21 +216,31 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         // Multiple results format
         queryResult = {
           multipleResults: true,
-          results: result.results.map((r: { statement: string; data: { columns: { name: string; type: string }[]; rows: string[][]; affectedRows: number; executionTimeMs: number } }) => ({
-            statement: r.statement,
-            data: {
-              columns: r.data.columns.map((c) => ({
-                name: c.name,
-                type: c.type,
-                size: 0,
-                nullable: true,
-                isPrimaryKey: false,
-              })),
-              rows: r.data.rows,
-              affectedRows: r.data.affectedRows,
-              executionTimeMs: r.data.executionTimeMs,
-            },
-          })),
+          results: result.results.map(
+            (r: {
+              statement: string;
+              data: {
+                columns: { name: string; type: string }[];
+                rows: string[][];
+                affectedRows: number;
+                executionTimeMs: number;
+              };
+            }) => ({
+              statement: r.statement,
+              data: {
+                columns: r.data.columns.map((c) => ({
+                  name: c.name,
+                  type: c.type,
+                  size: 0,
+                  nullable: true,
+                  isPrimaryKey: false,
+                })),
+                rows: r.data.rows,
+                affectedRows: r.data.affectedRows,
+                executionTimeMs: r.data.executionTimeMs,
+              },
+            })
+          ),
         };
       } else {
         // Single result format
