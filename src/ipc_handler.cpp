@@ -289,13 +289,19 @@ std::string IPCHandler::executeSQL(std::string_view params) {
             log<LogLevel::INFO>(std::format("Statement {}: '{}'", i + 1, statements[i]));
         }
 
-        // If multiple statements, execute them sequentially
+        // If multiple statements, execute them sequentially and collect all results
         if (statements.size() > 1) {
-            std::optional<ResultSet> lastResult;
+            struct StatementResult {
+                std::string statement;
+                ResultSet result;
+            };
+            std::vector<StatementResult> allResults;
             auto startTime = std::chrono::high_resolution_clock::now();
 
             try {
                 for (const auto& stmt : statements) {
+                    ResultSet currentResult;
+
                     // Check if this is a USE statement
                     if (SQLParser::isUseStatement(stmt)) {
                         std::string dbName = SQLParser::extractDatabaseName(stmt);
@@ -303,41 +309,41 @@ std::string IPCHandler::executeSQL(std::string_view params) {
                         log<LogLevel::INFO>(std::format("Database switched to '{}' for connection '{}'", dbName, connectionId));
 
                         // Create result for USE statement
-                        ResultSet useResult;
-                        useResult.columns.push_back({.name = "Message", .type = "VARCHAR", .size = 255, .nullable = false, .isPrimaryKey = false});
+                        currentResult.columns.push_back({.name = "Message", .type = "VARCHAR", .size = 255, .nullable = false, .isPrimaryKey = false});
                         ResultRow messageRow;
                         messageRow.values.push_back(std::format("Database changed to {}", dbName));
-                        useResult.rows.push_back(messageRow);
-                        useResult.affectedRows = 0;
-                        useResult.executionTimeMs = 0.0;
-                        lastResult = useResult;
+                        currentResult.rows.push_back(messageRow);
+                        currentResult.affectedRows = 0;
+                        currentResult.executionTimeMs = 0.0;
                     } else {
                         // Execute regular statement
-                        lastResult = driver->execute(stmt);
+                        currentResult = driver->execute(stmt);
                     }
+
+                    allResults.push_back({.statement = stmt, .result = std::move(currentResult)});
                 }
 
                 auto endTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration<double, std::milli>(endTime - startTime);
 
-                if (lastResult) {
-                    lastResult->executionTimeMs = duration.count();
+                // Construct JSON for multiple results
+                std::string jsonResponse = R"({"multipleResults":true,"results":[)";
+                for (size_t i = 0; i < allResults.size(); ++i) {
+                    if (i > 0)
+                        jsonResponse += ",";
 
-                    // Log column names for debugging
-                    std::string columnNames;
-                    for (size_t i = 0; i < lastResult->columns.size(); ++i) {
-                        if (i > 0)
-                            columnNames += ", ";
-                        columnNames += std::format("'{}' ({})", lastResult->columns[i].name, lastResult->columns[i].type);
-                    }
-                    log<LogLevel::INFO>(std::format("Returning multi-statement result: {} columns [{}], {} rows", lastResult->columns.size(), columnNames, lastResult->rows.size()));
+                    allResults[i].result.executionTimeMs = duration.count() / static_cast<double>(allResults.size());
 
-                    auto response = JsonUtils::successResponse(JsonUtils::serializeResultSet(*lastResult, false));
-                    return response;
-                } else {
-                    log<LogLevel::INFO>("No results from query execution");
-                    return JsonUtils::errorResponse("No results from query execution");
+                    jsonResponse += R"({"statement":")";
+                    jsonResponse += JsonUtils::escapeString(allResults[i].statement);
+                    jsonResponse += R"(","data":)";
+                    jsonResponse += JsonUtils::serializeResultSet(allResults[i].result, false);
+                    jsonResponse += "}";
                 }
+                jsonResponse += "]}";
+
+                log<LogLevel::INFO>(std::format("Returning {} results from multi-statement execution", allResults.size()));
+                return JsonUtils::successResponse(jsonResponse);
             } catch (const std::exception& e) {
                 return JsonUtils::errorResponse(std::format("Failed to execute SQL: {}", e.what()));
             }
