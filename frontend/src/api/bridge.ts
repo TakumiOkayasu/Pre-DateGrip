@@ -168,6 +168,7 @@ class Bridge {
       schema: string;
       name: string;
       type: string;
+      comment?: string;
     }[];
     loadTimeMs: number;
   }> {
@@ -178,6 +179,7 @@ class Bridge {
         schema: string;
         name: string;
         type: string;
+        comment?: string;
       }[]
     >('getTables', { connectionId, database });
     const endTime = performance.now();

@@ -69,6 +69,7 @@ export interface TableInfo {
   schema: string;
   name: string;
   type: 'TABLE' | 'VIEW';
+  comment?: string;
 }
 
 // Table metadata types for TableViewer
@@ -129,7 +130,10 @@ export interface DatabaseObject {
   name: string;
   type: 'database' | 'folder' | 'table' | 'view' | 'procedure' | 'function' | 'column' | 'index';
   children?: DatabaseObject[];
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    comment?: string;
+    [key: string]: unknown;
+  };
 }
 
 // ER Diagram types

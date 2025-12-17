@@ -181,6 +181,7 @@ export const TreeNode = memo(function TreeNode({
           {getIcon(node.type, isExpanded)}
         </span>
         <span className={styles.name}>{node.name}</span>
+        {node.metadata?.comment && <span className={styles.comment}>{node.metadata.comment}</span>}
       </div>
 
       {hasChildren && isExpanded && (

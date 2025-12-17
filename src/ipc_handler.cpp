@@ -448,11 +448,20 @@ std::string IPCHandler::fetchTableList(std::string_view params) {
         predategrip::log<LogLevel::DEBUG>(std::format("IPCHandler::fetchTableList: Driver found for connection: {}", connectionId));
 
         // Filter to only include user tables and views (exclude system tables)
+        // Include table comments from extended properties
         constexpr auto tableListQuery = R"(
-            SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_TYPE IN ('BASE TABLE', 'VIEW')
-            ORDER BY TABLE_SCHEMA, TABLE_NAME
+            SELECT
+                t.TABLE_SCHEMA,
+                t.TABLE_NAME,
+                t.TABLE_TYPE,
+                CAST(ep.value AS NVARCHAR(MAX)) AS comment
+            FROM INFORMATION_SCHEMA.TABLES t
+            LEFT JOIN sys.extended_properties ep ON ep.major_id = OBJECT_ID(t.TABLE_SCHEMA + '.' + t.TABLE_NAME)
+                AND ep.minor_id = 0
+                AND ep.class = 1
+                AND ep.name = 'MS_Description'
+            WHERE t.TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+            ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME
         )";
 
         predategrip::log<LogLevel::DEBUG>("IPCHandler::fetchTableList: Executing table list query"sv);
@@ -464,8 +473,10 @@ std::string IPCHandler::fetchTableList(std::string_view params) {
         for (size_t i = 0; i < queryResult.rows.size(); ++i) {
             if (i > 0)
                 jsonResponse += ',';
-            jsonResponse += std::format(R"({{"schema":"{}","name":"{}","type":"{}"}})", JsonUtils::escapeString(queryResult.rows[i].values[0]), JsonUtils::escapeString(queryResult.rows[i].values[1]),
-                                        JsonUtils::escapeString(queryResult.rows[i].values[2]));
+
+            std::string comment = queryResult.rows[i].values.size() >= 4 ? queryResult.rows[i].values[3] : "";
+            jsonResponse += std::format(R"({{"schema":"{}","name":"{}","type":"{}","comment":"{}"}})", JsonUtils::escapeString(queryResult.rows[i].values[0]),
+                                        JsonUtils::escapeString(queryResult.rows[i].values[1]), JsonUtils::escapeString(queryResult.rows[i].values[2]), JsonUtils::escapeString(comment));
         }
         jsonResponse += ']';
 

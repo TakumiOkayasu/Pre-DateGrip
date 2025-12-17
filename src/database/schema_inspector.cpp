@@ -40,16 +40,26 @@ std::vector<TableInfo> SchemaInspector::getTables(std::string_view database) {
         SELECT
             s.name AS schema_name,
             t.name AS table_name,
-            t.type_desc AS table_type
+            t.type_desc AS table_type,
+            CAST(ep.value AS NVARCHAR(MAX)) AS comment
         FROM sys.tables t
         INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+        LEFT JOIN sys.extended_properties ep ON ep.major_id = t.object_id
+            AND ep.minor_id = 0
+            AND ep.class = 1
+            AND ep.name = 'MS_Description'
         UNION ALL
         SELECT
             s.name AS schema_name,
             v.name AS table_name,
-            'VIEW' AS table_type
+            'VIEW' AS table_type,
+            CAST(ep.value AS NVARCHAR(MAX)) AS comment
         FROM sys.views v
         INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+        LEFT JOIN sys.extended_properties ep ON ep.major_id = v.object_id
+            AND ep.minor_id = 0
+            AND ep.class = 1
+            AND ep.name = 'MS_Description'
         ORDER BY schema_name, table_name
     )";
 
@@ -60,8 +70,9 @@ std::vector<TableInfo> SchemaInspector::getTables(std::string_view database) {
     tables.reserve(result.rows.size());
     for (const auto& row : result.rows) {
         if (row.values.size() >= 3) {
-            tables.push_back({.schema = row.values[0], .name = row.values[1], .type = row.values[2]});
-            predategrip::log<LogLevel::DEBUG>(std::format("  Found: {}.{} ({})", row.values[0], row.values[1], row.values[2]));
+            std::string comment = row.values.size() >= 4 ? row.values[3] : "";
+            tables.push_back({.schema = row.values[0], .name = row.values[1], .type = row.values[2], .comment = comment});
+            predategrip::log<LogLevel::DEBUG>(std::format("  Found: {}.{} ({}) - Comment: {}", row.values[0], row.values[1], row.values[2], comment));
         }
     }
 
