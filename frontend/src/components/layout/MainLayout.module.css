@@ -119,12 +119,18 @@
   cursor: col-resize;
   background-color: var(--border-color);
   transition: background-color 0.15s ease;
+  /* Expand clickable area without changing visual size */
+  padding: 0 4px;
+  margin: 0 -4px;
+  position: relative;
+  z-index: 10;
 }
 
 .verticalResizer:hover {
   background-color: var(--accent-color);
   width: 3px;
-  margin: 0 -1px;
+  margin: 0 -5px;
+  padding: 0 4px;
 }
 
 .horizontalResizer {

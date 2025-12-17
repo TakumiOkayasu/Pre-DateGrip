@@ -52,6 +52,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const [applyError, setApplyError] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [activeResultIndex, setActiveResultIndex] = useState(0);
+  const [columnSizing, setColumnSizing] = useState<Record<string, number>>({});
 
   const queryResult = targetQueryId ? (results[targetQueryId] ?? null) : null;
   const currentQuery = queries.find((q) => q.id === targetQueryId);
@@ -75,6 +76,13 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       : (queryResult as ResultSet | null);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Debug: Log columnSizing changes
+  useEffect(() => {
+    if (Object.keys(columnSizing).length > 0) {
+      log.debug(`[ResultGrid] columnSizing updated: ${JSON.stringify(columnSizing)}`);
+    }
+  }, [columnSizing]);
 
   // Convert resultSet to row data
   const rowData = useMemo<RowData[]>(() => {
@@ -128,8 +136,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         header: '#',
         accessorKey: '__rowIndex',
         size: 60,
-        minSize: 60,
-        maxSize: 80,
+        minSize: 40,
       },
     ];
 
@@ -140,7 +147,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         header: col.name,
         accessorKey: col.name,
         size: 150,
-        minSize: 100,
+        minSize: 80,
         meta: {
           type: col.type,
           align: isNumeric ? 'right' : 'left',
@@ -157,6 +164,12 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     columns,
     getCoreRowModel: getCoreRowModel(),
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    state: {
+      columnSizing,
+    },
+    onColumnSizingChange: setColumnSizing,
   });
 
   // Virtual scrolling
@@ -229,10 +242,59 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     setEditMode,
   ]);
 
-  const handleAutoSizeColumns = useCallback(() => {
-    // TanStack Table handles column sizing automatically
-    log.debug('[ResultGrid] Auto-size columns (TanStack Table handles this automatically)');
+  // Utility function to measure text width
+  const measureTextWidth = useCallback((text: string, font = '14px monospace'): number => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return 0;
+    context.font = font;
+    return context.measureText(text).width;
   }, []);
+
+  const handleAutoSizeColumns = useCallback(() => {
+    if (!resultSet || rowData.length === 0) {
+      log.debug('[ResultGrid] No data to auto-size');
+      return;
+    }
+
+    const newSizing: Record<string, number> = {};
+    const paddingDefault = 40; // Cell padding for data columns (left + right + extra space)
+    const paddingRowIndex = 24; // Padding for row index column
+    const headerExtraSpace = 16; // Extra space for sort icons, etc.
+    const minWidthDefault = 80; // Minimum column width for data columns
+    const maxWidth = 600; // Maximum column width to prevent overly wide columns
+    const minWidthRowIndex = 40; // Minimum width for row index column
+
+    // Calculate width for each column
+    for (const col of columns) {
+      const columnId = String(col.id);
+      const isRowIndex = columnId === '__rowIndex';
+      const minWidth = isRowIndex ? minWidthRowIndex : minWidthDefault;
+      const padding = isRowIndex ? paddingRowIndex : paddingDefault;
+
+      // Measure header width (add extra space for sort icons, etc.)
+      const headerText = String(col.header || '');
+      const headerWidth = measureTextWidth(headerText, 'bold 14px monospace') + headerExtraSpace;
+
+      // Measure content width (sample up to 1000 rows for performance)
+      let contentMaxWidth = 0;
+      const sampleSize = Math.min(rowData.length, 1000);
+      for (let i = 0; i < sampleSize; i++) {
+        const value = rowData[i][columnId];
+        const text = value === null ? 'NULL' : String(value);
+        const width = measureTextWidth(text);
+        contentMaxWidth = Math.max(contentMaxWidth, width);
+      }
+
+      // Take the larger of header and content width, then add padding
+      const maxWidth_measured = Math.max(headerWidth, contentMaxWidth);
+      const finalWidth = Math.min(maxWidth, Math.max(minWidth, maxWidth_measured + padding));
+      newSizing[columnId] = finalWidth;
+    }
+
+    setColumnSizing(newSizing);
+    log.debug(`[ResultGrid] Auto-sized columns: ${JSON.stringify(newSizing)}`);
+  }, [resultSet, rowData, columns, measureTextWidth]);
 
   const handleCopySelection = useCallback(() => {
     const selectedRowIndices = Array.from(selectedRows).sort((a, b) => a - b);
@@ -357,7 +419,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
         <div className={styles.resultTabs}>
           {filteredResults.map((result, index) => (
             <button
-              key={index}
+              key={`${result.statement}-${index}`}
               className={`${styles.resultTab} ${activeResultIndex === index ? styles.activeResultTab : ''}`}
               onClick={() => setActiveResultIndex(index)}
               title={result.statement}
@@ -416,8 +478,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           type="button"
           onClick={handleAutoSizeColumns}
           className={styles.toolbarButton}
-          disabled={true}
-          title="Auto-size All Columns (handled automatically)"
+          title="Auto-size All Columns"
         >
           Resize Columns
         </button>
@@ -536,7 +597,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
                         className={`${styles.td} ${isNull ? styles.nullCell : ''} ${isChanged ? styles.changedCell : ''}`}
                         style={{
                           width: cell.column.getSize(),
-                          textAlign: align as 'left' | 'right' | 'center',
+                          textAlign: isNull ? 'center' : (align as 'left' | 'right' | 'center'),
                         }}
                       >
                         {isNull ? 'NULL' : String(value)}

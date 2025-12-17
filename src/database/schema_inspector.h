@@ -13,6 +13,7 @@ struct TableInfo {
     std::string schema;
     std::string name;
     std::string type;
+    std::string comment;
 };
 
 struct IndexInfo {

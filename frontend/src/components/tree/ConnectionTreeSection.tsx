@@ -45,6 +45,9 @@ export function ConnectionTreeSection({
           name: table.schema !== 'dbo' ? `${table.schema}.${table.name}` : table.name,
           type: table.type === 'VIEW' ? 'view' : 'table',
           children: [], // Will be loaded on expand
+          metadata: {
+            comment: table.comment || '',
+          },
         };
 
         if (table.type === 'VIEW') {
