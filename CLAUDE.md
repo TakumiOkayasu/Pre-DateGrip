@@ -145,7 +145,7 @@ bun run lint         # Lint
 
 ```text
 Pre-DateGrip/
-├── src/                    # C++ Backend (ODBC, WebView2, IPC)
+├── backend/                # C++ Backend (ODBC, WebView2, IPC)
 │   ├── database/           # 接続、プール、キャッシュ、非同期実行
 │   ├── parsers/            # SQLフォーマッター、A5:ER
 │   ├── exporters/          # CSV/JSON/Excel
