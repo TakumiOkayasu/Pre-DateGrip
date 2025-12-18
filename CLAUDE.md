@@ -111,6 +111,11 @@ bun run lint         # Lint
    cd frontend && bun run lint         # フロントエンドのみ
    ```
 
+   **重要: Pythonスクリプト変更時の必須ルール**
+   - `scripts/` 内のファイルを変更した場合、**必ず** `ruff check scripts/` を実行して警告・エラーがゼロであることを確認
+   - VSCodeのPylance警告も**必ず解消**すること（型ヒント不足、型の不一致など）
+   - 警告・エラーが残ったままコミットメッセージを考えない
+
 ### コーディング規約
 
 #### Python (Build Scripts)
