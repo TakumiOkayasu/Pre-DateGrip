@@ -49,15 +49,6 @@ jobs:
           done
 
       # Frontend lint
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: 2.3.8
-
-      - name: Lint with Biome
-        working-directory: frontend
-        run: biome check src
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -66,6 +57,10 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: bun install --frozen-lockfile
+
+      - name: Lint with Biome
+        working-directory: frontend
+        run: bun run lint
 
       - name: Type Check
         working-directory: frontend
