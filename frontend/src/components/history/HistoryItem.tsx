@@ -39,9 +39,9 @@ export const HistoryItem = memo(function HistoryItem({ item }: HistoryItemProps)
   }, [queries.length, addQuery, updateQuery, item.sql]);
 
   const handleDoubleClick = useCallback(() => {
-    // Execute the query
+    // Set SQL in editor (same as single click)
+    // Auto-execution removed for safety (prevents accidental DELETE/UPDATE)
     handleClick();
-    // TODO: Execute
   }, [handleClick]);
 
   return (
