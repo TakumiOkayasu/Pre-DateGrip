@@ -8,7 +8,11 @@ import {
 import { useERDiagramStore } from '../../store/erDiagramStore';
 import { useQueryStore } from '../../store/queryStore';
 import { useSessionStore } from '../../store/sessionStore';
-import { checkSqlSafety, getQueryWarnings } from '../../utils/sqlSafetyCheck';
+import {
+  checkSqlSafety,
+  getQueryWarnings,
+  type UnsafeQueryWarning,
+} from '../../utils/sqlSafetyCheck';
 import type { ConnectionConfig } from '../dialogs/ConnectionDialog';
 import { QueryConfirmDialog } from '../dialogs/QueryConfirmDialog';
 import { CenterPanel } from './CenterPanel';
@@ -218,7 +222,7 @@ export function MainLayout() {
         setQueryConfirmDialog({
           isOpen: true,
           title: 'Production Warning',
-          message: warnings.map((w) => w.message).join('\n'),
+          message: warnings.map((w: UnsafeQueryWarning) => w.message).join('\n'),
           details: sql.slice(0, 200) + (sql.length > 200 ? '...' : ''),
           isBlocked: false,
         });
