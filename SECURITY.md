@@ -13,7 +13,7 @@ We release patches for security vulnerabilities for the following versions:
 
 ## Reporting a Vulnerability
 
-We take the security of Pre-DateGrip seriously. If you believe you have found a security vulnerability, please report it to us as described below.
+We take the security of Velocity-DB seriously. If you believe you have found a security vulnerability, please report it to us as described below.
 
 ### How to Report
 

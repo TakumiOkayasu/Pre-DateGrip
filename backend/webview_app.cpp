@@ -108,7 +108,7 @@ void WebViewApp::saveWindowSettings() {
 void WebViewApp::createAndConfigureWebView() {
     m_webview = std::make_unique<webview::webview>(true, nullptr);
 
-    m_webview->set_title("Pre-DateGrip");
+    m_webview->set_title("Velocity-DB");
 
     // Calculate and set window size
     const auto windowSize = calculateWindowSize();

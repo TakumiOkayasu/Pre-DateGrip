@@ -1,4 +1,4 @@
-# Pre-DateGrip プロジェクト情報
+# Velocity-DB プロジェクト情報
 
 ## 概要
 

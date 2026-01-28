@@ -47,7 +47,7 @@ std::string FileUtils::getAppDataPath() {
         if (size > 0) {
             std::string result(size - 1, '\0');
             WideCharToMultiByte(CP_UTF8, 0, path, -1, result.data(), size, nullptr, nullptr);
-            return result + "\\PreDateGrip";
+            return result + "\\Velocity-DB";
         }
     }
     return "";

@@ -1,6 +1,6 @@
 # TODO / Future Enhancements
 
-このファイルはPre-DateGripの残タスクを管理します。
+このファイルはVelocity-DBの残タスクを管理します。
 
 ## 🚨 Claude Code向けルール 🚨
 

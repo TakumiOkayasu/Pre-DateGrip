@@ -18,7 +18,7 @@ SettingsManager::SettingsManager() {
     // Get AppData\Local path
     wchar_t* localAppData = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {
-        m_settingsPath = std::filesystem::path(localAppData) / "Pre-DateGrip";
+        m_settingsPath = std::filesystem::path(localAppData) / "Velocity-DB";
         CoTaskMemFree(localAppData);
     } else {
         // Fallback to current directory

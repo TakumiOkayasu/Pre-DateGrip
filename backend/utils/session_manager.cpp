@@ -17,7 +17,7 @@ SessionManager::SessionManager() {
     // Get AppData\Local path
     wchar_t* localAppData = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {
-        m_sessionPath = std::filesystem::path(localAppData) / "Pre-DateGrip";
+        m_sessionPath = std::filesystem::path(localAppData) / "Velocity-DB";
         CoTaskMemFree(localAppData);
     } else {
         m_sessionPath = std::filesystem::current_path() / ".predategrip";

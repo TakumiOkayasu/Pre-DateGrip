@@ -1,4 +1,4 @@
-# Pre-DateGrip
+# Velocity-DB
 
 Windows向け高性能RDBMSマネジメントツール。DataGripライクなUI/UXを目指し、SQL Serverをメインターゲットとしています。
 
