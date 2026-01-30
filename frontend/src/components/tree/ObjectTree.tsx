@@ -1,6 +1,30 @@
-import { useConnectionStore } from '../../store/connectionStore';
+import { useCallback, useEffect, useState } from 'react';
+import { bridge } from '../../api/bridge';
+import { useConnectionActions, useConnectionStore } from '../../store/connectionStore';
 import { ConnectionTreeSection } from './ConnectionTreeSection';
 import styles from './ObjectTree.module.css';
+
+interface SavedProfile {
+  id: string;
+  name: string;
+  server: string;
+  port?: number;
+  database: string;
+  username: string;
+  useWindowsAuth: boolean;
+  savePassword?: boolean;
+  isProduction?: boolean;
+  isReadOnly?: boolean;
+  ssh?: {
+    enabled: boolean;
+    host: string;
+    port: number;
+    username: string;
+    authType: 'password' | 'privateKey';
+    privateKeyPath: string;
+    savePassword: boolean;
+  };
+}
 
 interface ObjectTreeProps {
   filter: string;
@@ -9,16 +33,98 @@ interface ObjectTreeProps {
 
 export function ObjectTree({ filter, onTableOpen }: ObjectTreeProps) {
   const { connections } = useConnectionStore();
+  const { addConnection } = useConnectionActions();
+  const [profiles, setProfiles] = useState<SavedProfile[]>([]);
+  const [confirmingProfile, setConfirmingProfile] = useState<SavedProfile | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  // Get all active connections
+  // Fetch profiles on mount
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const result = await bridge.getConnectionProfiles();
+        setProfiles(result.profiles);
+      } catch (error) {
+        console.error('Failed to fetch profiles:', error);
+      }
+    };
+    fetchProfiles();
+  }, []);
+
+  // Get active connections
   const activeConnections = connections.filter((c) => c.isActive);
 
-  if (activeConnections.length === 0) {
-    return <div className={styles.noConnection}>No active connection</div>;
-  }
+  // Get disconnected profiles (not currently connected)
+  const disconnectedProfiles = profiles.filter(
+    (profile) => !connections.some((c) => c.name === profile.name)
+  );
+
+  const handleProfileClick = useCallback((profile: SavedProfile) => {
+    setConfirmingProfile(profile);
+  }, []);
+
+  const handleConfirm = useCallback(async () => {
+    if (!confirmingProfile) return;
+
+    setIsConnecting(true);
+    try {
+      let password = '';
+      let sshPassword = '';
+      let sshKeyPassphrase = '';
+
+      if (!confirmingProfile.useWindowsAuth) {
+        const pwResult = await bridge.getProfilePassword(confirmingProfile.id);
+        password = pwResult.password || '';
+      }
+
+      if (confirmingProfile.ssh?.enabled) {
+        if (confirmingProfile.ssh.authType === 'password') {
+          const sshPwResult = await bridge.getSshPassword(confirmingProfile.id);
+          sshPassword = sshPwResult.password || '';
+        } else {
+          const passphraseResult = await bridge.getSshKeyPassphrase(confirmingProfile.id);
+          sshKeyPassphrase = passphraseResult.passphrase || '';
+        }
+      }
+
+      await addConnection({
+        name: confirmingProfile.name,
+        server: confirmingProfile.server,
+        port: confirmingProfile.port ?? 1433,
+        database: confirmingProfile.database,
+        username: confirmingProfile.username,
+        password,
+        useWindowsAuth: confirmingProfile.useWindowsAuth,
+        isProduction: confirmingProfile.isProduction ?? false,
+        isReadOnly: confirmingProfile.isReadOnly ?? false,
+        ssh: confirmingProfile.ssh?.enabled
+          ? {
+              enabled: true,
+              host: confirmingProfile.ssh.host,
+              port: confirmingProfile.ssh.port,
+              username: confirmingProfile.ssh.username,
+              authType: confirmingProfile.ssh.authType,
+              password: sshPassword,
+              privateKeyPath: confirmingProfile.ssh.privateKeyPath,
+              keyPassphrase: sshKeyPassphrase,
+            }
+          : undefined,
+      });
+      setConfirmingProfile(null);
+    } catch (error) {
+      console.error('Failed to connect:', error);
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [confirmingProfile, addConnection]);
+
+  const handleCancel = useCallback(() => {
+    setConfirmingProfile(null);
+  }, []);
 
   return (
     <div className={styles.container}>
+      {/* Connected databases */}
       {activeConnections.map((connection) => (
         <ConnectionTreeSection
           key={connection.id}
@@ -27,6 +133,77 @@ export function ObjectTree({ filter, onTableOpen }: ObjectTreeProps) {
           onTableOpen={onTableOpen}
         />
       ))}
+
+      {/* Disconnected profiles */}
+      {disconnectedProfiles.map((profile) => (
+        <div
+          key={profile.id}
+          className={`${styles.profileItem} ${profile.isProduction ? styles.production : ''}`}
+          onClick={() => handleProfileClick(profile)}
+          title={`Click to connect to ${profile.name}`}
+        >
+          <span className={styles.profileIcon}>🗄</span>
+          <span className={styles.profileName}>{profile.name}</span>
+          <span className={styles.profileStatus}>disconnected</span>
+        </div>
+      ))}
+
+      {/* No connections message */}
+      {activeConnections.length === 0 && disconnectedProfiles.length === 0 && (
+        <div className={styles.noConnection}>No connections</div>
+      )}
+
+      {/* Connection confirmation dialog */}
+      {confirmingProfile && (
+        <div className={styles.overlay} onClick={handleCancel}>
+          <div
+            className={`${styles.dialog} ${confirmingProfile.isProduction ? styles.productionDialog : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.dialogHeader}>
+              {confirmingProfile.isProduction && <span className={styles.warningIcon}>⚠</span>}
+              <span>Connect to Database</span>
+            </div>
+            <div className={styles.dialogBody}>
+              {confirmingProfile.isProduction ? (
+                <p className={styles.warningText}>
+                  You are about to connect to a <strong>PRODUCTION</strong> database.
+                  <br />
+                  Are you sure you want to proceed?
+                </p>
+              ) : (
+                <p>
+                  Connect to <strong>{confirmingProfile.name}</strong>?
+                </p>
+              )}
+              <div className={styles.profileDetails}>
+                <div>Server: {confirmingProfile.server}</div>
+                <div>Database: {confirmingProfile.database}</div>
+              </div>
+            </div>
+            <div className={styles.dialogActions}>
+              <button
+                className={styles.cancelButton}
+                onClick={handleCancel}
+                disabled={isConnecting}
+              >
+                Cancel
+              </button>
+              <button
+                className={`${styles.connectButton} ${confirmingProfile.isProduction ? styles.productionButton : ''}`}
+                onClick={handleConfirm}
+                disabled={isConnecting}
+              >
+                {isConnecting
+                  ? 'Connecting...'
+                  : confirmingProfile.isProduction
+                    ? 'Connect to Production'
+                    : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
