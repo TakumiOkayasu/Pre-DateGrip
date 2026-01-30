@@ -40,3 +40,178 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* Profile items (disconnected) */
+.profileItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color, #3c3f41);
+  color: var(--text-secondary, #808080);
+  font-size: 13px;
+}
+
+.profileItem:hover {
+  background: var(--bg-hover, #3c3f41);
+}
+
+/* Production environment - subtle dark red background */
+.profileItem.production {
+  background: #3d2a2e;
+}
+
+.profileItem.production:hover {
+  background: #4a3236;
+}
+
+.profileItem.production .profileName {
+  color: #e8a8a8;
+}
+
+.profileIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.profileName {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profileStatus {
+  font-size: 11px;
+  color: var(--text-disabled, #5a5d63);
+}
+
+/* Connection confirmation dialog */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: var(--bg-secondary, #2b2b2b);
+  border: 1px solid var(--border-color, #3c3f41);
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.productionDialog {
+  border: 2px solid #6b3a3a;
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #3c3f41);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary, #bbbbbb);
+}
+
+.warningIcon {
+  color: #e8a838;
+  font-size: 20px;
+}
+
+.dialogBody {
+  padding: 20px;
+}
+
+.dialogBody p {
+  margin: 0 0 16px 0;
+  color: var(--text-primary, #bbbbbb);
+  line-height: 1.5;
+}
+
+.dialogBody .warningText {
+  color: #e8a838;
+  font-weight: 500;
+}
+
+.profileDetails {
+  background: var(--bg-tertiary, #313335);
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary, #808080);
+}
+
+.profileDetails div {
+  margin-bottom: 4px;
+}
+
+.profileDetails div:last-child {
+  margin-bottom: 0;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color, #3c3f41);
+}
+
+.cancelButton {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color, #3c3f41);
+  border-radius: 4px;
+  color: var(--text-primary, #bbbbbb);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.cancelButton:hover {
+  background: var(--bg-hover, #3c3f41);
+}
+
+.cancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.connectButton {
+  padding: 8px 16px;
+  background: var(--accent-color, #4a88c7);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.connectButton:hover {
+  background: var(--accent-color-hover, #5a98d7);
+}
+
+.connectButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.productionButton {
+  background: #6b3a3a;
+}
+
+.productionButton:hover {
+  background: #7d4545;
+}
