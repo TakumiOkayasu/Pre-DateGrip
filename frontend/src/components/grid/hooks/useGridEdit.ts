@@ -20,6 +20,8 @@ interface UseGridEditResult {
   isApplying: boolean;
   applyError: string | null;
   isRowDeleted: (rowIndex: number) => boolean;
+  isRowInserted: (rowIndex: number) => boolean;
+  getInsertedRows: () => Map<number, Record<string, string | null>>;
   getCellChange: (rowIndex: number, field: string) => CellChange | null;
   updateCell: (
     rowIndex: number,
@@ -30,6 +32,7 @@ interface UseGridEditResult {
   handleToggleEditMode: () => void;
   handleRevertChanges: () => void;
   handleDeleteRow: () => void;
+  handleCloneRow: () => void;
   handleApplyChanges: () => Promise<void>;
 }
 
@@ -48,13 +51,17 @@ export function useGridEdit({
     hasChanges,
     getCellChange,
     isRowDeleted,
+    isRowInserted,
+    insertedRows,
     markRowDeleted,
     unmarkRowDeleted,
+    addNewRow,
     generateUpdateSQL,
     generateInsertSQL,
     generateDeleteSQL,
     setTableContext,
     clearTableContext,
+    primaryKeyColumns,
   } = useEditStore();
 
   const [isApplying, setIsApplying] = useState(false);
@@ -80,6 +87,29 @@ export function useGridEdit({
       }
     }
   }, [selectedRows, isRowDeleted, markRowDeleted, unmarkRowDeleted, rowData]);
+
+  const handleCloneRow = useCallback(() => {
+    if (selectedRows.size === 0) return;
+
+    for (const rowIndex of selectedRows) {
+      const sourceRow = rowData[rowIndex];
+      if (!sourceRow) continue;
+
+      // Copy row data, excluding PK columns and internal fields
+      const clonedRow: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(sourceRow)) {
+        if (key.startsWith('__')) continue;
+        // Set PK columns to NULL for new row
+        if (primaryKeyColumns.includes(key)) {
+          clonedRow[key] = null;
+        } else {
+          clonedRow[key] = value;
+        }
+      }
+
+      addNewRow(clonedRow);
+    }
+  }, [selectedRows, rowData, primaryKeyColumns, addNewRow]);
 
   const handleApplyChanges = useCallback(async () => {
     if (!activeConnectionId || !currentQuery?.sourceTable) return;
@@ -148,17 +178,22 @@ export function useGridEdit({
     };
   }, [resultSet, currentQuery?.sourceTable, setTableContext, clearTableContext, isEditMode]);
 
+  const getInsertedRows = useCallback(() => new Map(insertedRows), [insertedRows]);
+
   return {
     isEditMode,
     hasChanges,
     isApplying,
     applyError,
     isRowDeleted,
+    isRowInserted,
+    getInsertedRows,
     getCellChange,
     updateCell,
     handleToggleEditMode,
     handleRevertChanges,
     handleDeleteRow,
+    handleCloneRow,
     handleApplyChanges,
   };
 }

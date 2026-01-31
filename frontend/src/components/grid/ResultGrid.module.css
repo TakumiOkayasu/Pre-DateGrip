@@ -323,6 +323,10 @@
   color: #888;
 }
 
+.tbodyRow.inserted {
+  background-color: rgba(106, 153, 85, 0.2);
+}
+
 .td {
   padding: 6px 12px;
   border-right: 1px solid var(--border-color);
