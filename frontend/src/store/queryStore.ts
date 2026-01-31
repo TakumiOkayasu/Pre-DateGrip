@@ -24,6 +24,7 @@ interface QueryState {
   clearError: () => void;
   openTableData: (connectionId: string, tableName: string) => Promise<void>;
   applyWhereFilter: (id: string, connectionId: string, whereClause: string) => Promise<void>;
+  refreshDataView: (id: string, connectionId: string) => Promise<void>;
   saveToFile: (id: string) => Promise<void>;
   loadFromFile: (id: string) => Promise<void>;
 }
@@ -506,6 +507,55 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     }
   },
 
+  refreshDataView: async (id, connectionId) => {
+    const query = get().queries.find((q) => q.id === id);
+    if (!query?.sourceTable) return;
+
+    log.info(`[QueryStore] Refreshing data view: ${query.sourceTable}`);
+
+    set({ isExecuting: true, error: null });
+
+    try {
+      // Fetch column definitions (includes MS_Description comments)
+      const columnDefinitions = await bridge.getColumns(connectionId, query.sourceTable);
+
+      const result = await withTimeout(
+        bridge.executeQuery(connectionId, query.content),
+        DEFAULT_QUERY_TIMEOUT_MS,
+        'Query execution timed out after 5 minutes'
+      );
+
+      // Create a map of column names to comments
+      const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
+
+      const resultSet: ResultSet = {
+        columns: result.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          size: 0,
+          nullable: true,
+          isPrimaryKey: false,
+          comment: commentMap.get(c.name),
+        })),
+        rows: result.rows,
+        affectedRows: result.affectedRows,
+        executionTimeMs: result.executionTimeMs,
+      };
+
+      set((state) => ({
+        results: { ...state.results, [id]: resultSet },
+        isExecuting: false,
+      }));
+
+      log.info(`[QueryStore] Data view refreshed: ${resultSet.rows.length} rows`);
+    } catch (error) {
+      set({
+        isExecuting: false,
+        error: error instanceof Error ? error.message : 'データの更新に失敗しました',
+      });
+    }
+  },
+
   saveToFile: async (id) => {
     const query = get().queries.find((q) => q.id === id);
     if (!query || !query.content.trim()) return;
@@ -583,6 +633,7 @@ export const useQueryActions = () =>
       clearError: state.clearError,
       openTableData: state.openTableData,
       applyWhereFilter: state.applyWhereFilter,
+      refreshDataView: state.refreshDataView,
       saveToFile: state.saveToFile,
       loadFromFile: state.loadFromFile,
     }))

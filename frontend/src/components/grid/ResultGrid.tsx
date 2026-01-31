@@ -37,7 +37,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     `[ResultGrid] Render: targetQueryId=${targetQueryId}, activeQueryId=${activeQueryId}, excludeDataView=${excludeDataView}, isActiveDataView=${isActiveDataView}`
   );
 
-  const { applyWhereFilter } = useQueryActions();
+  const { applyWhereFilter, refreshDataView } = useQueryActions();
   const [whereClause, setWhereClause] = useState('');
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -214,7 +214,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     return (
       <div className={styles.message}>
         <span className={styles.spinner}>{'\u23F3'}</span>
-        <span>Executing query...</span>
+        <span>クエリ実行中...</span>
       </div>
     );
   }
@@ -223,7 +223,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     log.debug(`[ResultGrid] Showing error: ${error}`);
     return (
       <div className={`${styles.message} ${styles.error}`}>
-        <span>Error: {error}</span>
+        <span>エラー: {error}</span>
       </div>
     );
   }
@@ -232,7 +232,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     log.debug('[ResultGrid] Showing "Execute a query" message');
     return (
       <div className={styles.message}>
-        <span>Execute a query to see results</span>
+        <span>クエリを実行して結果を表示</span>
       </div>
     );
   }
@@ -259,13 +259,27 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       )}
 
       <div className={styles.toolbar}>
+        {activeQueryFromStore?.sourceTable && activeConnectionId && (
+          <button
+            type="button"
+            onClick={() => {
+              if (targetQueryId) {
+                refreshDataView(targetQueryId, activeConnectionId);
+              }
+            }}
+            className={styles.toolbarButton}
+            title="データを再取得 (F5)"
+          >
+            更新
+          </button>
+        )}
         <button
           type="button"
           onClick={handleToggleEditMode}
           className={`${styles.toolbarButton} ${isEditMode ? styles.active : ''}`}
-          title={isEditMode ? 'Exit Edit Mode' : 'Enter Edit Mode'}
+          title={isEditMode ? '編集モード終了' : '編集モード開始'}
         >
-          {isEditMode ? 'Exit Edit' : 'Edit'}
+          {isEditMode ? '編集終了' : '編集'}
         </button>
         {isEditMode && (
           <>
@@ -273,31 +287,31 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
               type="button"
               onClick={handleDeleteRow}
               className={styles.toolbarButton}
-              title="Delete Selected Rows (mark for deletion)"
+              title="選択行を削除（削除マーク）"
             >
-              Delete Row
+              行削除
             </button>
             <button
               type="button"
               onClick={handleRevertChanges}
               className={styles.toolbarButton}
               disabled={!hasChanges()}
-              title="Revert All Changes"
+              title="すべての変更を元に戻す"
             >
-              Revert
+              元に戻す
             </button>
             <button
               type="button"
               onClick={handleApplyChanges}
               className={`${styles.toolbarButton} ${styles.applyButton}`}
               disabled={!hasChanges() || isApplying}
-              title="Apply Changes to Database"
+              title="変更をデータベースに適用"
             >
-              {isApplying ? 'Applying...' : 'Apply'}
+              {isApplying ? '適用中...' : '適用'}
             </button>
           </>
         )}
-        {hasChanges() && <span className={styles.changesIndicator}>Unsaved changes</span>}
+        {hasChanges() && <span className={styles.changesIndicator}>未保存の変更あり</span>}
         {applyError && <span className={styles.errorIndicator}>{applyError}</span>}
         <div className={styles.toolbarSpacer} />
         <label className={styles.checkboxLabel}>
@@ -312,9 +326,9 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           type="button"
           onClick={() => setIsExportDialogOpen(true)}
           className={styles.toolbarButton}
-          title="Export Data"
+          title="データをエクスポート"
         >
-          Export
+          エクスポート
         </button>
       </div>
 
@@ -324,7 +338,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           <input
             type="text"
             className={styles.filterInput}
-            placeholder="e.g. id > 100 AND name LIKE '%test%'"
+            placeholder="例: id > 100 AND name LIKE '%test%'"
             value={whereClause}
             onChange={(e) => setWhereClause(e.target.value)}
             onKeyDown={handleWhereKeyDown}
@@ -338,9 +352,9 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
             }}
             className={styles.toolbarButton}
             disabled={isExecuting}
-            title="Apply WHERE filter (Enter)"
+            title="WHEREフィルタを適用 (Enter)"
           >
-            Apply
+            適用
           </button>
           <button
             type="button"
@@ -352,9 +366,9 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
             }}
             className={styles.toolbarButton}
             disabled={isExecuting || !whereClause}
-            title="Clear filter"
+            title="フィルタをクリア"
           >
-            Clear
+            クリア
           </button>
         </div>
       )}
@@ -464,16 +478,16 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       </div>
 
       <div className={styles.statusBar}>
-        <span>{resultSet.rows.length} rows</span>
+        <span>{resultSet.rows.length} 件</span>
         <span>|</span>
         <span>{resultSet.executionTimeMs.toFixed(2)} ms</span>
         {resultSet.affectedRows > 0 && (
           <>
             <span>|</span>
-            <span>{resultSet.affectedRows} affected</span>
+            <span>{resultSet.affectedRows} 件更新</span>
           </>
         )}
-        {isEditMode && <span className={styles.editModeIndicator}>EDIT MODE</span>}
+        {isEditMode && <span className={styles.editModeIndicator}>編集モード</span>}
       </div>
 
       <ExportDialog
