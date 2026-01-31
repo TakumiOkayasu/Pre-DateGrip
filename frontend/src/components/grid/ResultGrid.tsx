@@ -1,4 +1,11 @@
-import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
@@ -50,6 +57,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     columnName: string;
     value: string | null;
   }>({ isOpen: false, rowIndex: 0, columnName: '', value: null });
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const queryResult = targetQueryId ? (results[targetQueryId] ?? null) : null;
   const currentQuery = queries.find((q) => q.id === targetQueryId);
@@ -235,13 +243,17 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     data: rowData,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     enableRowSelection: true,
     enableColumnResizing: true,
+    enableSorting: true,
     columnResizeMode: 'onChange',
     state: {
       columnSizing,
+      sorting,
     },
     onColumnSizingChange: setColumnSizing,
+    onSortingChange: setSorting,
   });
 
   const { rows } = table.getRowModel();
@@ -442,19 +454,31 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
           <thead className={styles.thead}>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className={styles.theadRow}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className={styles.th}
-                    style={{
-                      width: header.getSize(),
-                      minWidth: header.column.columnDef.minSize,
-                      maxWidth: header.column.columnDef.maxSize,
-                    }}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
+                {headerGroup.headers.map((header) => {
+                  const canSort = header.column.getCanSort();
+                  const sortDirection = header.column.getIsSorted();
+                  return (
+                    <th
+                      key={header.id}
+                      className={[styles.th, canSort && styles.sortable].filter(Boolean).join(' ')}
+                      style={{
+                        width: header.getSize(),
+                        minWidth: header.column.columnDef.minSize,
+                        maxWidth: header.column.columnDef.maxSize,
+                      }}
+                      onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                    >
+                      <div className={styles.thContent}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {sortDirection && (
+                          <span className={styles.sortIndicator}>
+                            {sortDirection === 'asc' ? ' \u25B2' : ' \u25BC'}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>

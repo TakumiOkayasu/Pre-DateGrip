@@ -299,6 +299,27 @@
   border-right: none;
 }
 
+.th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.th.sortable:hover {
+  background-color: var(--bg-hover);
+}
+
+.thContent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sortIndicator {
+  color: var(--accent-color);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
 .tbody {
   background-color: var(--bg-primary);
 }
