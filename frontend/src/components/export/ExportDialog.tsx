@@ -136,7 +136,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <h2>Export Data</h2>
+          <h2>データエクスポート</h2>
           <button className={styles.closeButton} onClick={onClose}>
             {'\u2715'}
           </button>
@@ -144,7 +144,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
 
         <div className={styles.content}>
           <div className={styles.field}>
-            <label>Format</label>
+            <label>形式</label>
             <select
               value={options.format}
               onChange={(e) =>
@@ -157,21 +157,21 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
               <option value="sql">SQL INSERT</option>
-              <option value="html">HTML Table</option>
+              <option value="html">HTMLテーブル</option>
             </select>
           </div>
 
           {options.format === 'csv' && (
             <div className={styles.field}>
-              <label>Delimiter</label>
+              <label>区切り文字</label>
               <select
                 value={options.delimiter}
                 onChange={(e) => setOptions({ ...options, delimiter: e.target.value })}
               >
-                <option value=",">Comma (,)</option>
-                <option value="	">Tab</option>
-                <option value=";">Semicolon (;)</option>
-                <option value="|">Pipe (|)</option>
+                <option value=",">カンマ (,)</option>
+                <option value="	">タブ</option>
+                <option value=";">セミコロン (;)</option>
+                <option value="|">パイプ (|)</option>
               </select>
             </div>
           )}
@@ -184,14 +184,14 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
                   checked={options.includeHeaders}
                   onChange={(e) => setOptions({ ...options, includeHeaders: e.target.checked })}
                 />
-                Include headers
+                ヘッダーを含める
               </label>
             </div>
           )}
 
           {options.format === 'sql' && (
             <div className={styles.field}>
-              <label>Table Name</label>
+              <label>テーブル名</label>
               <input
                 type="text"
                 value={options.tableName}
@@ -201,7 +201,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
           )}
 
           <div className={styles.field}>
-            <label>NULL Value Display</label>
+            <label>NULL値の表示</label>
             <input
               type="text"
               value={options.nullValue}
@@ -210,7 +210,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
           </div>
 
           <div className={styles.preview}>
-            <label>Preview</label>
+            <label>プレビュー</label>
             <pre>
               {generateExport().slice(0, 1000)}
               {generateExport().length > 1000 ? '...' : ''}
@@ -220,14 +220,14 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
 
         <div className={styles.footer}>
           <span className={styles.rowCount}>
-            {resultSet ? `${resultSet.rows.length} rows` : 'No data'}
+            {resultSet ? `${resultSet.rows.length} 件` : 'データなし'}
           </span>
           <div className={styles.actions}>
             <button onClick={handleCopy} className={styles.copyButton}>
-              {copied ? 'Copied!' : 'Copy to Clipboard'}
+              {copied ? 'コピーしました' : 'クリップボードにコピー'}
             </button>
             <button onClick={handleDownload} className={styles.downloadButton}>
-              Download
+              ダウンロード
             </button>
           </div>
         </div>
