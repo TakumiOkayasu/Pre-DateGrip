@@ -21,6 +21,7 @@ interface UseGridKeyboardOptions {
     newValue: string | null
   ) => void;
   onDeleteRow: () => void;
+  onCloneRow: () => void;
 }
 
 interface UseGridKeyboardResult {
@@ -42,6 +43,7 @@ export function useGridKeyboard({
   tableContainerRef,
   updateCell,
   onDeleteRow,
+  onCloneRow,
 }: UseGridKeyboardOptions): UseGridKeyboardResult {
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -158,6 +160,10 @@ export function useGridKeyboard({
           const currentValue = rowData[rowIndex][columnId];
           handleStartEdit(rowIndex, columnId, currentValue);
         }
+      } else if (e.ctrlKey && e.key === 'd' && isEditMode) {
+        // Clone row (Ctrl+D) - WebView2環境ではブラウザのブックマーク機能は無効
+        e.preventDefault();
+        onCloneRow();
       }
     };
 
@@ -173,6 +179,7 @@ export function useGridKeyboard({
     handleCopySelection,
     handlePaste,
     onDeleteRow,
+    onCloneRow,
     handleStartEdit,
     handleConfirmEdit,
     handleCancelEdit,

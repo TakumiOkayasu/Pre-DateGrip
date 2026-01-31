@@ -63,7 +63,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  const rowData = useMemo<RowData[]>(() => {
+  const baseRowData = useMemo<RowData[]>(() => {
     if (!resultSet) return [];
 
     const rows = resultSet.rows;
@@ -74,6 +74,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       const row = rows[rowIndex];
       const obj: Record<string, string | null> = {
         __rowIndex: String(rowIndex + 1),
+        __originalIndex: String(rowIndex),
       };
 
       for (let colIdx = 0; colIdx < cols.length; colIdx++) {
@@ -131,7 +132,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
   const { columnSizing, setColumnSizing } = useColumnAutoSize({
     resultSet,
     columns,
-    rowData,
+    rowData: baseRowData,
   });
 
   // Grid Edit Hook
@@ -141,19 +142,39 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
     isApplying,
     applyError,
     isRowDeleted,
+    isRowInserted,
+    getInsertedRows,
     getCellChange,
     updateCell,
     handleToggleEditMode,
     handleRevertChanges,
     handleDeleteRow,
+    handleCloneRow,
     handleApplyChanges,
   } = useGridEdit({
     resultSet,
     currentQuery,
     activeConnectionId,
-    rowData,
+    rowData: baseRowData,
     selectedRows,
   });
+
+  // Combine base row data with inserted rows
+  const rowData = useMemo<RowData[]>(() => {
+    const insertedRows = getInsertedRows();
+    if (insertedRows.size === 0) return baseRowData;
+
+    const combined = [...baseRowData];
+    insertedRows.forEach((rowValues, rowIndex) => {
+      combined.push({
+        ...rowValues,
+        __rowIndex: '新規',
+        __originalIndex: String(rowIndex),
+      });
+    });
+
+    return combined;
+  }, [baseRowData, getInsertedRows]);
 
   // Grid Keyboard Hook
   const { editingCell, editValue, setEditValue, handleStartEdit, handleConfirmEdit } =
@@ -165,6 +186,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
       tableContainerRef,
       updateCell,
       onDeleteRow: handleDeleteRow,
+      onCloneRow: handleCloneRow,
     });
 
   const table = useReactTable({
@@ -403,13 +425,24 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
             {virtualRows.map((virtualRow) => {
               const row = rows[virtualRow.index];
               const rowIndex = virtualRow.index;
+              const originalIndex = Number(row.original.__originalIndex);
               const isSelected = selectedRows.has(rowIndex);
-              const isDeleted = isRowDeleted(rowIndex);
+              const isDeleted = isRowDeleted(originalIndex);
+              const isInserted = isRowInserted(originalIndex);
+
+              const rowClasses = [
+                styles.tbodyRow,
+                isSelected && styles.selected,
+                isDeleted && styles.deleted,
+                isInserted && styles.inserted,
+              ]
+                .filter(Boolean)
+                .join(' ');
 
               return (
                 <tr
                   key={row.id}
-                  className={`${styles.tbodyRow} ${isSelected ? styles.selected : ''} ${isDeleted ? styles.deleted : ''}`}
+                  className={rowClasses}
                   onClick={() => {
                     setSelectedRows((prev) => {
                       const next = new Set(prev);
@@ -425,14 +458,18 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
                   {row.getVisibleCells().map((cell) => {
                     const value = cell.getValue();
                     const field = cell.column.id;
-                    const change = field !== '__rowIndex' ? getCellChange(rowIndex, field) : null;
+                    const change =
+                      field !== '__rowIndex' && field !== '__originalIndex'
+                        ? getCellChange(originalIndex, field)
+                        : null;
                     const isChanged = change !== null;
                     const isNull = value === null || value === '';
                     const align =
                       (cell.column.columnDef.meta as { align?: string })?.align ?? 'left';
                     const isEditing =
-                      editingCell?.rowIndex === rowIndex && editingCell?.columnId === field;
-                    const isEditable = isEditMode && field !== '__rowIndex';
+                      editingCell?.rowIndex === originalIndex && editingCell?.columnId === field;
+                    const isEditable =
+                      isEditMode && field !== '__rowIndex' && field !== '__originalIndex';
 
                     return (
                       <td
@@ -444,7 +481,7 @@ export function ResultGrid({ queryId, excludeDataView = false }: ResultGridProps
                         }}
                         onDoubleClick={() => {
                           if (isEditable) {
-                            handleStartEdit(rowIndex, field, value as string | null);
+                            handleStartEdit(originalIndex, field, value as string | null);
                           }
                         }}
                       >
