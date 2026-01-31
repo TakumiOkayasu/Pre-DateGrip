@@ -4,11 +4,19 @@ import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueryStore } from '../../store/queryStore';
 import { log } from '../../utils/logger';
+import { getStatementAtCursor } from '../../utils/sqlParser';
 import styles from './SqlEditor.module.css';
 
 export function SqlEditor() {
-  const { queries, activeQueryId, updateQuery, executeQuery, saveToFile, loadFromFile } =
-    useQueryStore();
+  const {
+    queries,
+    activeQueryId,
+    updateQuery,
+    executeQuery,
+    executeSelectedText,
+    saveToFile,
+    loadFromFile,
+  } = useQueryStore();
   const { activeConnectionId } = useConnectionStore();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const isFormattingRef = useRef(false);
@@ -107,14 +115,36 @@ export function SqlEditor() {
         return;
       }
 
-      // Ctrl+Enter for query execution
+      // Ctrl+Enter for executing current statement at cursor position
       if (event.ctrlKey && event.key === 'Enter' && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         log.debug('[SqlEditor] Global Ctrl+Enter detected');
-        if (activeQueryId && activeConnectionId) {
+        if (activeQueryId && activeConnectionId && editorRef.current) {
           requestAnimationFrame(() => {
             setTimeout(() => {
-              executeQuery(activeQueryId, activeConnectionId);
+              if (!editorRef.current) return;
+
+              const model = editorRef.current.getModel();
+              const position = editorRef.current.getPosition();
+              if (!model || !position) {
+                // フォールバック: 全体を実行
+                executeQuery(activeQueryId, activeConnectionId);
+                return;
+              }
+
+              const cursorOffset = model.getOffsetAt(position);
+              const fullText = model.getValue();
+              const currentStatement = getStatementAtCursor(fullText, cursorOffset);
+
+              if (currentStatement) {
+                log.debug(
+                  `[SqlEditor] Executing statement at cursor: ${currentStatement.slice(0, 50)}...`
+                );
+                executeSelectedText(activeQueryId, activeConnectionId, currentStatement);
+              } else {
+                // フォールバック: 全体を実行
+                executeQuery(activeQueryId, activeConnectionId);
+              }
             }, 0);
           });
         }
@@ -158,7 +188,15 @@ export function SqlEditor() {
       window.removeEventListener('keydown', handleKeyDown);
       log.debug('[SqlEditor] Global keyboard listener removed');
     };
-  }, [activeQueryId, activeConnectionId, executeQuery, updateQuery, saveToFile, loadFromFile]);
+  }, [
+    activeQueryId,
+    activeConnectionId,
+    executeQuery,
+    executeSelectedText,
+    updateQuery,
+    saveToFile,
+    loadFromFile,
+  ]);
 
   const handleEditorDidMount: OnMount = useCallback((editor) => {
     // Store editor reference
