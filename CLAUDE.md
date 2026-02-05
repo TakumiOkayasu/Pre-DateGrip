@@ -103,6 +103,7 @@ ruff check scripts/ && ruff format --check scripts/  # Python
 | ファイル | 内容 |
 |----------|------|
 | `TODO.md` | 残タスク一覧（作業前に確認） |
+| `docs/ARCHITECTURE.md` | アーキテクチャ、コンポーネント対応表 |
 | `docs/PROJECT_INFO.md` | 技術スタック、構造、ショートカット |
 | `docs/BUILD_COMMANDS.md` | ビルドコマンド詳細 |
 | `docs/CODING_STANDARDS.md` | コーディング規約 |
