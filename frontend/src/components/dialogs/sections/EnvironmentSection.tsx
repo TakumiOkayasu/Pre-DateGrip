@@ -1,30 +1,49 @@
+import type { EnvironmentType } from '../../../types';
 import type { ConnectionConfig } from '../ConnectionDialog';
 import styles from '../ConnectionDialog.module.css';
 
 interface EnvironmentSectionProps {
-  isProduction: boolean;
+  environment: EnvironmentType;
   isReadOnly: boolean;
-  onChange: (field: keyof ConnectionConfig, value: boolean) => void;
+  onChange: (field: keyof ConnectionConfig, value: EnvironmentType | boolean) => void;
 }
 
-export function EnvironmentSection({
-  isProduction,
-  isReadOnly,
-  onChange,
-}: EnvironmentSectionProps) {
+const ENVIRONMENT_OPTIONS: { value: EnvironmentType; label: string; description: string }[] = [
+  { value: 'development', label: '開発', description: '開発環境' },
+  { value: 'staging', label: 'ステージング', description: 'テスト・検証環境' },
+  { value: 'production', label: '本番', description: '本番環境（警告表示有効）' },
+];
+
+export function EnvironmentSection({ environment, isReadOnly, onChange }: EnvironmentSectionProps) {
+  const isProduction = environment === 'production';
+
   return (
     <div className={styles.productionSection}>
       <div className={styles.sectionHeader}>環境設定</div>
       <div className={styles.formGroup}>
-        <label className={`${styles.checkboxLabel} ${styles.productionCheckbox}`}>
-          <input
-            type="checkbox"
-            checked={isProduction}
-            onChange={(e) => onChange('isProduction', e.target.checked)}
-          />
-          本番環境
-        </label>
-        <span className={styles.hint}>安全警告と視覚的インジケーターを有効化</span>
+        <div className={styles.environmentRadioGroup}>
+          {ENVIRONMENT_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className={`${styles.environmentRadio} ${environment === option.value ? styles.selected : ''} ${styles[`env-${option.value}`]}`}
+            >
+              <input
+                type="radio"
+                name="environment"
+                value={option.value}
+                checked={environment === option.value}
+                onChange={(e) => {
+                  const newEnv = e.target.value as EnvironmentType;
+                  onChange('environment', newEnv);
+                  // isProductionを同期
+                  onChange('isProduction', newEnv === 'production');
+                }}
+              />
+              <span className={styles.environmentLabel}>{option.label}</span>
+              <span className={styles.environmentDescription}>{option.description}</span>
+            </label>
+          ))}
+        </div>
       </div>
       {isProduction && (
         <div className={styles.formGroup}>

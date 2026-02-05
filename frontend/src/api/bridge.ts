@@ -79,6 +79,7 @@ class Bridge {
     username?: string;
     password?: string;
     useWindowsAuth: boolean;
+    dbType?: 'sqlserver' | 'postgresql' | 'mysql';
     ssh?: {
       enabled: boolean;
       host: string;
@@ -91,8 +92,14 @@ class Bridge {
     };
   }): Promise<{ connectionId: string }> {
     // Build server string with port if provided
+    const defaultPort =
+      connectionInfo.dbType === 'postgresql'
+        ? 5432
+        : connectionInfo.dbType === 'mysql'
+          ? 3306
+          : 1433;
     const serverWithPort =
-      connectionInfo.port && connectionInfo.port !== 1433
+      connectionInfo.port && connectionInfo.port !== defaultPort
         ? `${connectionInfo.server},${connectionInfo.port}`
         : connectionInfo.server;
     return this.call('connect', { ...connectionInfo, server: serverWithPort });
@@ -109,6 +116,7 @@ class Bridge {
     username?: string;
     password?: string;
     useWindowsAuth: boolean;
+    dbType?: 'sqlserver' | 'postgresql' | 'mysql';
     ssh?: {
       enabled: boolean;
       host: string;
@@ -121,8 +129,14 @@ class Bridge {
     };
   }): Promise<{ success: boolean; message: string }> {
     // Build server string with port if provided
+    const defaultPort =
+      connectionInfo.dbType === 'postgresql'
+        ? 5432
+        : connectionInfo.dbType === 'mysql'
+          ? 3306
+          : 1433;
     const serverWithPort =
-      connectionInfo.port && connectionInfo.port !== 1433
+      connectionInfo.port && connectionInfo.port !== defaultPort
         ? `${connectionInfo.server},${connectionInfo.port}`
         : connectionInfo.server;
     return this.call('testConnection', {
@@ -474,6 +488,8 @@ class Bridge {
       savePassword?: boolean;
       isProduction?: boolean;
       isReadOnly?: boolean;
+      environment?: 'development' | 'staging' | 'production';
+      dbType?: 'sqlserver' | 'postgresql' | 'mysql';
       ssh?: {
         enabled: boolean;
         host: string;
@@ -500,6 +516,8 @@ class Bridge {
     password?: string;
     isProduction?: boolean;
     isReadOnly?: boolean;
+    environment?: 'development' | 'staging' | 'production';
+    dbType?: 'sqlserver' | 'postgresql' | 'mysql';
     ssh?: {
       enabled: boolean;
       host: string;

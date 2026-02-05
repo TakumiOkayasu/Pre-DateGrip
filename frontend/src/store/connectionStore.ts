@@ -36,6 +36,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         username: connection.username,
         password: connection.password,
         useWindowsAuth: connection.useWindowsAuth,
+        dbType: connection.dbType,
         ssh: connection.ssh?.enabled
           ? {
               enabled: true,
@@ -56,6 +57,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         isActive: true, // New connections are active by default
         isProduction: connection.isProduction ?? false,
         isReadOnly: connection.isReadOnly ?? false,
+        environment:
+          connection.environment ?? (connection.isProduction ? 'production' : 'development'),
+        dbType: connection.dbType ?? 'sqlserver',
       };
 
       set((state) => ({

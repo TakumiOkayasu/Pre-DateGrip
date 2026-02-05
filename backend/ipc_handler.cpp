@@ -45,12 +45,15 @@ struct SshConnectionParams {
     std::string keyPassphrase;
 };
 
+enum class DbType { SQLServer, PostgreSQL, MySQL };
+
 struct DatabaseConnectionParams {
     std::string server;
     std::string database;
     std::string username;
     std::string password;
     bool useWindowsAuth = true;
+    DbType dbType = DbType::SQLServer;
     SshConnectionParams ssh;
 };
 
@@ -71,13 +74,43 @@ struct DatabaseConnectionParams {
 }
 
 [[nodiscard]] std::string buildODBCConnectionString(const DatabaseConnectionParams& params) {
-    auto connectionString = buildDriverConnectionPrefix(params.server, params.database);
+    std::string connectionString;
 
-    if (params.useWindowsAuth) {
-        connectionString += "Trusted_Connection=yes;";
-    } else {
-        // Escape username and password to prevent connection string injection
-        connectionString += std::format("Uid={};Pwd={};", escapeOdbcValue(params.username), escapeOdbcValue(params.password));
+    switch (params.dbType) {
+        case DbType::PostgreSQL: {
+            // PostgreSQL ODBC Driver
+            std::string host = params.server;
+            std::string port = "5432";
+            if (auto commaPos = host.find(','); commaPos != std::string::npos) {
+                port = host.substr(commaPos + 1);
+                host = host.substr(0, commaPos);
+            }
+            connectionString = std::format("Driver={{PostgreSQL ODBC Driver(UNICODE)}};Server={};Port={};Database={};", host, port, params.database);
+            connectionString += std::format("Uid={};Pwd={};", escapeOdbcValue(params.username), escapeOdbcValue(params.password));
+            break;
+        }
+        case DbType::MySQL: {
+            // MySQL ODBC Driver
+            std::string host = params.server;
+            std::string port = "3306";
+            if (auto commaPos = host.find(','); commaPos != std::string::npos) {
+                port = host.substr(commaPos + 1);
+                host = host.substr(0, commaPos);
+            }
+            connectionString = std::format("Driver={{MySQL ODBC 8.0 Unicode Driver}};Server={};Port={};Database={};", host, port, params.database);
+            connectionString += std::format("User={};Password={};", escapeOdbcValue(params.username), escapeOdbcValue(params.password));
+            break;
+        }
+        case DbType::SQLServer:
+        default:
+            connectionString = buildDriverConnectionPrefix(params.server, params.database);
+            if (params.useWindowsAuth) {
+                connectionString += "Trusted_Connection=yes;";
+            } else {
+                // Escape username and password to prevent connection string injection
+                connectionString += std::format("Uid={};Pwd={};", escapeOdbcValue(params.username), escapeOdbcValue(params.password));
+            }
+            break;
     }
 
     return connectionString;
@@ -105,6 +138,16 @@ struct DatabaseConnectionParams {
         }
         if (auto auth = doc["useWindowsAuth"].get_bool(); !auth.error()) {
             result.useWindowsAuth = auth.value();
+        }
+        if (auto dbTypeStr = doc["dbType"].get_string(); !dbTypeStr.error()) {
+            auto typeVal = std::string(dbTypeStr.value());
+            if (typeVal == "postgresql") {
+                result.dbType = DbType::PostgreSQL;
+            } else if (typeVal == "mysql") {
+                result.dbType = DbType::MySQL;
+            } else {
+                result.dbType = DbType::SQLServer;
+            }
         }
 
         // Extract SSH settings

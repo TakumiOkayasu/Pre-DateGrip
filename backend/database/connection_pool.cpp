@@ -97,14 +97,45 @@ bool ConnectionPool::testConnection(const ConnectionInfo& info) {
 }
 
 std::string ConnectionPool::buildConnectionString(const ConnectionInfo& info) const {
-    auto connStr = buildDriverConnectionPrefix(info.server, info.database);
+    std::string connStr;
 
-    if (info.useWindowsAuth) {
-        connStr += "Trusted_Connection=yes;";
-    } else {
-        // Escape username and password to prevent connection string injection
-        // Special characters like ; = { } in passwords can break parsing or allow injection
-        connStr += std::format("UID={};PWD={};", escapeOdbcValue(info.username), escapeOdbcValue(info.password));
+    switch (info.dbType) {
+        case DbType::PostgreSQL: {
+            // PostgreSQL ODBC Driver
+            // Server format: host or host,port -> need to split
+            std::string host = info.server;
+            std::string port = "5432";
+            if (auto commaPos = host.find(','); commaPos != std::string::npos) {
+                port = host.substr(commaPos + 1);
+                host = host.substr(0, commaPos);
+            }
+            connStr = std::format("Driver={{PostgreSQL ODBC Driver(UNICODE)}};Server={};Port={};Database={};", host, port, info.database);
+            connStr += std::format("Uid={};Pwd={};", escapeOdbcValue(info.username), escapeOdbcValue(info.password));
+            break;
+        }
+        case DbType::MySQL: {
+            // MySQL ODBC Driver
+            std::string host = info.server;
+            std::string port = "3306";
+            if (auto commaPos = host.find(','); commaPos != std::string::npos) {
+                port = host.substr(commaPos + 1);
+                host = host.substr(0, commaPos);
+            }
+            connStr = std::format("Driver={{MySQL ODBC 8.0 Unicode Driver}};Server={};Port={};Database={};", host, port, info.database);
+            connStr += std::format("User={};Password={};", escapeOdbcValue(info.username), escapeOdbcValue(info.password));
+            break;
+        }
+        case DbType::SQLServer:
+        default:
+            connStr = buildDriverConnectionPrefix(info.server, info.database);
+            if (info.useWindowsAuth) {
+                connStr += "Trusted_Connection=yes;";
+            } else {
+                // Escape username and password to prevent connection string injection
+                // Special characters like ; = { } in passwords can break parsing or allow injection
+                connStr += std::format("UID={};PWD={};", escapeOdbcValue(info.username), escapeOdbcValue(info.password));
+            }
+            break;
     }
 
     return connStr;

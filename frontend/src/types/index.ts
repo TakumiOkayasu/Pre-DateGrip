@@ -1,6 +1,12 @@
 // SSH authentication type
 export type SshAuthType = 'password' | 'privateKey';
 
+// Environment type for connection
+export type EnvironmentType = 'development' | 'staging' | 'production';
+
+// Database type for multi-DB support
+export type DatabaseType = 'sqlserver' | 'postgresql' | 'mysql';
+
 // SSH configuration types (runtime, includes secrets)
 export interface SshConfig {
   enabled: boolean;
@@ -36,6 +42,8 @@ export interface SavedConnectionProfile {
   savePassword: boolean;
   isProduction: boolean;
   isReadOnly: boolean;
+  environment?: EnvironmentType;
+  dbType?: DatabaseType;
   ssh?: SavedSshConfig;
 }
 
@@ -52,6 +60,8 @@ export interface Connection {
   isActive: boolean; // Track if connection is active in ObjectTree
   isProduction: boolean; // Production environment flag - enables safety features
   isReadOnly: boolean; // Read-only mode - prevents data modifications
+  environment?: EnvironmentType; // Environment type for color coding
+  dbType?: DatabaseType; // Database type (SQL Server, PostgreSQL, MySQL)
   tableListLoadTimeMs?: number; // Time taken to load table list
   tableOpenTimeMs?: number; // Time taken to open a table (click to display)
   ssh?: SshConfig;

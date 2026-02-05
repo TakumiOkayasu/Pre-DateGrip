@@ -12,6 +12,9 @@ namespace velocitydb {
 
 class SQLServerDriver;
 
+// Database type enumeration
+enum class DbType { SQLServer, PostgreSQL, MySQL };
+
 struct ConnectionInfo {
     std::string id;
     std::string name;
@@ -20,6 +23,7 @@ struct ConnectionInfo {
     std::string username;
     std::string password;
     bool useWindowsAuth = true;
+    DbType dbType = DbType::SQLServer;
 };
 
 class ConnectionPool {
