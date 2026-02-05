@@ -29,6 +29,8 @@ set(TEST_SOURCES
     parsers/test_a5er_parser.cpp
     parsers/test_sql_formatter.cpp
     exporters/test_csv_exporter.cpp
+    contexts/test_settings_context.cpp
+    contexts/test_utility_context.cpp
 )
 
 add_executable(VelocityDBTests ${TEST_SOURCES})

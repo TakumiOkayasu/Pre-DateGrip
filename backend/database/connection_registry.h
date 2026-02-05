@@ -5,7 +5,7 @@
 #include <atomic>
 #include <expected>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -52,7 +52,7 @@ public:
     void clear();
 
 private:
-    mutable std::mutex m_mutex;
+    mutable std::shared_mutex m_mutex;
     std::unordered_map<std::string, DriverPtr> m_connections;
     std::unordered_map<std::string, std::unique_ptr<SshTunnel>> m_tunnels;
     std::atomic<int> m_counter{1};

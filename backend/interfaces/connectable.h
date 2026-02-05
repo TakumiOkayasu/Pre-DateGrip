@@ -11,6 +11,7 @@ class IConnectable {
 public:
     virtual ~IConnectable() = default;
 
+    // Non-copyable (stateful resource), but movable for ownership transfer
     IConnectable(const IConnectable&) = delete;
     IConnectable& operator=(const IConnectable&) = delete;
 

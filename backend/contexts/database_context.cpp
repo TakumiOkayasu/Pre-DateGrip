@@ -11,8 +11,85 @@
 #include "../utils/json_utils.h"
 
 #include <format>
+#include <stdexcept>
 
 namespace velocitydb {
+
+namespace {
+
+/// Sanitize a single SQL Server identifier part (no dots).
+/// Wraps in brackets and escapes any existing brackets.
+[[nodiscard]] std::string sanitizeIdentifierPart(std::string_view part) {
+    if (part.empty()) {
+        return {};
+    }
+
+    std::string result;
+    result.reserve(part.size() + 2);
+    result += '[';
+    for (char c : part) {
+        if (c == ']') {
+            result += "]]";  // Escape closing bracket
+        } else {
+            result += c;
+        }
+    }
+    result += ']';
+    return result;
+}
+
+/// Sanitize SQL Server identifier (table/column name) to prevent SQL injection.
+/// Handles schema-qualified names like "dbo.users" -> "[dbo].[users]"
+[[nodiscard]] std::string sanitizeIdentifier(std::string_view identifier) {
+    if (identifier.empty()) {
+        return {};
+    }
+
+    std::string result;
+    result.reserve(identifier.size() + 4);
+
+    size_t start = 0;
+    size_t pos = identifier.find('.');
+
+    while (pos != std::string_view::npos) {
+        auto part = sanitizeIdentifierPart(identifier.substr(start, pos - start));
+        if (!part.empty()) {
+            if (!result.empty()) {
+                result += '.';
+            }
+            result += part;
+        }
+        start = pos + 1;
+        pos = identifier.find('.', start);
+    }
+
+    // Handle last (or only) part
+    auto lastPart = sanitizeIdentifierPart(identifier.substr(start));
+    if (!lastPart.empty()) {
+        if (!result.empty()) {
+            result += '.';
+        }
+        result += lastPart;
+    }
+
+    return result;
+}
+
+/// Helper to get SQLServerDriver from connection registry
+[[nodiscard]] std::expected<std::shared_ptr<SQLServerDriver>, std::string> getDriver(const ConnectionRegistry& registry, std::string_view connectionId) {
+    auto driverResult = registry.get(connectionId);
+    if (!driverResult) {
+        return std::unexpected(driverResult.error());
+    }
+
+    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
+    if (!driver) {
+        return std::unexpected("Invalid driver type");
+    }
+    return driver;
+}
+
+}  // namespace
 
 DatabaseContext::DatabaseContext()
     : m_registry(std::make_unique<ConnectionRegistry>())
@@ -25,32 +102,18 @@ DatabaseContext::~DatabaseContext() = default;
 DatabaseContext::DatabaseContext(DatabaseContext&&) noexcept = default;
 DatabaseContext& DatabaseContext::operator=(DatabaseContext&&) noexcept = default;
 
-std::expected<std::string, std::string> DatabaseContext::connect(std::string_view params) {
-    // Connection logic will be implemented during IPCHandler migration
-    return std::unexpected("Not implemented - use IPCHandler::openDatabaseConnection");
-}
-
 void DatabaseContext::disconnect(std::string_view connectionId) {
     m_transactionManagers.erase(std::string(connectionId));
     m_registry->remove(connectionId);
 }
 
-std::expected<bool, std::string> DatabaseContext::testConnection(std::string_view params) {
-    return std::unexpected("Not implemented - use IPCHandler::verifyDatabaseConnection");
-}
-
 std::expected<ResultSet, std::string> DatabaseContext::execute(std::string_view connectionId, std::string_view sql) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    auto result = driver->execute(sql);
+    auto result = (*driverResult)->execute(sql);
 
     // Add to history
     HistoryItem item;
@@ -63,35 +126,32 @@ std::expected<ResultSet, std::string> DatabaseContext::execute(std::string_view 
 }
 
 std::expected<ResultSet, std::string> DatabaseContext::executePaginated(std::string_view connectionId, std::string_view sql, int offset, int limit) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
+    // Validate pagination parameters
+    if (offset < 0 || limit <= 0) {
+        return std::unexpected("Invalid pagination parameters");
     }
 
-    // Wrap SQL with pagination
+    // Note: The sql parameter comes from trusted internal sources (user's query editor).
+    // Pagination wrapping is safe as it doesn't interpolate user data into the query structure.
     auto paginatedSql = std::format("SELECT * FROM ({}) AS __paginated_query OFFSET {} ROWS FETCH NEXT {} ROWS ONLY", sql, offset, limit);
 
-    return driver->execute(paginatedSql);
+    return (*driverResult)->execute(paginatedSql);
 }
 
 std::expected<int64_t, std::string> DatabaseContext::getRowCount(std::string_view connectionId, std::string_view tableName) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    auto countSql = std::format("SELECT COUNT(*) FROM {}", tableName);
-    auto result = driver->execute(countSql);
+    // Sanitize table name to prevent SQL injection
+    auto countSql = std::format("SELECT COUNT(*) FROM {}", sanitizeIdentifier(tableName));
+    auto result = (*driverResult)->execute(countSql);
 
     if (result.rows.empty() || result.rows[0].values.empty()) {
         return std::unexpected("Failed to get row count");
@@ -99,33 +159,26 @@ std::expected<int64_t, std::string> DatabaseContext::getRowCount(std::string_vie
 
     try {
         return std::stoll(result.rows[0].values[0]);
-    } catch (...) {
-        return std::unexpected("Invalid row count result");
+    } catch (const std::invalid_argument&) {
+        return std::unexpected("Invalid row count result: not a number");
+    } catch (const std::out_of_range&) {
+        return std::unexpected("Invalid row count result: value out of range");
     }
 }
 
 void DatabaseContext::cancelQuery(std::string_view connectionId) {
-    auto driverResult = m_registry->get(connectionId);
-    if (driverResult) {
-        auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-        if (driver) {
-            driver->cancel();
-        }
+    if (auto driverResult = getDriver(*m_registry, connectionId)) {
+        (*driverResult)->cancel();
     }
 }
 
 std::expected<std::string, std::string> DatabaseContext::executeAsync(std::string_view connectionId, std::string_view sql) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    return m_asyncExecutor->submitQuery(driver, sql);
+    return m_asyncExecutor->submitQuery(*driverResult, sql);
 }
 
 std::expected<std::string, std::string> DatabaseContext::getAsyncResult(std::string_view queryId) {
@@ -151,85 +204,55 @@ std::string DatabaseContext::getActiveQueries() {
 }
 
 std::expected<std::vector<std::string>, std::string> DatabaseContext::getDatabases(std::string_view connectionId) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    m_schemaInspector->setDriver(driver);
+    m_schemaInspector->setDriver(*driverResult);
     return m_schemaInspector->getDatabases();
 }
 
 std::expected<std::vector<TableInfo>, std::string> DatabaseContext::getTables(std::string_view connectionId, std::string_view database) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    m_schemaInspector->setDriver(driver);
+    m_schemaInspector->setDriver(*driverResult);
     return m_schemaInspector->getTables(database);
 }
 
 std::expected<std::vector<ColumnInfo>, std::string> DatabaseContext::getColumns(std::string_view connectionId, std::string_view tableName) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    m_schemaInspector->setDriver(driver);
+    m_schemaInspector->setDriver(*driverResult);
     return m_schemaInspector->getColumns(tableName);
 }
 
-std::expected<std::string, std::string> DatabaseContext::getTableMetadata(std::string_view connectionId, std::string_view tableName) {
-    // Metadata retrieval delegated to IPCHandler for now
-    return std::unexpected("Not implemented - use IPCHandler::fetchTableMetadata");
-}
-
 std::expected<std::string, std::string> DatabaseContext::getTableDDL(std::string_view connectionId, std::string_view tableName) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
     }
 
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
-    }
-
-    m_schemaInspector->setDriver(driver);
+    m_schemaInspector->setDriver(*driverResult);
     return m_schemaInspector->generateDDL(tableName);
 }
 
 std::expected<void, std::string> DatabaseContext::beginTransaction(std::string_view connectionId) {
-    auto driverResult = m_registry->get(connectionId);
+    auto driverResult = getDriver(*m_registry, connectionId);
     if (!driverResult) {
         return std::unexpected(driverResult.error());
-    }
-
-    auto driver = std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
-    if (!driver) {
-        return std::unexpected("Invalid driver type");
     }
 
     auto connId = std::string(connectionId);
     if (!m_transactionManagers.contains(connId)) {
         m_transactionManagers[connId] = std::make_unique<TransactionManager>();
-        m_transactionManagers[connId]->setDriver(driver);
+        m_transactionManagers[connId]->setDriver(*driverResult);
     }
 
     m_transactionManagers[connId]->begin();

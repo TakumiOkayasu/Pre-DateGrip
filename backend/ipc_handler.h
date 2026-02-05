@@ -16,14 +16,11 @@ class TransactionManager;
 class QueryHistory;
 class ResultCache;
 class AsyncQueryExecutor;
-class SIMDFilter;
-class SettingsManager;
-class SessionManager;
-class GlobalSearch;
-class DataExporter;
-class A5ERParser;
-class SQLFormatter;
 class SshTunnel;
+
+// Contexts
+class SettingsContext;
+class UtilityContext;
 
 /// Dispatches IPC requests from the frontend to appropriate backend operations
 class IPCHandler {
@@ -129,18 +126,17 @@ private:
     [[nodiscard]] std::string saveBookmark(std::string_view params);
     [[nodiscard]] std::string deleteBookmark(std::string_view params);
 
+    // Contexts (new architecture)
+    std::unique_ptr<SettingsContext> m_settingsContext;
+    std::unique_ptr<UtilityContext> m_utilityContext;
+
+    // Database-related members (to be migrated to DatabaseContext)
     std::unique_ptr<ConnectionPool> m_connectionPool;
     std::unique_ptr<SchemaInspector> m_schemaInspector;
     std::unordered_map<std::string, std::unique_ptr<TransactionManager>> m_transactionManagers;
     std::unique_ptr<QueryHistory> m_queryHistory;
     std::unique_ptr<ResultCache> m_resultCache;
     std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;
-    std::unique_ptr<SIMDFilter> m_simdFilter;
-    std::unique_ptr<SettingsManager> m_settingsManager;
-    std::unique_ptr<SessionManager> m_sessionManager;
-    std::unique_ptr<GlobalSearch> m_globalSearch;
-    std::unique_ptr<SQLFormatter> m_sqlFormatter;
-    std::unique_ptr<A5ERParser> m_a5erParser;
 
     std::unordered_map<std::string, std::shared_ptr<SQLServerDriver>> m_activeConnections;
     std::unordered_map<std::string, std::unique_ptr<SshTunnel>> m_sshTunnels;

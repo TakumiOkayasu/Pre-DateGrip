@@ -34,9 +34,8 @@ public:
     DatabaseContext& operator=(DatabaseContext&&) noexcept;
 
     // Connection management
-    [[nodiscard]] std::expected<std::string, std::string> connect(std::string_view params);
+    // Note: connect() and testConnection() are handled by IPCHandler during migration
     void disconnect(std::string_view connectionId);
-    [[nodiscard]] std::expected<bool, std::string> testConnection(std::string_view params);
 
     // Query execution
     [[nodiscard]] std::expected<ResultSet, std::string> execute(std::string_view connectionId, std::string_view sql);
@@ -60,8 +59,6 @@ public:
     [[nodiscard]] std::expected<std::vector<TableInfo>, std::string> getTables(std::string_view connectionId, std::string_view database);
 
     [[nodiscard]] std::expected<std::vector<ColumnInfo>, std::string> getColumns(std::string_view connectionId, std::string_view tableName);
-
-    [[nodiscard]] std::expected<std::string, std::string> getTableMetadata(std::string_view connectionId, std::string_view tableName);
 
     [[nodiscard]] std::expected<std::string, std::string> getTableDDL(std::string_view connectionId, std::string_view tableName);
 

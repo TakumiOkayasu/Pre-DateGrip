@@ -25,6 +25,16 @@ public:
     UtilityContext(UtilityContext&&) noexcept;
     UtilityContext& operator=(UtilityContext&&) noexcept;
 
+    // Direct access to services (for migration)
+    [[nodiscard]] SQLFormatter& sqlFormatter() { return *m_sqlFormatter; }
+    [[nodiscard]] const SQLFormatter& sqlFormatter() const { return *m_sqlFormatter; }
+    [[nodiscard]] A5ERParser& a5erParser() { return *m_a5erParser; }
+    [[nodiscard]] const A5ERParser& a5erParser() const { return *m_a5erParser; }
+    [[nodiscard]] SIMDFilter& simdFilter() { return *m_simdFilter; }
+    [[nodiscard]] const SIMDFilter& simdFilter() const { return *m_simdFilter; }
+    [[nodiscard]] GlobalSearch& globalSearch() { return *m_globalSearch; }
+    [[nodiscard]] const GlobalSearch& globalSearch() const { return *m_globalSearch; }
+
     // SQL formatting
     [[nodiscard]] std::string formatSQL(std::string_view sql);
     [[nodiscard]] std::string uppercaseKeywords(std::string_view sql);

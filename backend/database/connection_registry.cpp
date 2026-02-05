@@ -37,22 +37,21 @@ void ConnectionRegistry::remove(std::string_view id) {
 }
 
 std::expected<ConnectionRegistry::DriverPtr, std::string> ConnectionRegistry::get(std::string_view id) const {
-    std::lock_guard lock(m_mutex);
-    auto idStr = std::string(id);
+    std::shared_lock lock(m_mutex);
 
-    if (auto it = m_connections.find(idStr); it != m_connections.end()) {
+    if (auto it = m_connections.find(std::string(id)); it != m_connections.end()) {
         return it->second;
     }
     return std::unexpected(std::format("Connection '{}' not found", id));
 }
 
 bool ConnectionRegistry::exists(std::string_view id) const {
-    std::lock_guard lock(m_mutex);
+    std::shared_lock lock(m_mutex);
     return m_connections.contains(std::string(id));
 }
 
 size_t ConnectionRegistry::count() const {
-    std::lock_guard lock(m_mutex);
+    std::shared_lock lock(m_mutex);
     return m_connections.size();
 }
 
@@ -62,10 +61,9 @@ void ConnectionRegistry::attachTunnel(std::string_view connectionId, std::unique
 }
 
 SshTunnel* ConnectionRegistry::getTunnel(std::string_view connectionId) const {
-    std::lock_guard lock(m_mutex);
-    auto idStr = std::string(connectionId);
+    std::shared_lock lock(m_mutex);
 
-    if (auto it = m_tunnels.find(idStr); it != m_tunnels.end()) {
+    if (auto it = m_tunnels.find(std::string(connectionId)); it != m_tunnels.end()) {
         return it->second.get();
     }
     return nullptr;
