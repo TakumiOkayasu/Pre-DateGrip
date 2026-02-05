@@ -13,20 +13,30 @@ endif()
 set(LIB_SOURCES
     webview_app.cpp
     ipc_handler.cpp
+    # Database
     database/sqlserver_driver.cpp
     database/connection_pool.cpp
+    database/connection_registry.cpp
     database/result_cache.cpp
     database/async_query_executor.cpp
     database/schema_inspector.cpp
     database/query_history.cpp
     database/transaction_manager.cpp
     database/odbc_driver_detector.cpp
+    # Contexts
+    contexts/database_context.cpp
+    contexts/export_context.cpp
+    contexts/settings_context.cpp
+    contexts/utility_context.cpp
+    # Parsers
     parsers/a5er_parser.cpp
     parsers/sql_formatter.cpp
     parsers/sql_parser.cpp
+    # Exporters
     exporters/csv_exporter.cpp
     exporters/json_exporter.cpp
     exporters/excel_exporter.cpp
+    # Utils
     utils/json_utils.cpp
     utils/simd_filter.cpp
     utils/file_utils.cpp
@@ -46,21 +56,40 @@ endif()
 set(HEADERS
     webview_app.h
     ipc_handler.h
+    # Interfaces
+    interfaces/queryable.h
+    interfaces/connectable.h
+    interfaces/exportable.h
+    interfaces/formattable.h
+    interfaces/searchable.h
+    interfaces/cacheable.h
+    interfaces/storable.h
+    # Database
+    database/driver_interface.h
     database/sqlserver_driver.h
     database/connection_pool.h
+    database/connection_registry.h
     database/result_cache.h
     database/async_query_executor.h
     database/schema_inspector.h
     database/query_history.h
     database/transaction_manager.h
     database/odbc_driver_detector.h
+    # Contexts
+    contexts/database_context.h
+    contexts/export_context.h
+    contexts/settings_context.h
+    contexts/utility_context.h
+    # Parsers
     parsers/a5er_parser.h
     parsers/sql_formatter.h
     parsers/sql_parser.h
+    # Exporters
     exporters/csv_exporter.h
     exporters/json_exporter.h
     exporters/excel_exporter.h
     exporters/data_exporter.h
+    # Utils
     utils/json_utils.h
     utils/simd_filter.h
     utils/file_utils.h
