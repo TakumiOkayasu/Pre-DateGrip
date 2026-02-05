@@ -13,6 +13,7 @@ class IQueryable {
 public:
     virtual ~IQueryable() = default;
 
+    // Non-copyable (stateful resource), but movable for ownership transfer
     IQueryable(const IQueryable&) = delete;
     IQueryable& operator=(const IQueryable&) = delete;
 

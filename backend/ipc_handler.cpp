@@ -1,5 +1,7 @@
 #include "ipc_handler.h"
 
+#include "contexts/settings_context.h"
+#include "contexts/utility_context.h"
 #include "database/async_query_executor.h"
 #include "database/connection_pool.h"
 #include "database/odbc_driver_detector.h"
@@ -204,19 +206,13 @@ struct DatabaseConnectionParams {
 }  // namespace
 
 IPCHandler::IPCHandler()
-    : m_connectionPool(std::make_unique<ConnectionPool>())
+    : m_settingsContext(std::make_unique<SettingsContext>())
+    , m_utilityContext(std::make_unique<UtilityContext>())
+    , m_connectionPool(std::make_unique<ConnectionPool>())
     , m_schemaInspector(std::make_unique<SchemaInspector>())
     , m_queryHistory(std::make_unique<QueryHistory>())
     , m_resultCache(std::make_unique<ResultCache>())
-    , m_asyncExecutor(std::make_unique<AsyncQueryExecutor>())
-    , m_simdFilter(std::make_unique<SIMDFilter>())
-    , m_settingsManager(std::make_unique<SettingsManager>())
-    , m_sessionManager(std::make_unique<SessionManager>())
-    , m_globalSearch(std::make_unique<GlobalSearch>())
-    , m_sqlFormatter(std::make_unique<SQLFormatter>())
-    , m_a5erParser(std::make_unique<A5ERParser>()) {
-    m_settingsManager->load();
-    m_sessionManager->load();
+    , m_asyncExecutor(std::make_unique<AsyncQueryExecutor>()) {
     registerRequestRoutes();
 }
 
@@ -971,9 +967,8 @@ std::string IPCHandler::formatSQLQuery(std::string_view params) {
             return JsonUtils::errorResponse(std::format("SQL too large ({} chars). Maximum size is {} chars.", sqlQuery.size(), MAX_SQL_SIZE));
         }
 
-        // Format SQL with uppercase keywords (default option)
-        SQLFormatter::FormatOptions options;
-        auto finalSQL = m_sqlFormatter->format(sqlQuery, options);
+        // Delegate to UtilityContext
+        auto finalSQL = m_utilityContext->formatSQL(sqlQuery);
 
         return JsonUtils::successResponse(std::format(R"({{"sql":"{}"}})", JsonUtils::escapeString(finalSQL)));
     } catch (const std::exception& e) {
@@ -992,7 +987,8 @@ std::string IPCHandler::uppercaseKeywords(std::string_view params) {
         }
         std::string sqlQuery = std::string(sqlResult.value());
 
-        auto uppercasedSQL = m_sqlFormatter->uppercaseKeywords(sqlQuery);
+        // Delegate to UtilityContext
+        auto uppercasedSQL = m_utilityContext->uppercaseKeywords(sqlQuery);
         return JsonUtils::successResponse(std::format(R"({{"sql":"{}"}})", JsonUtils::escapeString(uppercasedSQL)));
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -1010,7 +1006,7 @@ std::string IPCHandler::parseA5ERFile(std::string_view params) {
         }
         std::string filepath = std::string(filepathResult.value());
 
-        A5ERModel model = m_a5erParser->parse(filepath);
+        A5ERModel model = m_utilityContext->a5erParser().parse(filepath);
 
         // Build tables array
         std::string tablesJson = "[";
@@ -1348,16 +1344,16 @@ std::string IPCHandler::filterResultSet(std::string_view params) {
         // Apply SIMD-optimized filter
         std::vector<size_t> matchingIndices;
         if (filterType == "equals") {
-            matchingIndices = m_simdFilter->filterEquals(queryResult, columnIndex, filterValue);
+            matchingIndices = m_utilityContext->simdFilter().filterEquals(queryResult, columnIndex, filterValue);
         } else if (filterType == "contains") {
-            matchingIndices = m_simdFilter->filterContains(queryResult, columnIndex, filterValue);
+            matchingIndices = m_utilityContext->simdFilter().filterContains(queryResult, columnIndex, filterValue);
         } else if (filterType == "range") {
             std::string minValue = filterValue;
             std::string maxValue;
             if (auto maxVal = doc["filterValueMax"].get_string(); !maxVal.error()) {
                 maxValue = std::string(maxVal.value());
             }
-            matchingIndices = m_simdFilter->filterRange(queryResult, columnIndex, minValue, maxValue);
+            matchingIndices = m_utilityContext->simdFilter().filterRange(queryResult, columnIndex, minValue, maxValue);
         } else {
             return JsonUtils::errorResponse(std::format("Unknown filter type: {}", filterType));
         }
@@ -1399,7 +1395,7 @@ std::string IPCHandler::filterResultSet(std::string_view params) {
 }
 
 std::string IPCHandler::getSettings(std::string_view) {
-    const auto& settings = m_settingsManager->getSettings();
+    const auto& settings = m_settingsContext->settingsManager().getSettings();
 
     std::string json = "{";
 
@@ -1444,7 +1440,7 @@ std::string IPCHandler::updateSettings(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        AppSettings settings = m_settingsManager->getSettings();
+        AppSettings settings = m_settingsContext->settingsManager().getSettings();
 
         // Update general settings
         if (auto general = doc["general"]; !general.error()) {
@@ -1496,8 +1492,8 @@ std::string IPCHandler::updateSettings(std::string_view params) {
                 settings.window.isMaximized = val.value();
         }
 
-        m_settingsManager->updateSettings(settings);
-        m_settingsManager->save();
+        m_settingsContext->settingsManager().updateSettings(settings);
+        m_settingsContext->settingsManager().save();
 
         return JsonUtils::successResponse(R"({"saved":true})");
     } catch (const std::exception& e) {
@@ -1506,7 +1502,7 @@ std::string IPCHandler::updateSettings(std::string_view params) {
 }
 
 std::string IPCHandler::getConnectionProfiles(std::string_view) {
-    const auto& profiles = m_settingsManager->getConnectionProfiles();
+    const auto& profiles = m_settingsContext->settingsManager().getConnectionProfiles();
 
     std::string json = R"({"profiles":[)";
     for (size_t i = 0; i < profiles.size(); ++i) {
@@ -1590,10 +1586,10 @@ std::string IPCHandler::saveConnectionProfile(std::string_view params) {
         }
 
         // Check if profile exists
-        if (m_settingsManager->getConnectionProfile(profile.id).has_value()) {
-            m_settingsManager->updateConnectionProfile(profile);
+        if (m_settingsContext->settingsManager().getConnectionProfile(profile.id).has_value()) {
+            m_settingsContext->settingsManager().updateConnectionProfile(profile);
         } else {
-            m_settingsManager->addConnectionProfile(profile);
+            m_settingsContext->settingsManager().addConnectionProfile(profile);
         }
 
         // Handle password encryption
@@ -1601,12 +1597,12 @@ std::string IPCHandler::saveConnectionProfile(std::string_view params) {
             if (auto val = doc["password"].get_string(); !val.error()) {
                 auto password = std::string(val.value());
                 if (!password.empty()) {
-                    (void)m_settingsManager->setProfilePassword(profile.id, password);
+                    (void)m_settingsContext->settingsManager().setProfilePassword(profile.id, password);
                 }
             }
         } else {
             // Clear saved password if savePassword is false
-            (void)m_settingsManager->setProfilePassword(profile.id, "");
+            (void)m_settingsContext->settingsManager().setProfilePassword(profile.id, "");
         }
 
         // Handle SSH authentication encryption
@@ -1616,24 +1612,24 @@ std::string IPCHandler::saveConnectionProfile(std::string_view params) {
                 if (auto val = ssh["password"].get_string(); !val.error()) {
                     auto sshPassword = std::string(val.value());
                     if (!sshPassword.empty()) {
-                        (void)m_settingsManager->setSshPassword(profile.id, sshPassword);
+                        (void)m_settingsContext->settingsManager().setSshPassword(profile.id, sshPassword);
                     }
                 }
                 // SSH key passphrase
                 if (auto val = ssh["keyPassphrase"].get_string(); !val.error()) {
                     auto keyPassphrase = std::string(val.value());
                     if (!keyPassphrase.empty()) {
-                        (void)m_settingsManager->setSshKeyPassphrase(profile.id, keyPassphrase);
+                        (void)m_settingsContext->settingsManager().setSshKeyPassphrase(profile.id, keyPassphrase);
                     }
                 }
             } else {
                 // Clear saved SSH credentials
-                (void)m_settingsManager->setSshPassword(profile.id, "");
-                (void)m_settingsManager->setSshKeyPassphrase(profile.id, "");
+                (void)m_settingsContext->settingsManager().setSshPassword(profile.id, "");
+                (void)m_settingsContext->settingsManager().setSshKeyPassphrase(profile.id, "");
             }
         }
 
-        m_settingsManager->save();
+        m_settingsContext->settingsManager().save();
 
         return JsonUtils::successResponse(std::format(R"({{"id":"{}"}})", JsonUtils::escapeString(profile.id)));
     } catch (const std::exception& e) {
@@ -1651,8 +1647,8 @@ std::string IPCHandler::deleteConnectionProfile(std::string_view params) {
             return JsonUtils::errorResponse("Missing required field: id");
         }
         auto profileId = std::string(profileIdResult.value());
-        m_settingsManager->removeConnectionProfile(profileId);
-        m_settingsManager->save();
+        m_settingsContext->settingsManager().removeConnectionProfile(profileId);
+        m_settingsContext->settingsManager().save();
 
         return JsonUtils::successResponse(R"({"deleted":true})");
     } catch (const std::exception& e) {
@@ -1671,7 +1667,7 @@ std::string IPCHandler::getProfilePassword(std::string_view params) {
         }
         auto profileId = std::string(idResult.value());
 
-        auto passwordResult = m_settingsManager->getProfilePassword(profileId);
+        auto passwordResult = m_settingsContext->settingsManager().getProfilePassword(profileId);
         if (!passwordResult) {
             return JsonUtils::errorResponse(passwordResult.error());
         }
@@ -1693,7 +1689,7 @@ std::string IPCHandler::getSshPassword(std::string_view params) {
         }
         auto profileId = std::string(idResult.value());
 
-        auto passwordResult = m_settingsManager->getSshPassword(profileId);
+        auto passwordResult = m_settingsContext->settingsManager().getSshPassword(profileId);
         if (!passwordResult) {
             return JsonUtils::errorResponse(passwordResult.error());
         }
@@ -1715,7 +1711,7 @@ std::string IPCHandler::getSshKeyPassphrase(std::string_view params) {
         }
         auto profileId = std::string(idResult.value());
 
-        auto passphraseResult = m_settingsManager->getSshKeyPassphrase(profileId);
+        auto passphraseResult = m_settingsContext->settingsManager().getSshKeyPassphrase(profileId);
         if (!passphraseResult) {
             return JsonUtils::errorResponse(passphraseResult.error());
         }
@@ -1727,7 +1723,7 @@ std::string IPCHandler::getSshKeyPassphrase(std::string_view params) {
 }
 
 std::string IPCHandler::getSessionState(std::string_view) {
-    const auto& state = m_sessionManager->getState();
+    const auto& state = m_settingsContext->sessionManager().getState();
 
     std::string json = "{";
     json += std::format("\"activeConnectionId\":\"{}\",", JsonUtils::escapeString(state.activeConnectionId));
@@ -1777,7 +1773,7 @@ std::string IPCHandler::saveSessionState(std::string_view params) {
         simdjson::dom::parser parser;
         simdjson::dom::element doc = parser.parse(params);
 
-        SessionState state = m_sessionManager->getState();
+        SessionState state = m_settingsContext->sessionManager().getState();
 
         if (auto val = doc["activeConnectionId"].get_string(); !val.error())
             state.activeConnectionId = std::string(val.value());
@@ -1831,8 +1827,8 @@ std::string IPCHandler::saveSessionState(std::string_view params) {
             }
         }
 
-        m_sessionManager->updateState(state);
-        m_sessionManager->save();
+        m_settingsContext->sessionManager().updateState(state);
+        m_settingsContext->sessionManager().save();
 
         return JsonUtils::successResponse(R"({"saved":true})");
     } catch (const std::exception& e) {
@@ -1874,7 +1870,7 @@ std::string IPCHandler::searchObjects(std::string_view params) {
         if (auto val = doc["maxResults"].get_int64(); !val.error())
             options.maxResults = static_cast<int>(val.value());
 
-        auto results = m_globalSearch->searchObjects(connection->second.get(), pattern, options);
+        auto results = m_utilityContext->globalSearch().searchObjects(connection->second.get(), pattern, options);
 
         std::string json = "[";
         for (size_t i = 0; i < results.size(); ++i) {
@@ -1917,7 +1913,7 @@ std::string IPCHandler::quickSearch(std::string_view params) {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto results = m_globalSearch->quickSearch(connection->second.get(), prefix, limit);
+        auto results = m_utilityContext->globalSearch().quickSearch(connection->second.get(), prefix, limit);
 
         std::string json = "[";
         for (size_t i = 0; i < results.size(); ++i) {

@@ -22,6 +22,12 @@ public:
     SettingsContext(SettingsContext&&) noexcept;
     SettingsContext& operator=(SettingsContext&&) noexcept;
 
+    // Direct access to managers (for migration)
+    [[nodiscard]] SettingsManager& settingsManager() { return *m_settingsManager; }
+    [[nodiscard]] const SettingsManager& settingsManager() const { return *m_settingsManager; }
+    [[nodiscard]] SessionManager& sessionManager() { return *m_sessionManager; }
+    [[nodiscard]] const SessionManager& sessionManager() const { return *m_sessionManager; }
+
     // Application settings
     [[nodiscard]] std::string getSettings();
     void updateSettings(std::string_view settingsJson);
