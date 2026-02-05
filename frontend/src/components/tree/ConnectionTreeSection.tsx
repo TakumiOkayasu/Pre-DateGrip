@@ -308,6 +308,15 @@ export function ConnectionTreeSection({
             });
           },
         });
+
+        items.push({ label: '', action: () => {}, divider: true });
+
+        items.push({
+          label: '接続を閉じる',
+          action: async () => {
+            await useConnectionStore.getState().removeConnection(connection.id);
+          },
+        });
       }
 
       if (node.type === 'column') {
@@ -340,6 +349,7 @@ export function ConnectionTreeSection({
           expandedNodes={expandedNodes}
           loadingNodes={loadingNodes}
           selectedNodeId={selectedNodeId}
+          environment={connection.environment}
           onToggle={toggleNode}
           onTableOpen={handleTableOpen}
           onContextMenu={handleContextMenu}

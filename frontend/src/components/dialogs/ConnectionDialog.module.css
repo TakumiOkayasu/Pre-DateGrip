@@ -429,3 +429,114 @@
 .browseButton:hover {
   background: var(--bg-hover, #3c3f41);
 }
+
+/* Environment Radio Group */
+.environmentRadioGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.environmentRadio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  padding: 12px 8px;
+  border: 2px solid var(--border-color, #3c3f41);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.environmentRadio input[type="radio"] {
+  display: none;
+}
+
+.environmentRadio:hover {
+  background: var(--bg-hover, #3c3f41);
+}
+
+.environmentRadio.selected {
+  border-color: var(--accent-color, #4a88c7);
+}
+
+.environmentLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #bbbbbb);
+}
+
+.environmentDescription {
+  font-size: 10px;
+  color: var(--text-secondary, #808080);
+  text-align: center;
+}
+
+/* Environment-specific colors */
+.environmentRadio.env-development.selected {
+  border-color: #4caf50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.environmentRadio.env-development.selected .environmentLabel {
+  color: #81c784;
+}
+
+.environmentRadio.env-staging.selected {
+  border-color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.environmentRadio.env-staging.selected .environmentLabel {
+  color: #ffb74d;
+}
+
+.environmentRadio.env-production.selected {
+  border-color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.environmentRadio.env-production.selected .environmentLabel {
+  color: #e57373;
+}
+
+/* Database Type Radio Group */
+.dbTypeRadioGroup {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dbTypeRadio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color, #3c3f41);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.dbTypeRadio input[type="radio"] {
+  display: none;
+}
+
+.dbTypeRadio:hover {
+  background: var(--bg-hover, #3c3f41);
+}
+
+.dbTypeRadio.selected {
+  border-color: var(--accent-color, #4a88c7);
+  background: rgba(74, 136, 199, 0.1);
+}
+
+.dbTypeLabel {
+  font-size: 13px;
+  color: var(--text-primary, #bbbbbb);
+}

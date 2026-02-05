@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { DatabaseObject } from '../../types';
+import type { DatabaseObject, EnvironmentType } from '../../types';
 import styles from './TreeNode.module.css';
 
 interface TreeNodeProps {
@@ -8,6 +8,7 @@ interface TreeNodeProps {
   expandedNodes: Set<string>;
   loadingNodes?: Set<string>;
   selectedNodeId?: string | null;
+  environment?: EnvironmentType;
   onToggle: (id: string, node: DatabaseObject) => void;
   onTableOpen?: (nodeId: string, tableName: string, tableType: 'table' | 'view') => void;
   onContextMenu?: (e: React.MouseEvent, node: DatabaseObject) => void;
@@ -122,6 +123,7 @@ export const TreeNode = memo(function TreeNode({
   expandedNodes,
   loadingNodes,
   selectedNodeId,
+  environment,
   onToggle,
   onTableOpen,
   onContextMenu,
@@ -154,10 +156,26 @@ export const TreeNode = memo(function TreeNode({
     onContextMenu?.(e, node);
   };
 
+  // 環境別のクラスを付与（データベースノードのみ）
+  const getEnvironmentClass = (): string => {
+    if (node.type !== 'database' || !environment) return '';
+    switch (environment) {
+      case 'development':
+        return styles.envDevelopment;
+      case 'staging':
+        return styles.envStaging;
+      case 'production':
+        return styles.envProduction;
+      default:
+        return '';
+    }
+  };
+
   const nodeClasses = [
     styles.node,
     isLoading ? styles.loading : '',
     isSelected ? styles.selected : '',
+    getEnvironmentClass(),
   ]
     .filter(Boolean)
     .join(' ');
@@ -196,6 +214,7 @@ export const TreeNode = memo(function TreeNode({
               expandedNodes={expandedNodes}
               loadingNodes={loadingNodes}
               selectedNodeId={selectedNodeId}
+              environment={environment}
               onToggle={onToggle}
               onTableOpen={onTableOpen}
               onContextMenu={onContextMenu}

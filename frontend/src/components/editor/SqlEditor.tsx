@@ -1,10 +1,13 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import { useCallback, useEffect, useRef } from 'react';
 import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueryStore } from '../../store/queryStore';
+import { useSchemaStore } from '../../store/schemaStore';
 import { log } from '../../utils/logger';
 import { getStatementAtCursor } from '../../utils/sqlParser';
+import { createCompletionProvider } from './completionProvider';
 import styles from './SqlEditor.module.css';
 
 export function SqlEditor() {
@@ -19,6 +22,8 @@ export function SqlEditor() {
   } = useQueryStore();
   const { activeConnectionId } = useConnectionStore();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  const completionDisposableRef = useRef<Monaco.IDisposable | null>(null);
   const isFormattingRef = useRef(false);
 
   const activeQuery = queries.find((q) => q.id === activeQueryId);
@@ -198,16 +203,56 @@ export function SqlEditor() {
     loadFromFile,
   ]);
 
-  const handleEditorDidMount: OnMount = useCallback((editor) => {
-    // Store editor reference
-    editorRef.current = editor;
+  const handleEditorDidMount: OnMount = useCallback(
+    (editor, monaco) => {
+      // Store editor reference
+      editorRef.current = editor;
+      monacoRef.current = monaco;
 
-    // Auto-focus editor when mounted
-    editor.focus();
+      // Auto-focus editor when mounted
+      editor.focus();
 
-    log.debug('[SqlEditor] Editor mounted, using global keyboard shortcuts');
-    // Note: We no longer use Monaco's addCommand() to avoid potential blocking issues
-    // All keyboard shortcuts are handled via global window.addEventListener
+      // Register completion provider for SQL
+      if (completionDisposableRef.current) {
+        completionDisposableRef.current.dispose();
+      }
+      completionDisposableRef.current = monaco.languages.registerCompletionItemProvider(
+        'sql',
+        createCompletionProvider(activeConnectionId)
+      );
+
+      // Preload schema if connected
+      if (activeConnectionId) {
+        useSchemaStore.getState().loadTables(activeConnectionId);
+      }
+
+      log.debug('[SqlEditor] Editor mounted with completion provider');
+    },
+    [activeConnectionId]
+  );
+
+  // 接続IDが変わったらcompletionProviderを再登録
+  useEffect(() => {
+    if (monacoRef.current && activeConnectionId) {
+      if (completionDisposableRef.current) {
+        completionDisposableRef.current.dispose();
+      }
+      completionDisposableRef.current = monacoRef.current.languages.registerCompletionItemProvider(
+        'sql',
+        createCompletionProvider(activeConnectionId)
+      );
+      useSchemaStore.getState().loadTables(activeConnectionId);
+      log.debug(`[SqlEditor] Completion provider updated for connection: ${activeConnectionId}`);
+    }
+  }, [activeConnectionId]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (completionDisposableRef.current) {
+        completionDisposableRef.current.dispose();
+      }
+    };
   }, []);
 
   if (!activeQuery) {

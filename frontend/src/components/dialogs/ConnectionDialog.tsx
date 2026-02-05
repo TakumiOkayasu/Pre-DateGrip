@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { bridge } from '../../api/bridge';
-import type { SshAuthType } from '../../types';
+import type { DatabaseType, EnvironmentType, SshAuthType } from '../../types';
 import styles from './ConnectionDialog.module.css';
 import { useConnectionProfile } from './hooks/useConnectionProfile';
 import { ConnectionFormSection } from './sections/ConnectionFormSection';
+import { DatabaseTypeSection } from './sections/DatabaseTypeSection';
 import { EnvironmentSection } from './sections/EnvironmentSection';
 import { SshTunnelSection } from './sections/SshTunnelSection';
 
@@ -34,6 +35,8 @@ export interface ConnectionConfig {
   useWindowsAuth: boolean;
   isProduction: boolean;
   isReadOnly: boolean;
+  environment: EnvironmentType;
+  dbType: DatabaseType;
   ssh: SshConfig;
 }
 
@@ -84,6 +87,7 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
         username: config.username,
         password: config.password,
         useWindowsAuth: config.useWindowsAuth,
+        dbType: config.dbType,
         ssh: config.ssh.enabled
           ? {
               enabled: true,
@@ -173,6 +177,8 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
               {mode === 'new' ? '新規接続' : '接続を編集'}
             </div>
 
+            <DatabaseTypeSection dbType={config.dbType} onChange={handleChange} />
+
             <ConnectionFormSection
               config={config}
               savePassword={savePassword}
@@ -183,7 +189,7 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
             <SshTunnelSection ssh={config.ssh} onChange={handleSshChange} />
 
             <EnvironmentSection
-              isProduction={config.isProduction}
+              environment={config.environment}
               isReadOnly={config.isReadOnly}
               onChange={handleChange}
             />

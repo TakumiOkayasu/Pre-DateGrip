@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bridge } from '../../../api/bridge';
-import type { SavedConnectionProfile, SshAuthType } from '../../../types';
+import type {
+  DatabaseType,
+  EnvironmentType,
+  SavedConnectionProfile,
+  SshAuthType,
+} from '../../../types';
 import type { ConnectionConfig, SshConfig } from '../ConnectionDialog';
 
 export type ProfileMode = 'new' | 'edit';
@@ -26,6 +31,8 @@ const DEFAULT_CONFIG: ConnectionConfig = {
   useWindowsAuth: true,
   isProduction: false,
   isReadOnly: false,
+  environment: 'development',
+  dbType: 'sqlserver',
   ssh: { ...DEFAULT_SSH_CONFIG },
 };
 
@@ -79,6 +86,12 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
 
     if (operationCounterRef.current !== operationId) return;
 
+    // isProductionからenvironmentを推定（後方互換性）
+    const inferEnvironment = (p: SavedConnectionProfile): EnvironmentType => {
+      if (p.environment) return p.environment;
+      return p.isProduction ? 'production' : 'development';
+    };
+
     setConfig({
       name: profile.name,
       server: profile.server,
@@ -89,6 +102,8 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
       useWindowsAuth: profile.useWindowsAuth,
       isProduction: profile.isProduction,
       isReadOnly: profile.isReadOnly,
+      environment: inferEnvironment(profile),
+      dbType: profile.dbType ?? 'sqlserver',
       ssh: profile.ssh
         ? {
             enabled: profile.ssh.enabled,
@@ -140,6 +155,9 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
           savePassword: p.savePassword ?? false,
           isProduction: p.isProduction ?? false,
           isReadOnly: p.isReadOnly ?? false,
+          environment:
+            (p.environment as EnvironmentType) ?? (p.isProduction ? 'production' : 'development'),
+          dbType: (p.dbType as DatabaseType) ?? 'sqlserver',
           ssh: p.ssh
             ? {
                 enabled: p.ssh.enabled ?? false,
@@ -189,6 +207,9 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
               useWindowsAuth: profile.useWindowsAuth,
               isProduction: profile.isProduction,
               isReadOnly: profile.isReadOnly,
+              environment:
+                profile.environment ?? (profile.isProduction ? 'production' : 'development'),
+              dbType: profile.dbType ?? 'sqlserver',
               ssh: profile.ssh
                 ? {
                     enabled: profile.ssh.enabled,
@@ -243,6 +264,8 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
         password: savePassword ? config.password : undefined,
         isProduction: config.isProduction,
         isReadOnly: config.isReadOnly,
+        environment: config.environment,
+        dbType: config.dbType,
         ssh: config.ssh.enabled
           ? {
               enabled: true,
@@ -270,6 +293,8 @@ export function useConnectionProfile(isOpen: boolean): UseConnectionProfileResul
         savePassword,
         isProduction: config.isProduction,
         isReadOnly: config.isReadOnly,
+        environment: config.environment,
+        dbType: config.dbType,
         ssh: config.ssh.enabled
           ? {
               enabled: true,
