@@ -13,8 +13,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import {
   useIsActiveDataView,
+  useIsQueryExecuting,
   useQueryActions,
   useQueryById,
+  useQueryError,
   useQueryResult,
   useQueryStore,
 } from '../../store/queryStore';
@@ -38,14 +40,16 @@ interface ResultGridProps {
 function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps = {}) {
   // Targeted store subscriptions (primitives - cheap)
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
-  const isExecuting = useQueryStore((state) => state.isExecuting);
-  const error = useQueryStore((state) => state.error);
   const activeConnectionId = useConnectionStore((state) => state.activeConnectionId);
 
   const isActiveDataView = useIsActiveDataView();
   const targetQueryId = excludeDataView && isActiveDataView ? null : (queryId ?? activeQueryId);
   const currentQuery = useQueryById(targetQueryId);
   const queryResult = useQueryResult(targetQueryId);
+
+  // Per-query state (each tab is an independent instance)
+  const isExecuting = useIsQueryExecuting(targetQueryId);
+  const error = useQueryError(targetQueryId);
 
   // Session store with targeted selectors (not entire store)
   const showLogicalNamesInGrid = useSessionStore((state) => state.showLogicalNamesInGrid);

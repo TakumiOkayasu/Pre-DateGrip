@@ -27,8 +27,9 @@ describe('queryStore', () => {
       queries: [],
       activeQueryId: null,
       results: {},
+      executingQueryIds: new Set<string>(),
+      errors: {},
       isExecuting: false,
-      error: null,
     });
     useHistoryStore.setState({ history: [], searchKeyword: '' });
     vi.clearAllMocks();
@@ -166,7 +167,7 @@ describe('queryStore', () => {
       expect(history[0].errorMessage).toBe('Table not found');
     });
 
-    it('should set error state on failure', async () => {
+    it('should set per-query error state on failure', async () => {
       const { addQuery, updateQuery, executeQuery } = useQueryStore.getState();
 
       addQuery('conn_1');
@@ -178,9 +179,10 @@ describe('queryStore', () => {
 
       await executeQuery(queryId, 'conn_1');
 
-      const { error, isExecuting } = useQueryStore.getState();
-      expect(error).toBe('Syntax error');
+      const { errors, isExecuting, executingQueryIds } = useQueryStore.getState();
+      expect(errors[queryId]).toBe('Syntax error');
       expect(isExecuting).toBe(false);
+      expect(executingQueryIds.has(queryId)).toBe(false);
     });
   });
 
@@ -299,9 +301,9 @@ describe('queryStore', () => {
       expect(history[0].success).toBe(false);
       expect(history[0].errorMessage).toBe('Syntax error');
 
-      // Verify error state
-      const { error, isExecuting } = useQueryStore.getState();
-      expect(error).toBe('Syntax error');
+      // Verify per-query error state
+      const { errors, isExecuting } = useQueryStore.getState();
+      expect(errors[queryId]).toBe('Syntax error');
       expect(isExecuting).toBe(false);
     });
   });
@@ -324,13 +326,48 @@ describe('queryStore', () => {
   });
 
   describe('clearError', () => {
-    it('should clear error state', () => {
-      useQueryStore.setState({ error: 'Some error' });
+    it('should clear specific query error', () => {
+      useQueryStore.setState({ errors: { 'q-1': 'Some error', 'q-2': 'Other error' } });
+
+      const { clearError } = useQueryStore.getState();
+      clearError('q-1');
+
+      const { errors } = useQueryStore.getState();
+      expect(errors['q-1']).toBeNull();
+      expect(errors['q-2']).toBe('Other error');
+    });
+
+    it('should clear all errors when no id specified', () => {
+      useQueryStore.setState({ errors: { 'q-1': 'Error 1', 'q-2': 'Error 2' } });
 
       const { clearError } = useQueryStore.getState();
       clearError();
 
-      expect(useQueryStore.getState().error).toBeNull();
+      expect(useQueryStore.getState().errors).toEqual({});
+    });
+  });
+
+  describe('error isolation between tabs', () => {
+    it('should not leak error from one query tab to another', async () => {
+      const { addQuery, updateQuery, executeQuery } = useQueryStore.getState();
+
+      // Create two tabs
+      addQuery('conn_1');
+      const tab1Id = useQueryStore.getState().queries[0].id;
+      addQuery('conn_1');
+      const tab2Id = useQueryStore.getState().queries[1].id;
+
+      updateQuery(tab1Id, 'INVALID SQL');
+      updateQuery(tab2Id, 'SELECT 1');
+
+      // Fail tab1
+      mockedBridge.executeAsyncQuery.mockRejectedValue(new Error('Syntax error'));
+      await executeQuery(tab1Id, 'conn_1');
+
+      // Tab1 has error, tab2 does not
+      const { errors } = useQueryStore.getState();
+      expect(errors[tab1Id]).toBe('Syntax error');
+      expect(errors[tab2Id] ?? null).toBeNull();
     });
   });
 });
