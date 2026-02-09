@@ -149,6 +149,12 @@ public:
         }
         log<LogLevel::INFO>("[SSH] Authentication successful");
 
+        // Enable SSH keepalive to prevent server-side idle timeout
+        // Many SSH servers have ClientAliveInterval (e.g. 15-60s) that drops
+        // connections without keepalive responses, causing ODBC tunnel breakage
+        libssh2_keepalive_config(m_session, 1, 15);
+        log<LogLevel::DEBUG>("[SSH] Keepalive configured: interval=15s");
+
         // Store remote target info
         m_remoteHost = config.remoteHost;
         m_remotePort = config.remotePort;
@@ -216,20 +222,23 @@ public:
             m_listenerSocket = INVALID_SOCK;
         }
 
-        // Close client socket if connected
+        // Signal client socket shutdown to unblock recv() in proxyData(),
+        // but do NOT closesocket() here — the proxy thread owns the client
+        // socket lifetime via its local `client` variable. Closing here
+        // causes double-close when proxyLoop() also calls closeSocket(client).
         if (m_clientSocket != INVALID_SOCK) {
-            closeSocket(m_clientSocket);
-            m_clientSocket = INVALID_SOCK;
+            shutdown(m_clientSocket, SD_BOTH);
         }
 
-        // Wait for proxy thread
+        // Wait for proxy thread — it will clean up channel and client socket
         if (m_proxyThread.joinable()) {
             log<LogLevel::DEBUG>("[SSH] Waiting for proxy thread to finish...");
             m_proxyThread.join();
         }
 
-        // Clean up SSH channel
+        // Channel should already be cleaned up by proxyLoop(), but guard
         if (m_channel) {
+            libssh2_session_set_blocking(m_session, 1);
             libssh2_channel_close(m_channel);
             libssh2_channel_free(m_channel);
             m_channel = nullptr;
@@ -237,6 +246,7 @@ public:
 
         // Clean up SSH session
         if (m_session) {
+            libssh2_session_set_blocking(m_session, 1);
             libssh2_session_disconnect(m_session, "Disconnecting");
             libssh2_session_free(m_session);
             m_session = nullptr;
@@ -330,11 +340,15 @@ private:
             log<LogLevel::INFO>("[SSH] Data proxy ended");
             log_flush();
 
-            // Cleanup
+            // Cleanup — set blocking mode so channel_close completes fully
+            // instead of returning EAGAIN (which would leave channel half-closed
+            // and cause heap corruption on channel_free)
             if (m_channel) {
+                libssh2_session_set_blocking(m_session, 1);
                 libssh2_channel_close(m_channel);
                 libssh2_channel_free(m_channel);
                 m_channel = nullptr;
+                libssh2_session_set_blocking(m_session, 0);
             }
 
             closeSocket(client);
@@ -449,8 +463,10 @@ private:
                 return;  // Error
             }
 
-            // Avoid busy loop
+            // Send SSH keepalive when idle to prevent server-side timeout
             if (!activity) {
+                int secondsToNext = 0;
+                libssh2_keepalive_send(m_session, &secondsToNext);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
