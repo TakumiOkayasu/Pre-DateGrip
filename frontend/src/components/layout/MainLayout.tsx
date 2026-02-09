@@ -262,10 +262,10 @@ export function MainLayout() {
   }, []);
 
   const handleFormat = useCallback(() => {
-    if (activeQueryId) {
+    if (activeQueryId && !isDataView) {
       formatQuery(activeQueryId);
     }
-  }, [activeQueryId, formatQuery]);
+  }, [activeQueryId, isDataView, formatQuery]);
 
   const handleOpenSearch = useCallback(() => {
     setIsSearchDialogOpen(true);
@@ -447,7 +447,7 @@ export function MainLayout() {
           <button
             className={styles.iconButton}
             onClick={handleFormat}
-            disabled={!activeQuery?.content}
+            disabled={!activeQuery?.content || isDataView}
             title="SQLフォーマット (Ctrl+Shift+F)"
           >
             {Icons.format}

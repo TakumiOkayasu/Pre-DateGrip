@@ -9,8 +9,12 @@ export interface QueryState {
   queries: Query[];
   activeQueryId: string | null;
   results: Record<string, QueryResult>;
+  /** Per-query executing state (each tab is an independent instance) */
+  executingQueryIds: Set<string>;
+  /** Per-query error state (each tab is an independent instance) */
+  errors: Record<string, string | null>;
+  /** @deprecated Use executingQueryIds instead. Kept for toolbar compatibility. */
   isExecuting: boolean;
-  error: string | null;
 
   addQuery: (connectionId?: string | null) => void;
   removeQuery: (id: string) => void;
@@ -21,7 +25,7 @@ export interface QueryState {
   executeSelectedText: (id: string, connectionId: string, selectedText: string) => Promise<void>;
   cancelQuery: (connectionId: string) => Promise<void>;
   formatQuery: (id: string) => Promise<void>;
-  clearError: () => void;
+  clearError: (id?: string) => void;
   openTableData: (connectionId: string, tableName: string, whereClause?: string) => Promise<void>;
   applyWhereFilter: (id: string, connectionId: string, whereClause: string) => Promise<void>;
   refreshDataView: (id: string, connectionId: string) => Promise<void>;
@@ -80,12 +84,67 @@ async function executeAsyncWithPolling(
   }
 }
 
+// Fetch table data with column comments (DRY: used by openTableData, applyWhereFilter, refreshDataView)
+async function fetchTableWithComments(
+  connectionId: string,
+  tableName: string,
+  sql: string
+): Promise<ResultSet> {
+  const [columnDefinitions, result] = await Promise.all([
+    bridge.getColumns(connectionId, tableName),
+    executeAsyncWithPolling(connectionId, sql),
+  ]);
+
+  const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
+
+  return {
+    columns: result.columns.map((c) => ({
+      name: c.name,
+      type: c.type,
+      size: 0,
+      nullable: true,
+      isPrimaryKey: false,
+      comment: commentMap.get(c.name) || undefined,
+    })),
+    rows: result.rows,
+    affectedRows: result.affectedRows,
+    executionTimeMs: result.executionTimeMs,
+  };
+}
+
+// Per-query state transition helpers (DRY: used by all async operations)
+function startExecution(state: QueryState, id: string): Partial<QueryState> {
+  const newExecuting = new Set(state.executingQueryIds).add(id);
+  return {
+    executingQueryIds: newExecuting,
+    errors: { ...state.errors, [id]: null },
+    isExecuting: true,
+  };
+}
+
+function endExecution(state: QueryState, id: string): Partial<QueryState> {
+  const newExecuting = new Set(state.executingQueryIds);
+  newExecuting.delete(id);
+  return {
+    executingQueryIds: newExecuting,
+    isExecuting: newExecuting.size > 0,
+  };
+}
+
+function failExecution(state: QueryState, id: string, errorMessage: string): Partial<QueryState> {
+  return {
+    ...endExecution(state, id),
+    errors: { ...state.errors, [id]: errorMessage },
+  };
+}
+
 export const useQueryStore = create<QueryState>((set, get) => ({
   queries: [],
   activeQueryId: null,
   results: {},
+  executingQueryIds: new Set<string>(),
+  errors: {},
   isExecuting: false,
-  error: null,
 
   addQuery: (connectionId = null) => {
     const id = `query-${++queryCounter}`;
@@ -104,12 +163,19 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   },
 
   removeQuery: (id) => {
-    const { queries, activeQueryId, results } = get();
+    const { queries, activeQueryId, results, errors, executingQueryIds } = get();
     const index = queries.findIndex((q) => q.id === id);
     const newQueries = queries.filter((q) => q.id !== id);
 
     // Update results (remove the entry for the deleted query)
     const { [id]: _, ...newResults } = results;
+
+    // Clean up per-query error
+    const { [id]: _err, ...newErrors } = errors;
+
+    // Clean up per-query executing state
+    const newExecuting = new Set(executingQueryIds);
+    newExecuting.delete(id);
 
     // Determine new active query
     let newActiveId: string | null = null;
@@ -124,6 +190,9 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       queries: newQueries,
       activeQueryId: newActiveId,
       results: newResults,
+      errors: newErrors,
+      executingQueryIds: newExecuting,
+      isExecuting: newExecuting.size > 0,
     });
   },
 
@@ -147,74 +216,46 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const query = get().queries.find((q) => q.id === id);
     if (!query || !query.content.trim()) return;
 
-    set({ isExecuting: true, error: null });
+    set((state) => startExecution(state, id));
 
     try {
-      // Start async query execution
-      const { queryId } = await bridge.executeAsyncQuery(connectionId, query.content);
+      const result = await executeAsyncWithPolling(connectionId, query.content);
 
-      // Poll for results
-      const pollInterval = 100; // Poll every 100ms
-      const maxPollTime = DEFAULT_QUERY_TIMEOUT_MS;
-      const startTime = Date.now();
-
-      while (true) {
-        // Check timeout
-        if (Date.now() - startTime > maxPollTime) {
-          throw new Error('Query execution timed out after 5 minutes');
-        }
-
-        const result = await bridge.getAsyncQueryResult(queryId);
-
-        if (result.status === 'completed') {
-          // Query completed successfully
-          if (!result.columns || !result.rows) {
-            throw new Error('Invalid query result: missing columns or rows');
-          }
-
-          const queryResult: QueryResult = {
-            columns: result.columns.map((c) => ({
-              name: c.name,
-              type: c.type,
-              size: 0,
-              nullable: true,
-              isPrimaryKey: false,
-              comment: c.comment,
-            })),
-            rows: result.rows,
-            affectedRows: result.affectedRows ?? 0,
-            executionTimeMs: result.executionTimeMs ?? 0,
-          };
-
-          set((state) => ({
-            results: { ...state.results, [id]: queryResult },
-            isExecuting: false,
-          }));
-
-          // Add to history on success
-          useHistoryStore.getState().addHistory({
-            sql: query.content,
-            connectionId,
-            timestamp: new Date(),
-            executionTimeMs: result.executionTimeMs ?? 0,
-            affectedRows: result.affectedRows ?? 0,
-            success: true,
-            isFavorite: false,
-          });
-          break;
-        } else if (result.status === 'failed') {
-          throw new Error(result.error || 'Query execution failed');
-        } else if (result.status === 'cancelled') {
-          throw new Error('Query was cancelled');
-        }
-
-        // Status is 'pending' or 'running' - wait before polling again
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (!result.columns || !result.rows) {
+        throw new Error('Invalid query result: missing columns or rows');
       }
+
+      const queryResult: QueryResult = {
+        columns: result.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          size: 0,
+          nullable: true,
+          isPrimaryKey: false,
+          comment: c.comment,
+        })),
+        rows: result.rows,
+        affectedRows: result.affectedRows,
+        executionTimeMs: result.executionTimeMs,
+      };
+
+      set((state) => ({
+        ...endExecution(state, id),
+        results: { ...state.results, [id]: queryResult },
+      }));
+
+      useHistoryStore.getState().addHistory({
+        sql: query.content,
+        connectionId,
+        timestamp: new Date(),
+        executionTimeMs: result.executionTimeMs,
+        affectedRows: result.affectedRows,
+        success: true,
+        isFavorite: false,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Query execution failed';
 
-      // Add to history on failure
       useHistoryStore.getState().addHistory({
         sql: query.content,
         connectionId,
@@ -226,17 +267,14 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         isFavorite: false,
       });
 
-      set({
-        isExecuting: false,
-        error: errorMessage,
-      });
+      set((state) => failExecution(state, id, errorMessage));
     }
   },
 
   executeSelectedText: async (id, connectionId, selectedText) => {
     if (!selectedText.trim()) return;
 
-    set({ isExecuting: true, error: null });
+    set((state) => startExecution(state, id));
 
     try {
       // Start async query execution
@@ -316,11 +354,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
           }
 
           set((state) => ({
+            ...endExecution(state, id),
             results: { ...state.results, [id]: queryResult },
-            isExecuting: false,
           }));
 
-          // Add to history on success
           useHistoryStore.getState().addHistory({
             sql: selectedText,
             connectionId,
@@ -343,7 +380,6 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Query execution failed';
 
-      // Add to history on failure
       useHistoryStore.getState().addHistory({
         sql: selectedText,
         connectionId,
@@ -355,27 +391,33 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         isFavorite: false,
       });
 
-      set({
-        isExecuting: false,
-        error: errorMessage,
-      });
+      set((state) => failExecution(state, id, errorMessage));
     }
   },
 
   cancelQuery: async (connectionId) => {
     try {
       await bridge.cancelQuery(connectionId);
-      set({ isExecuting: false });
-    } catch (error) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to cancel query',
+        executingQueryIds: new Set<string>(),
+        isExecuting: false,
       });
+    } catch (error) {
+      const activeId = get().activeQueryId;
+      set((state) => ({
+        errors: activeId
+          ? {
+              ...state.errors,
+              [activeId]: error instanceof Error ? error.message : 'Failed to cancel query',
+            }
+          : state.errors,
+      }));
     }
   },
 
   formatQuery: async (id) => {
     const query = get().queries.find((q) => q.id === id);
-    if (!query || !query.content.trim()) return;
+    if (!query || !query.content.trim() || query.isDataView) return;
 
     try {
       const result = await bridge.formatSQL(query.content);
@@ -385,14 +427,23 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         ),
       }));
     } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to format SQL',
-      });
+      set((state) => ({
+        errors: {
+          ...state.errors,
+          [id]: error instanceof Error ? error.message : 'Failed to format SQL',
+        },
+      }));
     }
   },
 
-  clearError: () => {
-    set({ error: null });
+  clearError: (id?) => {
+    if (id) {
+      set((state) => ({
+        errors: { ...state.errors, [id]: null },
+      }));
+    } else {
+      set({ errors: {} });
+    }
   },
 
   openTableData: async (connectionId, tableName, whereClause) => {
@@ -436,54 +487,34 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     log.info(`[QueryStore] Creating new query tab: ${id} for table ${tableName}`);
 
     set((state) => ({
+      ...startExecution(state, id),
       queries: [...state.queries, newQuery],
       activeQueryId: id,
-      isExecuting: true,
-      error: null,
     }));
 
     try {
       log.debug(`[QueryStore] Fetching table data for ${tableName}`);
       const fetchStart = performance.now();
 
-      // Fetch column definitions (includes MS_Description comments)
-      const columnDefinitions = await bridge.getColumns(connectionId, tableName);
-
-      // Fetch table data (async to prevent UI freeze)
-      const result = await executeAsyncWithPolling(connectionId, sql);
-      const fetchEnd = performance.now();
-
-      // Create a map of column names to comments
-      const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
-
-      const resultSet: ResultSet = {
-        columns: result.columns.map((c) => ({
-          name: c.name,
-          type: c.type,
-          size: 0,
-          nullable: true,
-          isPrimaryKey: false,
-          comment: commentMap.get(c.name) || undefined,
-        })),
-        rows: result.rows,
-        affectedRows: result.affectedRows,
-        executionTimeMs: result.executionTimeMs,
-      };
+      const resultSet = await fetchTableWithComments(connectionId, tableName, sql);
 
       set((state) => ({
+        ...endExecution(state, id),
         results: { ...state.results, [id]: resultSet },
-        isExecuting: false,
       }));
 
       log.info(
-        `[QueryStore] Loaded ${result.rows.length} rows with ${result.columns.length} columns in ${(fetchEnd - fetchStart).toFixed(2)}ms`
+        `[QueryStore] Loaded ${resultSet.rows.length} rows with ${resultSet.columns.length} columns in ${(performance.now() - fetchStart).toFixed(2)}ms`
       );
     } catch (error) {
       log.error(`[QueryStore] Failed to fetch table data: ${error}`);
-      set({
-        isExecuting: false,
-        error: error instanceof Error ? error.message : 'Failed to load table data',
-      });
+      set((state) =>
+        failExecution(
+          state,
+          id,
+          error instanceof Error ? error.message : 'Failed to load table data'
+        )
+      );
     }
   },
 
@@ -495,43 +526,21 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const sql = whereClause.trim() ? `${baseSql} WHERE ${whereClause}` : baseSql;
 
     set((state) => ({
+      ...startExecution(state, id),
       queries: state.queries.map((q) => (q.id === id ? { ...q, content: sql, isDirty: true } : q)),
-      isExecuting: true,
-      error: null,
     }));
 
     try {
-      // Fetch column definitions (includes MS_Description comments)
-      const columnDefinitions = await bridge.getColumns(connectionId, query.sourceTable);
-
-      const result = await executeAsyncWithPolling(connectionId, sql);
-
-      // Create a map of column names to comments
-      const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
-
-      const resultSet: ResultSet = {
-        columns: result.columns.map((c) => ({
-          name: c.name,
-          type: c.type,
-          size: 0,
-          nullable: true,
-          isPrimaryKey: false,
-          comment: commentMap.get(c.name) || undefined,
-        })),
-        rows: result.rows,
-        affectedRows: result.affectedRows,
-        executionTimeMs: result.executionTimeMs,
-      };
+      const resultSet = await fetchTableWithComments(connectionId, query.sourceTable, sql);
 
       set((state) => ({
+        ...endExecution(state, id),
         results: { ...state.results, [id]: resultSet },
-        isExecuting: false,
       }));
     } catch (error) {
-      set({
-        isExecuting: false,
-        error: error instanceof Error ? error.message : 'Failed to apply filter',
-      });
+      set((state) =>
+        failExecution(state, id, error instanceof Error ? error.message : 'Failed to apply filter')
+      );
     }
   },
 
@@ -541,42 +550,29 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
     log.info(`[QueryStore] Refreshing data view: ${query.sourceTable}`);
 
-    set({ isExecuting: true, error: null });
+    set((state) => startExecution(state, id));
 
     try {
-      // Fetch column definitions (includes MS_Description comments)
-      const columnDefinitions = await bridge.getColumns(connectionId, query.sourceTable);
-
-      const result = await executeAsyncWithPolling(connectionId, query.content);
-
-      // Create a map of column names to comments
-      const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
-
-      const resultSet: ResultSet = {
-        columns: result.columns.map((c) => ({
-          name: c.name,
-          type: c.type,
-          size: 0,
-          nullable: true,
-          isPrimaryKey: false,
-          comment: commentMap.get(c.name),
-        })),
-        rows: result.rows,
-        affectedRows: result.affectedRows,
-        executionTimeMs: result.executionTimeMs,
-      };
+      const resultSet = await fetchTableWithComments(
+        connectionId,
+        query.sourceTable,
+        query.content
+      );
 
       set((state) => ({
+        ...endExecution(state, id),
         results: { ...state.results, [id]: resultSet },
-        isExecuting: false,
       }));
 
       log.info(`[QueryStore] Data view refreshed: ${resultSet.rows.length} rows`);
     } catch (error) {
-      set({
-        isExecuting: false,
-        error: error instanceof Error ? error.message : 'データの更新に失敗しました',
-      });
+      set((state) =>
+        failExecution(
+          state,
+          id,
+          error instanceof Error ? error.message : 'データの更新に失敗しました'
+        )
+      );
     }
   },
 
@@ -602,7 +598,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       // User cancelled or error occurred
       const message = error instanceof Error ? error.message : 'Failed to save file';
       if (!message.includes('cancelled')) {
-        set({ error: message });
+        set((state) => ({ errors: { ...state.errors, [id]: message } }));
       }
     }
   },
@@ -624,7 +620,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       // User cancelled or error occurred
       const message = error instanceof Error ? error.message : 'Failed to load file';
       if (!message.includes('cancelled')) {
-        set({ error: message });
+        set((state) => ({ errors: { ...state.errors, [id]: message } }));
       }
     }
   },
@@ -649,6 +645,14 @@ export const useQueryById = (queryId: string | null | undefined) =>
 
 export const useQueryResult = (queryId: string | null | undefined) =>
   useQueryStore((state) => (queryId ? (state.results[queryId] ?? null) : null));
+
+/** Per-query error selector */
+export const useQueryError = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? (state.errors[queryId] ?? null) : null));
+
+/** Per-query executing state selector */
+export const useIsQueryExecuting = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? state.executingQueryIds.has(queryId) : false));
 
 export const useQueryActions = () =>
   useQueryStore(
