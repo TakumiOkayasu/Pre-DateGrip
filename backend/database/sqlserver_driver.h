@@ -7,6 +7,7 @@
 #include <sqlext.h>
 
 #include <expected>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -63,6 +64,7 @@ private:
     SQLHSTMT m_stmt = SQL_NULL_HSTMT;
     bool m_connected = false;
     std::string m_lastError;
+    std::mutex m_executeMutex;  // Serializes concurrent execute()/disconnect() calls
 };
 
 }  // namespace velocitydb

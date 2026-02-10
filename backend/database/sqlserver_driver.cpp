@@ -82,6 +82,7 @@ bool SQLServerDriver::connect(std::string_view connectionString) {
 }
 
 void SQLServerDriver::disconnect() {
+    std::lock_guard lock(m_executeMutex);
     if (m_stmt != SQL_NULL_HSTMT) {
         SQLFreeHandle(SQL_HANDLE_STMT, m_stmt);
         m_stmt = SQL_NULL_HSTMT;
@@ -128,6 +129,7 @@ std::string SQLServerDriver::convertSQLTypeToDisplayName(SQLSMALLINT dataType) {
 }
 
 ResultSet SQLServerDriver::execute(std::string_view sql) {
+    std::lock_guard lock(m_executeMutex);
     ResultSet result;
 
     if (!m_connected) [[unlikely]] {
