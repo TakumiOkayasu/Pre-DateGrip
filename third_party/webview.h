@@ -146,6 +146,9 @@ private:
         wc.hInstance = GetModuleHandle(nullptr);
         wc.lpszClassName = L"VelocityDBWindow";
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        // IDI_APP_ICON (101) defined in backend/resources/resource.h
+        wc.hIcon = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        wc.hIconSm = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
         static HBRUSH darkBrush = CreateSolidBrush(RGB(30, 30, 30));
         wc.hbrBackground = darkBrush;
         RegisterClassExW(&wc);
