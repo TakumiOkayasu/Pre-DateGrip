@@ -26,6 +26,7 @@
 #include "utils/settings_manager.h"
 #include "utils/simd_filter.h"
 
+#include <charconv>
 #include <chrono>
 #include <format>
 #include <fstream>
@@ -203,6 +204,34 @@ struct DatabaseConnectionParams {
     }
 }
 
+[[nodiscard]] SshTunnelConfig buildSshTunnelConfig(const SshConnectionParams& ssh, const std::string& server) {
+    SshTunnelConfig config;
+    config.host = ssh.host;
+    config.port = ssh.port;
+    config.username = ssh.username;
+    config.authMethod = (ssh.authType == "privateKey") ? SshAuthMethod::PublicKey : SshAuthMethod::Password;
+    config.password = ssh.password;
+    config.privateKeyPath = ssh.privateKeyPath;
+    config.keyPassphrase = ssh.keyPassphrase;
+    config.remoteHost = server;
+    config.remotePort = 1433;
+    if (auto commaPos = config.remoteHost.find(','); commaPos != std::string::npos) {
+        std::from_chars(config.remoteHost.data() + commaPos + 1, config.remoteHost.data() + config.remoteHost.size(), config.remotePort);
+        config.remoteHost.resize(commaPos);
+    }
+    return config;
+}
+
+[[nodiscard]] std::expected<std::unique_ptr<SshTunnel>, std::string> establishSshTunnel(const DatabaseConnectionParams& params) {
+    auto tunnel = std::make_unique<SshTunnel>();
+    auto config = buildSshTunnelConfig(params.ssh, params.server);
+    auto result = tunnel->connect(config);
+    if (!result) {
+        return std::unexpected(std::format("SSH tunnel failed: {}", result.error().message));
+    }
+    return tunnel;
+}
+
 }  // namespace
 
 IPCHandler::IPCHandler()
@@ -238,6 +267,7 @@ void IPCHandler::registerRequestRoutes() {
     m_requestRoutes["formatSQL"] = [this](std::string_view p) { return formatSQLQuery(p); };
     m_requestRoutes["uppercaseKeywords"] = [this](std::string_view p) { return uppercaseKeywords(p); };
     m_requestRoutes["parseA5ER"] = [this](std::string_view p) { return parseA5ERFile(p); };
+    m_requestRoutes["parseA5ERContent"] = [this](std::string_view p) { return parseA5ERContent(p); };
     m_requestRoutes["getQueryHistory"] = [this](std::string_view p) { return retrieveQueryHistory(p); };
     m_requestRoutes["getExecutionPlan"] = [this](std::string_view p) { return getExecutionPlan(p); };
     m_requestRoutes["getCacheStats"] = [this](std::string_view p) { return getCacheStats(p); };
@@ -312,33 +342,11 @@ std::string IPCHandler::openDatabaseConnection(std::string_view params) {
 
     // If SSH is enabled, establish tunnel first
     if (connectionParams->ssh.enabled) {
-        sshTunnel = std::make_unique<SshTunnel>();
-
-        SshTunnelConfig sshConfig;
-        sshConfig.host = connectionParams->ssh.host;
-        sshConfig.port = connectionParams->ssh.port;
-        sshConfig.username = connectionParams->ssh.username;
-        sshConfig.authMethod = (connectionParams->ssh.authType == "privateKey") ? SshAuthMethod::PublicKey : SshAuthMethod::Password;
-        sshConfig.password = connectionParams->ssh.password;
-        sshConfig.privateKeyPath = connectionParams->ssh.privateKeyPath;
-        sshConfig.keyPassphrase = connectionParams->ssh.keyPassphrase;
-
-        // Parse original server to get remote host and port
-        std::string remoteHost = connectionParams->server;
-        int remotePort = 1433;
-        if (auto commaPos = remoteHost.find(','); commaPos != std::string::npos) {
-            remotePort = std::stoi(remoteHost.substr(commaPos + 1));
-            remoteHost = remoteHost.substr(0, commaPos);
+        auto tunnelResult = establishSshTunnel(*connectionParams);
+        if (!tunnelResult) {
+            return JsonUtils::errorResponse(tunnelResult.error());
         }
-        sshConfig.remoteHost = remoteHost;
-        sshConfig.remotePort = remotePort;
-
-        auto result = sshTunnel->connect(sshConfig);
-        if (!result) {
-            return JsonUtils::errorResponse(std::format("SSH tunnel failed: {}", result.error().message));
-        }
-
-        // Redirect connection to localhost through tunnel
+        sshTunnel = std::move(*tunnelResult);
         effectiveParams.server = std::format("127.0.0.1,{}", sshTunnel->getLocalPort());
         log<LogLevel::DEBUG>(std::format("[IPC] SSH tunnel established, redirecting to: {}", effectiveParams.server));
     }
@@ -398,33 +406,11 @@ std::string IPCHandler::verifyDatabaseConnection(std::string_view params) {
 
     // If SSH is enabled, establish tunnel first
     if (connectionParams->ssh.enabled) {
-        sshTunnel = std::make_unique<SshTunnel>();
-
-        SshTunnelConfig sshConfig;
-        sshConfig.host = connectionParams->ssh.host;
-        sshConfig.port = connectionParams->ssh.port;
-        sshConfig.username = connectionParams->ssh.username;
-        sshConfig.authMethod = (connectionParams->ssh.authType == "privateKey") ? SshAuthMethod::PublicKey : SshAuthMethod::Password;
-        sshConfig.password = connectionParams->ssh.password;
-        sshConfig.privateKeyPath = connectionParams->ssh.privateKeyPath;
-        sshConfig.keyPassphrase = connectionParams->ssh.keyPassphrase;
-
-        // Parse original server to get remote host and port
-        std::string remoteHost = connectionParams->server;
-        int remotePort = 1433;
-        if (auto commaPos = remoteHost.find(','); commaPos != std::string::npos) {
-            remotePort = std::stoi(remoteHost.substr(commaPos + 1));
-            remoteHost = remoteHost.substr(0, commaPos);
+        auto tunnelResult = establishSshTunnel(*connectionParams);
+        if (!tunnelResult) {
+            return JsonUtils::successResponse(std::format(R"({{"success":false,"message":"{}"}})", JsonUtils::escapeString(tunnelResult.error())));
         }
-        sshConfig.remoteHost = remoteHost;
-        sshConfig.remotePort = remotePort;
-
-        auto result = sshTunnel->connect(sshConfig);
-        if (!result) {
-            return JsonUtils::successResponse(std::format(R"({{"success":false,"message":"SSH tunnel failed: {}"}})", JsonUtils::escapeString(result.error().message)));
-        }
-
-        // Redirect connection to localhost through tunnel
+        sshTunnel = std::move(*tunnelResult);
         effectiveParams.server = std::format("127.0.0.1,{}", sshTunnel->getLocalPort());
         log<LogLevel::DEBUG>(std::format("[IPC] SSH tunnel established, redirecting to: {}", effectiveParams.server));
     }
@@ -995,6 +981,71 @@ std::string IPCHandler::uppercaseKeywords(std::string_view params) {
     }
 }
 
+namespace {
+
+std::string serializeA5ERModelToJson(const A5ERModel& model, const std::string& ddl = "") {
+    std::string tablesJson = "[";
+    for (size_t i = 0; i < model.tables.size(); ++i) {
+        const auto& table = model.tables[i];
+        if (i > 0)
+            tablesJson += ',';
+
+        std::string columnsJson = "[";
+        for (size_t j = 0; j < table.columns.size(); ++j) {
+            const auto& col = table.columns[j];
+            if (j > 0)
+                columnsJson += ',';
+            columnsJson += std::format(R"({{"name":"{}","logicalName":"{}","type":"{}","size":{},"scale":{},"nullable":{},"isPrimaryKey":{},"defaultValue":"{}","comment":"{}"}})",
+                                       JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.logicalName), JsonUtils::escapeString(col.type), col.size, col.scale,
+                                       col.nullable ? "true" : "false", col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.defaultValue), JsonUtils::escapeString(col.comment));
+        }
+        columnsJson += "]";
+
+        std::string indexesJson = "[";
+        for (size_t j = 0; j < table.indexes.size(); ++j) {
+            const auto& idx = table.indexes[j];
+            if (j > 0)
+                indexesJson += ',';
+
+            std::string idxColumnsJson = "[";
+            for (size_t k = 0; k < idx.columns.size(); ++k) {
+                if (k > 0)
+                    idxColumnsJson += ',';
+                idxColumnsJson += std::format(R"("{}")", JsonUtils::escapeString(idx.columns[k]));
+            }
+            idxColumnsJson += "]";
+
+            indexesJson += std::format(R"({{"name":"{}","columns":{},"isUnique":{}}})", JsonUtils::escapeString(idx.name), idxColumnsJson, idx.isUnique ? "true" : "false");
+        }
+        indexesJson += "]";
+
+        tablesJson += std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
+                                  JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), columnsJson, indexesJson, table.posX, table.posY);
+    }
+    tablesJson += "]";
+
+    std::string relationsJson = "[";
+    for (size_t i = 0; i < model.relations.size(); ++i) {
+        const auto& rel = model.relations[i];
+        if (i > 0)
+            relationsJson += ',';
+        relationsJson += std::format(R"({{"name":"{}","parentTable":"{}","childTable":"{}","parentColumn":"{}","childColumn":"{}","cardinality":"{}"}})", JsonUtils::escapeString(rel.name),
+                                     JsonUtils::escapeString(rel.parentTable), JsonUtils::escapeString(rel.childTable), JsonUtils::escapeString(rel.parentColumn),
+                                     JsonUtils::escapeString(rel.childColumn), JsonUtils::escapeString(rel.cardinality));
+    }
+    relationsJson += "]";
+
+    std::string json = "{";
+    json += "\"name\":\"" + JsonUtils::escapeString(model.name) + "\",";
+    json += "\"databaseType\":\"" + JsonUtils::escapeString(model.databaseType) + "\",";
+    json += "\"tables\":" + tablesJson + ",";
+    json += "\"relations\":" + relationsJson + ",";
+    json += "\"ddl\":\"" + JsonUtils::escapeString(ddl) + "\"}";
+    return json;
+}
+
+}  // namespace
+
 std::string IPCHandler::parseA5ERFile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
@@ -1004,73 +1055,35 @@ std::string IPCHandler::parseA5ERFile(std::string_view params) {
         if (filepathResult.error()) [[unlikely]] {
             return JsonUtils::errorResponse("Missing filepath field");
         }
-        std::string filepath = std::string(filepathResult.value());
 
-        A5ERModel model = m_utilityContext->a5erParser().parse(filepath);
+        auto& a5er = m_utilityContext->a5erParser();
+        A5ERModel model = a5er.parse(std::string(filepathResult.value()));
+        return JsonUtils::successResponse(serializeA5ERModelToJson(model, a5er.generateDDL(model)));
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
 
-        // Build tables array
-        std::string tablesJson = "[";
-        for (size_t i = 0; i < model.tables.size(); ++i) {
-            const auto& table = model.tables[i];
-            if (i > 0)
-                tablesJson += ',';
+std::string IPCHandler::parseA5ERContent(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        simdjson::dom::element doc = parser.parse(params);
 
-            // Build columns array for this table
-            std::string columnsJson = "[";
-            for (size_t j = 0; j < table.columns.size(); ++j) {
-                const auto& col = table.columns[j];
-                if (j > 0)
-                    columnsJson += ',';
-                columnsJson += std::format(R"({{"name":"{}","logicalName":"{}","type":"{}","size":{},"scale":{},"nullable":{},"isPrimaryKey":{},"defaultValue":"{}","comment":"{}"}})",
-                                           JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.logicalName), JsonUtils::escapeString(col.type), col.size, col.scale,
-                                           col.nullable ? "true" : "false", col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.defaultValue), JsonUtils::escapeString(col.comment));
-            }
-            columnsJson += "]";
-
-            // Build indexes array for this table
-            std::string indexesJson = "[";
-            for (size_t j = 0; j < table.indexes.size(); ++j) {
-                const auto& idx = table.indexes[j];
-                if (j > 0)
-                    indexesJson += ',';
-
-                std::string idxColumnsJson = "[";
-                for (size_t k = 0; k < idx.columns.size(); ++k) {
-                    if (k > 0)
-                        idxColumnsJson += ',';
-                    idxColumnsJson += std::format(R"("{}")", JsonUtils::escapeString(idx.columns[k]));
-                }
-                idxColumnsJson += "]";
-
-                indexesJson += std::format(R"({{"name":"{}","columns":{},"isUnique":{}}})", JsonUtils::escapeString(idx.name), idxColumnsJson, idx.isUnique ? "true" : "false");
-            }
-            indexesJson += "]";
-
-            tablesJson += std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
-                                      JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), columnsJson, indexesJson, table.posX, table.posY);
+        auto contentResult = doc["content"].get_string();
+        if (contentResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing content field");
         }
-        tablesJson += "]";
 
-        // Build relations array
-        std::string relationsJson = "[";
-        for (size_t i = 0; i < model.relations.size(); ++i) {
-            const auto& rel = model.relations[i];
-            if (i > 0)
-                relationsJson += ',';
-            relationsJson += std::format(R"({{"name":"{}","parentTable":"{}","childTable":"{}","parentColumn":"{}","childColumn":"{}","cardinality":"{}"}})", JsonUtils::escapeString(rel.name),
-                                         JsonUtils::escapeString(rel.parentTable), JsonUtils::escapeString(rel.childTable), JsonUtils::escapeString(rel.parentColumn),
-                                         JsonUtils::escapeString(rel.childColumn), JsonUtils::escapeString(rel.cardinality));
+        auto& a5er = m_utilityContext->a5erParser();
+        A5ERModel model = a5er.parseFromString(std::string(contentResult.value()));
+
+        // filename が指定されていればモデル名に設定
+        auto filenameResult = doc["filename"].get_string();
+        if (!filenameResult.error() && model.name.empty()) {
+            model.name = std::string(filenameResult.value());
         }
-        relationsJson += "]";
 
-        // Build final response
-        std::string jsonResponse = "{";
-        jsonResponse += "\"name\":\"" + JsonUtils::escapeString(model.name) + "\",";
-        jsonResponse += "\"databaseType\":\"" + JsonUtils::escapeString(model.databaseType) + "\",";
-        jsonResponse += "\"tables\":" + tablesJson + ",";
-        jsonResponse += "\"relations\":" + relationsJson + "}";
-
-        return JsonUtils::successResponse(jsonResponse);
+        return JsonUtils::successResponse(serializeA5ERModelToJson(model, a5er.generateDDL(model)));
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
     }

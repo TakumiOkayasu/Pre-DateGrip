@@ -79,5 +79,187 @@ TEST_F(A5ERParserTest, GeneratesIndexes) {
     EXPECT_NE(ddl.find("[IX_Users_Email]"), std::string::npos);
 }
 
+// === Text format parser tests ===
+
+static const char* BASIC_TEXT_INPUT = R"a5er(# A5:ER FORMAT:19
+# A5:ER ENCODING:UTF-8
+
+[Entity]
+PName=users
+LName=User
+Comment=User master
+Page=MAIN
+Left=100
+Top=200
+Field="id","id","INT","NOT NULL",1,"",""
+Field="name","display_name","NVARCHAR(100)","NOT NULL",0,"",""
+Field="email","email_addr","NVARCHAR(255)","NULL",0,"",""
+DEL
+
+[Entity]
+PName=orders
+LName=Order
+Comment=
+Page=MAIN
+Left=400
+Top=200
+Field="id","id","INT","NOT NULL",1,"",""
+Field="user_id","user_ref","INT","NOT NULL",0,"",""
+Field="amount","price","DECIMAL(10,2)","NOT NULL",0,"0",""
+DEL
+
+[Relation]
+Entity1=users
+Entity2=orders
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Dependence=0
+DEL
+)a5er";
+
+TEST_F(A5ERParserTest, TextFormatDetection) {
+    EXPECT_EQ(parser.parseFromString("# A5:ER FORMAT:19\n[Entity]\nPName=t\nDEL\n").tables.size(), 1);
+    // XML format should not be detected as text
+    EXPECT_NO_THROW(parser.parseFromString("<?xml version=\"1.0\"?><A5ER Name=\"test\"></A5ER>"));
+}
+
+TEST_F(A5ERParserTest, TextFormatBasicParse) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+
+    EXPECT_EQ(model.tables.size(), 2);
+    EXPECT_EQ(model.relations.size(), 1);
+}
+
+TEST_F(A5ERParserTest, TextFormatTableProperties) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+    const auto& users = model.tables[0];
+
+    EXPECT_EQ(users.name, "users");
+    EXPECT_EQ(users.logicalName, "User");
+    EXPECT_EQ(users.comment, "User master");
+    EXPECT_EQ(users.posX, 100.0);
+    EXPECT_EQ(users.posY, 200.0);
+}
+
+TEST_F(A5ERParserTest, TextFormatColumns) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+    const auto& users = model.tables[0];
+
+    ASSERT_EQ(users.columns.size(), 3);
+
+    EXPECT_EQ(users.columns[0].name, "id");
+    EXPECT_EQ(users.columns[0].logicalName, "id");
+    EXPECT_EQ(users.columns[0].type, "INT");
+    EXPECT_FALSE(users.columns[0].nullable);
+    EXPECT_TRUE(users.columns[0].isPrimaryKey);
+
+    EXPECT_EQ(users.columns[1].name, "name");
+    EXPECT_EQ(users.columns[1].logicalName, "display_name");
+    EXPECT_EQ(users.columns[1].type, "NVARCHAR(100)");
+    EXPECT_FALSE(users.columns[1].nullable);
+    EXPECT_FALSE(users.columns[1].isPrimaryKey);
+
+    EXPECT_TRUE(users.columns[2].nullable);
+}
+
+TEST_F(A5ERParserTest, TextFormatDefaultValues) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+    const auto& orders = model.tables[1];
+
+    EXPECT_EQ(orders.columns[2].defaultValue, "0");
+    EXPECT_EQ(orders.columns[0].defaultValue, "");
+}
+
+TEST_F(A5ERParserTest, TextFormatRelation) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+
+    ASSERT_EQ(model.relations.size(), 1);
+    const auto& rel = model.relations[0];
+
+    EXPECT_EQ(rel.parentTable, "users");
+    EXPECT_EQ(rel.childTable, "orders");
+    EXPECT_EQ(rel.parentColumn, "id");
+    EXPECT_EQ(rel.childColumn, "user_id");
+    EXPECT_EQ(rel.cardinality, "1:N");
+}
+
+TEST_F(A5ERParserTest, TextFormatCardinalityConversions) {
+    auto makeInput = [](int type1, int type2) {
+        return "# A5:ER FORMAT:19\n"
+               "[Entity]\nPName=a\nLName=A\nField=\"id\",\"id\",\"INT\",\"NOT NULL\",1,\"\",\"\"\nDEL\n"
+               "[Entity]\nPName=b\nLName=B\nField=\"id\",\"id\",\"INT\",\"NOT NULL\",1,\"\",\"\"\nDEL\n"
+               "[Relation]\nEntity1=a\nEntity2=b\nRelationType1=" +
+               std::to_string(type1) + "\nRelationType2=" + std::to_string(type2) + "\nFields1=id\nFields2=id\nDEL\n";
+    };
+
+    EXPECT_EQ(parser.parseFromString(makeInput(2, 3)).relations[0].cardinality, "1:N");
+    EXPECT_EQ(parser.parseFromString(makeInput(2, 4)).relations[0].cardinality, "1:N");
+    EXPECT_EQ(parser.parseFromString(makeInput(3, 2)).relations[0].cardinality, "1:N");
+    EXPECT_EQ(parser.parseFromString(makeInput(2, 2)).relations[0].cardinality, "1:1");
+    EXPECT_EQ(parser.parseFromString(makeInput(1, 2)).relations[0].cardinality, "1:1");
+    EXPECT_EQ(parser.parseFromString(makeInput(3, 3)).relations[0].cardinality, "N:M");
+    EXPECT_EQ(parser.parseFromString(makeInput(4, 4)).relations[0].cardinality, "N:M");
+    EXPECT_EQ(parser.parseFromString(makeInput(3, 4)).relations[0].cardinality, "N:M");
+}
+
+TEST_F(A5ERParserTest, TextFormatIndexes) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=users
+LName=User
+Field="id","id","INT","NOT NULL",1,"",""
+Field="email","email_addr","NVARCHAR(255)","NOT NULL",0,"",""
+Field="name","display_name","NVARCHAR(100)","NULL",0,"",""
+Index=IX_users_email=0,email
+Index=UQ_users_name=1,name
+DEL
+)a5er";
+    auto model = parser.parseFromString(input);
+    const auto& table = model.tables[0];
+
+    ASSERT_EQ(table.indexes.size(), 2);
+
+    EXPECT_EQ(table.indexes[0].name, "IX_users_email");
+    EXPECT_FALSE(table.indexes[0].isUnique);
+    ASSERT_EQ(table.indexes[0].columns.size(), 1);
+    EXPECT_EQ(table.indexes[0].columns[0], "email");
+
+    EXPECT_EQ(table.indexes[1].name, "UQ_users_name");
+    EXPECT_TRUE(table.indexes[1].isUnique);
+}
+
+TEST_F(A5ERParserTest, TextFormatEmptyEntity) {
+    const char* input = "# A5:ER FORMAT:19\n\n[Entity]\nPName=empty\nLName=Empty\nDEL\n";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables.size(), 1);
+    EXPECT_EQ(model.tables[0].columns.size(), 0);
+}
+
+TEST_F(A5ERParserTest, TextFormatQuotedCSVWithCommaInType) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=test
+LName=Test
+Field="price","unit_price","DECIMAL(10,2)","NOT NULL",0,"",""
+DEL
+)a5er";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables[0].columns.size(), 1);
+    EXPECT_EQ(model.tables[0].columns[0].type, "DECIMAL(10,2)");
+}
+
+TEST_F(A5ERParserTest, TextFormatNoEntities) {
+    auto model = parser.parseFromString("# A5:ER FORMAT:19\n");
+
+    EXPECT_EQ(model.tables.size(), 0);
+    EXPECT_EQ(model.relations.size(), 0);
+}
+
 }  // namespace test
 }  // namespace velocitydb

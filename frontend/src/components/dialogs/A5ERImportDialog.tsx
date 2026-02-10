@@ -1,41 +1,12 @@
 import { useCallback, useState } from 'react';
+import { bridge, toERDiagramModel } from '../../api/bridge';
 import type { ERDiagramModel } from '../../utils/erDiagramParser';
-import { parseERDiagram } from '../../utils/erDiagramParser';
-// A5ERテキストパーサーを登録するため副作用インポート
-import '../../utils/a5erTextParser';
 import styles from './A5ERImportDialog.module.css';
 
 interface A5ERImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (model: ERDiagramModel) => void;
-}
-
-// Legacy types kept for DDL generation compatibility
-export interface A5ERTable {
-  name: string;
-  schema: string;
-  columns: A5ERColumn[];
-}
-
-export interface A5ERColumn {
-  name: string;
-  type: string;
-  nullable: boolean;
-  isPrimaryKey: boolean;
-  isForeignKey: boolean;
-  references?: {
-    table: string;
-    column: string;
-  };
-}
-
-export interface A5ERRelation {
-  sourceTable: string;
-  targetTable: string;
-  sourceColumn: string;
-  targetColumn: string;
-  cardinality: '1:1' | '1:N' | 'N:M';
 }
 
 export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialogProps) {
@@ -54,67 +25,9 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
 
     try {
       const content = await file.text();
-
-      // 新パーサーレジストリで自動判定（テキスト形式 / XML形式）
-      let model: ERDiagramModel;
-      try {
-        model = parseERDiagram(content, file.name);
-      } catch {
-        // 新パーサーで処理できない場合はレガシーXMLパーサーにフォールバック
-        const { tables, relations } = parseA5ERContent(content);
-        model = {
-          name: file.name,
-          tables: tables.map((t) => ({
-            name: t.name,
-            logicalName: '',
-            comment: '',
-            posX: 0,
-            posY: 0,
-            columns: t.columns.map((c) => ({
-              name: c.name,
-              logicalName: '',
-              type: c.type,
-              nullable: c.nullable,
-              isPrimaryKey: c.isPrimaryKey,
-              defaultValue: '',
-              comment: '',
-            })),
-            indexes: [],
-          })),
-          relations: relations.map((r) => ({
-            name: `${r.sourceTable}_${r.targetTable}`,
-            sourceTable: r.sourceTable,
-            targetTable: r.targetTable,
-            sourceColumn: r.sourceColumn,
-            targetColumn: r.targetColumn,
-            cardinality: r.cardinality,
-          })),
-        };
-      }
-
-      setParsedModel(model);
-
-      // Generate DDL from model
-      const legacyTables: A5ERTable[] = model.tables.map((t) => ({
-        name: t.name,
-        schema: 'dbo',
-        columns: t.columns.map((c) => ({
-          name: c.name,
-          type: c.type,
-          nullable: c.nullable,
-          isPrimaryKey: c.isPrimaryKey,
-          isForeignKey: false,
-        })),
-      }));
-      const legacyRelations: A5ERRelation[] = model.relations.map((r) => ({
-        sourceTable: r.sourceTable,
-        targetTable: r.targetTable,
-        sourceColumn: r.sourceColumn,
-        targetColumn: r.targetColumn,
-        cardinality: r.cardinality,
-      }));
-      const ddl = generateDDL(legacyTables, legacyRelations);
-      setGeneratedDDL(ddl);
+      const result = await bridge.parseA5ERContent(content, file.name);
+      setParsedModel(toERDiagramModel(result, file.name));
+      setGeneratedDDL(result.ddl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse file');
     }
@@ -197,138 +110,4 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
       </div>
     </div>
   );
-}
-
-// Parse A5:ER XML format
-// A5:ER uses 'Entity' and 'Attribute' elements (not 'ENTITY' and 'ATTR')
-function parseA5ERContent(content: string): {
-  tables: A5ERTable[];
-  relations: A5ERRelation[];
-} {
-  const tables: A5ERTable[] = [];
-  const relations: A5ERRelation[] = [];
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(content, 'text/xml');
-
-    // Check for XML parse errors
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) {
-      throw new Error(`XML parse error: ${parseError.textContent}`);
-    }
-
-    // A5:ER root element
-    const root = doc.querySelector('A5ER');
-    if (!root) {
-      throw new Error('Invalid A5:ER file: missing A5ER root element');
-    }
-
-    // Parse tables (Entity elements)
-    const entityElements = doc.querySelectorAll('Entity');
-    for (const entity of entityElements) {
-      const tableName = entity.getAttribute('Name') || '';
-      const schema = entity.getAttribute('Schema') || 'dbo';
-
-      const columns: A5ERColumn[] = [];
-      const attrElements = entity.querySelectorAll('Attribute');
-
-      for (const attr of attrElements) {
-        const colName = attr.getAttribute('Name') || '';
-        const colType = attr.getAttribute('Type') || 'NVARCHAR(255)';
-        const isPK = attr.getAttribute('PK') === 'true' || attr.getAttribute('PK') === '1';
-        const isNullable =
-          attr.getAttribute('Nullable') !== 'false' && attr.getAttribute('Nullable') !== '0';
-
-        if (colName) {
-          columns.push({
-            name: colName,
-            type: colType,
-            nullable: isNullable,
-            isPrimaryKey: isPK,
-            isForeignKey: false,
-          });
-        }
-      }
-
-      if (tableName) {
-        tables.push({ name: tableName, schema, columns });
-      }
-    }
-
-    // Parse relations (Relation elements)
-    const relationElements = doc.querySelectorAll('Relation');
-    for (const rel of relationElements) {
-      const sourceTable = rel.getAttribute('ParentEntity') || '';
-      const targetTable = rel.getAttribute('ChildEntity') || '';
-      const sourceColumn = rel.getAttribute('ParentAttribute') || 'id';
-      const targetColumn = rel.getAttribute('ChildAttribute') || `${sourceTable.toLowerCase()}_id`;
-      const cardinality = rel.getAttribute('Cardinality') || '1:N';
-
-      if (sourceTable && targetTable) {
-        relations.push({
-          sourceTable,
-          targetTable,
-          sourceColumn,
-          targetColumn,
-          cardinality: cardinality as '1:1' | '1:N' | 'N:M',
-        });
-      }
-    }
-
-    console.log('[A5ER] Parsed tables:', tables.length, 'relations:', relations.length);
-  } catch (err) {
-    console.error('Failed to parse A5:ER content:', err);
-    throw err;
-  }
-
-  return { tables, relations };
-}
-
-// Generate SQL Server DDL
-function generateDDL(tables: A5ERTable[], relations: A5ERRelation[]): string {
-  const lines: string[] = [];
-
-  // Create tables
-  tables.forEach((table) => {
-    const fullName = table.schema ? `[${table.schema}].[${table.name}]` : `[${table.name}]`;
-    lines.push(`-- Table: ${table.name}`);
-    lines.push(`CREATE TABLE ${fullName} (`);
-
-    const columnDefs = table.columns.map((col, idx) => {
-      const parts = [`  [${col.name}]`, col.type];
-      if (!col.nullable) parts.push('NOT NULL');
-      if (col.isPrimaryKey) parts.push('PRIMARY KEY');
-      return parts.join(' ') + (idx < table.columns.length - 1 ? ',' : '');
-    });
-
-    lines.push(columnDefs.join('\n'));
-    lines.push(');');
-    lines.push('');
-  });
-
-  // Create foreign keys
-  relations.forEach((rel) => {
-    const sourceTable = tables.find((t) => t.name === rel.sourceTable);
-    const targetTable = tables.find((t) => t.name === rel.targetTable);
-
-    if (sourceTable && targetTable) {
-      const sourceFull = sourceTable.schema
-        ? `[${sourceTable.schema}].[${sourceTable.name}]`
-        : `[${sourceTable.name}]`;
-      const targetFull = targetTable.schema
-        ? `[${targetTable.schema}].[${targetTable.name}]`
-        : `[${targetTable.name}]`;
-
-      lines.push(`-- Foreign Key: ${rel.sourceTable} -> ${rel.targetTable}`);
-      lines.push(`ALTER TABLE ${targetFull}`);
-      lines.push(`ADD CONSTRAINT FK_${rel.targetTable}_${rel.sourceTable}`);
-      lines.push(
-        `FOREIGN KEY ([${rel.targetColumn}]) REFERENCES ${sourceFull}([${rel.sourceColumn}]);`
-      );
-      lines.push('');
-    }
-  });
-
-  return lines.join('\n');
 }

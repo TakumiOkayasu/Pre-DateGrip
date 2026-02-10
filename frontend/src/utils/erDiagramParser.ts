@@ -63,10 +63,13 @@ export function registerERDiagramParser(parser: ERDiagramParser): void {
 export function parseERDiagram(content: string, filename?: string): ERDiagramModel {
   // 1. filenameの拡張子でパーサー候補を絞る
   if (filename) {
-    const ext = '.' + filename.split('.').pop()?.toLowerCase();
-    for (const parser of parsers) {
-      if (parser.extensions.includes(ext) && parser.canParse(content)) {
-        return parser.parse(content, filename);
+    const rawExt = filename.split('.').pop()?.toLowerCase();
+    if (rawExt) {
+      const ext = `.${rawExt}`;
+      for (const parser of parsers) {
+        if (parser.extensions.includes(ext) && parser.canParse(content)) {
+          return parser.parse(content, filename);
+        }
       }
     }
   }
