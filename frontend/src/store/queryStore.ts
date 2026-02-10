@@ -31,6 +31,7 @@ export interface QueryState {
   refreshDataView: (id: string, connectionId: string) => Promise<void>;
   saveToFile: (id: string) => Promise<void>;
   loadFromFile: (id: string) => Promise<void>;
+  openERDiagram: (name: string) => string;
 }
 
 let queryCounter = 0;
@@ -624,6 +625,32 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       }
     }
   },
+
+  openERDiagram: (name) => {
+    // 同名のER図タブが既にあればアクティブ化
+    const existing = get().queries.find((q) => q.isERDiagram && q.name === name);
+    if (existing) {
+      set({ activeQueryId: existing.id });
+      return existing.id;
+    }
+
+    const id = `query-${++queryCounter}`;
+    const newQuery: Query = {
+      id,
+      name,
+      content: '',
+      connectionId: null,
+      isDirty: false,
+      isERDiagram: true,
+    };
+
+    set((state) => ({
+      queries: [...state.queries, newQuery],
+      activeQueryId: id,
+    }));
+
+    return id;
+  },
 }));
 
 // Optimized selectors to prevent unnecessary re-renders
@@ -638,6 +665,11 @@ export const useActiveQuery = () =>
 export const useIsActiveDataView = () =>
   useQueryStore(
     (state) => state.queries.find((q) => q.id === state.activeQueryId)?.isDataView === true
+  );
+
+export const useIsActiveERDiagram = () =>
+  useQueryStore(
+    (state) => state.queries.find((q) => q.id === state.activeQueryId)?.isERDiagram === true
   );
 
 export const useQueryById = (queryId: string | null | undefined) =>
@@ -672,5 +704,6 @@ export const useQueryActions = () =>
       refreshDataView: state.refreshDataView,
       saveToFile: state.saveToFile,
       loadFromFile: state.loadFromFile,
+      openERDiagram: state.openERDiagram,
     }))
   );

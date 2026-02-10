@@ -1,10 +1,85 @@
 import type { IPCRequest, IPCResponse } from '../types';
+import type { ERDiagramModel } from '../utils/erDiagramParser';
 import { log } from '../utils/logger';
 
 declare global {
   interface Window {
     invoke?: (request: string) => Promise<string>;
   }
+}
+
+/** A5:ER parse result returned from backend IPC */
+export interface A5ERParseResult {
+  name: string;
+  databaseType: string;
+  tables: {
+    name: string;
+    logicalName: string;
+    comment: string;
+    columns: {
+      name: string;
+      logicalName: string;
+      type: string;
+      size: number;
+      scale: number;
+      nullable: boolean;
+      isPrimaryKey: boolean;
+      defaultValue: string;
+      comment: string;
+    }[];
+    indexes: {
+      name: string;
+      columns: string[];
+      isUnique: boolean;
+    }[];
+    posX: number;
+    posY: number;
+  }[];
+  relations: {
+    name: string;
+    parentTable: string;
+    childTable: string;
+    parentColumn: string;
+    childColumn: string;
+    cardinality: string;
+  }[];
+  ddl: string;
+}
+
+/** A5ERParseResult → ERDiagramModel 変換 */
+export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string): ERDiagramModel {
+  return {
+    name: result.name || fallbackName || '',
+    tables: result.tables.map((t) => ({
+      name: t.name,
+      logicalName: t.logicalName,
+      comment: t.comment,
+      posX: t.posX,
+      posY: t.posY,
+      columns: t.columns.map((c) => ({
+        name: c.name,
+        logicalName: c.logicalName,
+        type: c.type,
+        nullable: c.nullable,
+        isPrimaryKey: c.isPrimaryKey,
+        defaultValue: c.defaultValue,
+        comment: c.comment,
+      })),
+      indexes: t.indexes.map((idx) => ({
+        name: idx.name,
+        isUnique: idx.isUnique,
+        columns: idx.columns,
+      })),
+    })),
+    relations: result.relations.map((r) => ({
+      name: r.name,
+      sourceTable: r.parentTable,
+      targetTable: r.childTable,
+      sourceColumn: r.parentColumn,
+      targetColumn: r.childColumn,
+      cardinality: (r.cardinality as '1:1' | '1:N' | 'N:M') || '1:N',
+    })),
+  };
 }
 
 class Bridge {
@@ -292,42 +367,12 @@ class Bridge {
   }
 
   // A5:ER methods
-  async parseA5ER(filepath: string): Promise<{
-    name: string;
-    databaseType: string;
-    tables: {
-      name: string;
-      logicalName: string;
-      comment: string;
-      columns: {
-        name: string;
-        logicalName: string;
-        type: string;
-        size: number;
-        scale: number;
-        nullable: boolean;
-        isPrimaryKey: boolean;
-        defaultValue: string;
-        comment: string;
-      }[];
-      indexes: {
-        name: string;
-        columns: string[];
-        isUnique: boolean;
-      }[];
-      posX: number;
-      posY: number;
-    }[];
-    relations: {
-      name: string;
-      parentTable: string;
-      childTable: string;
-      parentColumn: string;
-      childColumn: string;
-      cardinality: string;
-    }[];
-  }> {
+  async parseA5ER(filepath: string): Promise<A5ERParseResult> {
     return this.call('parseA5ER', { filepath });
+  }
+
+  async parseA5ERContent(content: string, filename: string): Promise<A5ERParseResult> {
+    return this.call('parseA5ERContent', { content, filename });
   }
 
   // Execution plan methods

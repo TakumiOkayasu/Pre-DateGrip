@@ -62,6 +62,11 @@ public:
     std::string generateTableDDL(const A5ERTable& table, const std::string& targetDatabase = "SQLServer");
 
 private:
+    [[nodiscard]] bool isTextFormat(const std::string& content) const;
+    A5ERModel parseTextFormat(const std::string& content);
+    A5ERModel parseXmlFormat(const std::string& content);
+    static std::vector<std::string> parseQuotedCSV(const std::string& raw);
+    static std::string resolveCardinality(int type1, int type2);
     std::string mapTypeToSQLServer(const std::string& a5erType, int size, int scale) const;
 };
 

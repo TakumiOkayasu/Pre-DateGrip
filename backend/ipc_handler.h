@@ -78,6 +78,7 @@ private:
     [[nodiscard]] std::string formatSQLQuery(std::string_view params);
     [[nodiscard]] std::string uppercaseKeywords(std::string_view params);
     [[nodiscard]] std::string parseA5ERFile(std::string_view params);
+    [[nodiscard]] std::string parseA5ERContent(std::string_view params);
     [[nodiscard]] std::string retrieveQueryHistory(std::string_view params);
     [[nodiscard]] std::string getExecutionPlan(std::string_view params);
     [[nodiscard]] std::string writeFrontendLog(std::string_view params);

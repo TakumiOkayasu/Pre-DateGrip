@@ -144,8 +144,9 @@ export function MainLayout() {
     executeQuery,
     formatQuery,
     isExecuting,
+    openERDiagram,
   } = useQueryStore();
-  const { importFromA5ER } = useERDiagramStore();
+  const { loadFromParsedModel } = useERDiagramStore();
   const isProduction = useIsProductionMode();
   const isReadOnly = useIsReadOnlyMode();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
@@ -628,24 +629,9 @@ export function MainLayout() {
           <A5ERImportDialog
             isOpen={isA5ERImportDialogOpen}
             onClose={() => setIsA5ERImportDialogOpen(false)}
-            onImport={(tables, relations) => {
-              importFromA5ER(
-                tables.map((t) => ({
-                  name: t.name,
-                  schema: t.schema,
-                  columns: t.columns.map((c) => ({
-                    name: c.name,
-                    type: c.type,
-                    nullable: c.nullable,
-                    isPrimaryKey: c.isPrimaryKey,
-                  })),
-                })),
-                relations.map((r) => ({
-                  sourceTable: r.sourceTable,
-                  targetTable: r.targetTable,
-                  cardinality: r.cardinality,
-                }))
-              );
+            onImport={(model) => {
+              loadFromParsedModel(model);
+              openERDiagram(model.name || 'ER Diagram');
             }}
           />
         </Suspense>
