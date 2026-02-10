@@ -151,7 +151,7 @@ target_precompile_headers(VelocityDBCore PRIVATE
 )
 
 # Main executable
-add_executable(VelocityDB WIN32 main.cpp)
+add_executable(VelocityDB WIN32 main.cpp resources/app.rc)
 
 target_link_libraries(VelocityDB PRIVATE VelocityDBCore)
 
