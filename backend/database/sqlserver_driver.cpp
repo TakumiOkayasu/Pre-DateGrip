@@ -77,19 +77,18 @@ bool SQLServerDriver::connect(std::string_view connectionString) {
         return false;
     }
 
-    m_connected = true;
+    m_connected.store(true, std::memory_order_release);
     return true;
 }
 
 void SQLServerDriver::disconnect() {
     std::lock_guard lock(m_executeMutex);
-    if (m_stmt != SQL_NULL_HSTMT) {
-        SQLFreeHandle(SQL_HANDLE_STMT, m_stmt);
-        m_stmt = SQL_NULL_HSTMT;
+    auto stmt = m_stmt.exchange(SQL_NULL_HSTMT, std::memory_order_acq_rel);
+    if (stmt != SQL_NULL_HSTMT) {
+        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
     }
-    if (m_connected) {
+    if (m_connected.exchange(false, std::memory_order_acq_rel)) {
         SQLDisconnect(m_dbc);
-        m_connected = false;
     }
 }
 
@@ -132,37 +131,43 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
     std::lock_guard lock(m_executeMutex);
     ResultSet result;
 
-    if (!m_connected) [[unlikely]] {
+    if (!m_connected.load(std::memory_order_acquire)) [[unlikely]] {
         throw std::runtime_error("Not connected to database");
     }
 
     const auto startTime = std::chrono::high_resolution_clock::now();
 
-    if (m_stmt != SQL_NULL_HSTMT) {
-        SQLFreeHandle(SQL_HANDLE_STMT, m_stmt);
+    auto oldStmt = m_stmt.exchange(SQL_NULL_HSTMT, std::memory_order_acq_rel);
+    if (oldStmt != SQL_NULL_HSTMT) {
+        SQLFreeHandle(SQL_HANDLE_STMT, oldStmt);
     }
 
-    SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_STMT, m_dbc, &m_stmt);
+    SQLHSTMT stmt = SQL_NULL_HSTMT;
+    SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_STMT, m_dbc, &stmt);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
+        m_stmt.store(SQL_NULL_HSTMT, std::memory_order_release);
         storeODBCDiagnosticMessage(ret, SQL_HANDLE_DBC, m_dbc);
         throw std::runtime_error(m_lastError);
     }
 
+    // Publish new stmt so cancel() can see it immediately
+    m_stmt.store(stmt, std::memory_order_release);
+
     // Set query timeout to prevent indefinite hangs
     constexpr SQLULEN queryTimeout = 300;  // 5 minutes
-    SQLSetStmtAttr(m_stmt, SQL_ATTR_QUERY_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(queryTimeout)), 0);
+    SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(queryTimeout)), 0);
 
     auto sqlStr = std::string(sql);
-    ret = SQLExecDirectA(m_stmt, reinterpret_cast<SQLCHAR*>(sqlStr.data()), SQL_NTS);
+    ret = SQLExecDirectA(stmt, reinterpret_cast<SQLCHAR*>(sqlStr.data()), SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO && ret != SQL_NO_DATA) [[unlikely]] {
-        storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
+        storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, stmt);
         throw std::runtime_error(m_lastError);
     }
 
     SQLSMALLINT numCols = 0;
-    ret = SQLNumResultCols(m_stmt, &numCols);
+    ret = SQLNumResultCols(stmt, &numCols);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
-        storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
+        storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, stmt);
         throw std::runtime_error(std::string("Failed to get column count: ") + m_lastError);
     }
 
@@ -175,9 +180,9 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
         SQLSMALLINT decimalDigits = 0;
         SQLSMALLINT nullable = 0;
 
-        ret = SQLDescribeColW(m_stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen, &dataType, &colSize, &decimalDigits, &nullable);
+        ret = SQLDescribeColW(stmt, i, colName.data(), static_cast<SQLSMALLINT>(colName.size()), &colNameLen, &dataType, &colSize, &decimalDigits, &nullable);
         if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
-            storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
+            storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, stmt);
             throw std::runtime_error(std::string("Failed to describe column: ") + m_lastError);
         }
 
@@ -200,13 +205,13 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
     std::vector<SQLWCHAR> buffer(INITIAL_BUFFER_CHARS);
     SQLLEN indicator = 0;
 
-    while ((ret = SQLFetch(m_stmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+    while ((ret = SQLFetch(stmt)) == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         ResultRow row;
         row.values.reserve(static_cast<size_t>(numCols));
 
         for (SQLSMALLINT i = 1; i <= numCols; ++i) {
             // Use SQL_C_WCHAR to get Unicode data
-            ret = SQLGetData(m_stmt, i, SQL_C_WCHAR, buffer.data(), buffer.size() * sizeof(SQLWCHAR), &indicator);
+            ret = SQLGetData(stmt, i, SQL_C_WCHAR, buffer.data(), buffer.size() * sizeof(SQLWCHAR), &indicator);
             if (indicator == SQL_NULL_DATA) {
                 row.values.emplace_back();
             } else if (ret == SQL_SUCCESS_WITH_INFO && indicator > static_cast<SQLLEN>((buffer.size() - 1) * sizeof(SQLWCHAR))) {
@@ -219,7 +224,7 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
                 std::copy(buffer.begin(), buffer.begin() + static_cast<ptrdiff_t>(alreadyReadChars), largeBuffer.begin());
                 // Get remaining data
                 SQLLEN remainingIndicator = 0;
-                ret = SQLGetData(m_stmt, i, SQL_C_WCHAR, largeBuffer.data() + alreadyReadChars, (requiredChars - alreadyReadChars) * sizeof(SQLWCHAR), &remainingIndicator);
+                ret = SQLGetData(stmt, i, SQL_C_WCHAR, largeBuffer.data() + alreadyReadChars, (requiredChars - alreadyReadChars) * sizeof(SQLWCHAR), &remainingIndicator);
                 // Find actual string length
                 size_t strLen = 0;
                 for (size_t j = 0; j < largeBuffer.size() && largeBuffer[j] != 0; ++j) {
@@ -242,7 +247,7 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
     }
 
     SQLLEN rowCount = 0;
-    ret = SQLRowCount(m_stmt, &rowCount);
+    ret = SQLRowCount(stmt, &rowCount);
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         result.affectedRows = rowCount;
     } else {
@@ -257,9 +262,15 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
 }
 
 void SQLServerDriver::cancel() {
-    if (m_stmt != SQL_NULL_HSTMT) {
-        SQLCancel(m_stmt);
+    auto stmt = m_stmt.load(std::memory_order_acquire);
+    if (stmt != SQL_NULL_HSTMT) {
+        SQLCancel(stmt);
     }
+}
+
+std::string SQLServerDriver::getLastError() const {
+    std::lock_guard lock(m_executeMutex);
+    return m_lastError;
 }
 
 void SQLServerDriver::storeODBCDiagnosticMessage(SQLRETURN returnCode, SQLSMALLINT odbcHandleType, SQLHANDLE odbcHandle) {

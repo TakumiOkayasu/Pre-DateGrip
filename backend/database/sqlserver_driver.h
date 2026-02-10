@@ -6,6 +6,7 @@
 #include <sql.h>
 #include <sqlext.h>
 
+#include <atomic>
 #include <expected>
 #include <mutex>
 #include <string>
@@ -47,12 +48,12 @@ public:
     // IDatabaseDriver interface
     [[nodiscard]] bool connect(std::string_view connectionString) override;
     void disconnect() override;
-    [[nodiscard]] bool isConnected() const noexcept override { return m_connected; }
+    [[nodiscard]] bool isConnected() const noexcept override { return m_connected.load(std::memory_order_acquire); }
 
     [[nodiscard]] ResultSet execute(std::string_view sql) override;
     void cancel() override;
 
-    [[nodiscard]] std::string_view getLastError() const noexcept override { return m_lastError; }
+    [[nodiscard]] std::string getLastError() const override;
     [[nodiscard]] DriverType getType() const noexcept override { return DriverType::SQLServer; }
 
 private:
@@ -61,10 +62,10 @@ private:
 
     SQLHENV m_env = SQL_NULL_HENV;
     SQLHDBC m_dbc = SQL_NULL_HDBC;
-    SQLHSTMT m_stmt = SQL_NULL_HSTMT;
-    bool m_connected = false;
+    std::atomic<SQLHSTMT> m_stmt{SQL_NULL_HSTMT};
+    std::atomic<bool> m_connected{false};
     std::string m_lastError;
-    std::mutex m_executeMutex;  // Serializes concurrent execute()/disconnect() calls
+    mutable std::mutex m_executeMutex;  // Serializes concurrent execute()/disconnect()/getLastError() calls
 };
 
 }  // namespace velocitydb
