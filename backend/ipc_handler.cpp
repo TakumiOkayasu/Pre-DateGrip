@@ -3,11 +3,9 @@
 #include "contexts/settings_context.h"
 #include "contexts/utility_context.h"
 #include "database/async_query_executor.h"
-#include "database/connection_pool.h"
 #include "database/odbc_driver_detector.h"
 #include "database/query_history.h"
 #include "database/result_cache.h"
-#include "database/schema_inspector.h"
 #include "database/sqlserver_driver.h"
 #include "database/transaction_manager.h"
 #include "exporters/csv_exporter.h"
@@ -237,8 +235,6 @@ struct DatabaseConnectionParams {
 IPCHandler::IPCHandler()
     : m_settingsContext(std::make_unique<SettingsContext>())
     , m_utilityContext(std::make_unique<UtilityContext>())
-    , m_connectionPool(std::make_unique<ConnectionPool>())
-    , m_schemaInspector(std::make_unique<SchemaInspector>())
     , m_queryHistory(std::make_unique<QueryHistory>())
     , m_resultCache(std::make_unique<ResultCache>())
     , m_asyncExecutor(std::make_unique<AsyncQueryExecutor>()) {
@@ -246,6 +242,22 @@ IPCHandler::IPCHandler()
 }
 
 IPCHandler::~IPCHandler() = default;
+
+std::shared_ptr<SQLServerDriver> IPCHandler::getQueryDriver(const std::string& connectionId) {
+    std::shared_lock lock(m_connectionsMutex);
+    if (auto it = m_activeConnections.find(connectionId); it != m_activeConnections.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<SQLServerDriver> IPCHandler::getMetadataDriver(const std::string& connectionId) {
+    std::shared_lock lock(m_connectionsMutex);
+    if (auto it = m_metadataConnections.find(connectionId); it != m_metadataConnections.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
 
 void IPCHandler::registerRequestRoutes() {
     m_requestRoutes["connect"] = [this](std::string_view p) { return openDatabaseConnection(p); };
@@ -361,12 +373,20 @@ std::string IPCHandler::openDatabaseConnection(std::string_view params) {
         return JsonUtils::errorResponse(std::format("Connection failed: {}", driver->getLastError()));
     }
 
-    auto connectionId = std::format("conn_{}", m_connectionIdCounter++);
-    m_activeConnections[connectionId] = driver;
+    auto metadataDriver = std::make_shared<SQLServerDriver>();
+    if (!metadataDriver->connect(odbcString)) {
+        driver->disconnect();
+        return JsonUtils::errorResponse(std::format("Metadata connection failed: {}", metadataDriver->getLastError()));
+    }
 
-    // Store SSH tunnel if used
-    if (sshTunnel) {
-        m_sshTunnels[connectionId] = std::move(sshTunnel);
+    auto connectionId = std::format("conn_{}", m_connectionIdCounter++);
+    {
+        std::unique_lock lock(m_connectionsMutex);
+        m_activeConnections[connectionId] = driver;
+        m_metadataConnections[connectionId] = metadataDriver;
+        if (sshTunnel) {
+            m_sshTunnels[connectionId] = std::move(sshTunnel);
+        }
     }
 
     return JsonUtils::successResponse(std::format(R"({{"connectionId":"{}"}})", connectionId));
@@ -379,18 +399,32 @@ std::string IPCHandler::closeDatabaseConnection(std::string_view params) {
     }
     auto connectionId = *connectionIdResult;
 
-    if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
-        connection->second->disconnect();
-        m_activeConnections.erase(connection);
-        // Clean up TransactionManager for this connection
+    std::shared_ptr<SQLServerDriver> queryConn;
+    std::shared_ptr<SQLServerDriver> metadataConn;
+    std::unique_ptr<SshTunnel> sshTunnel;
+    {
+        std::unique_lock lock(m_connectionsMutex);
+        if (auto it = m_activeConnections.find(connectionId); it != m_activeConnections.end()) {
+            queryConn = std::move(it->second);
+            m_activeConnections.erase(it);
+        }
+        if (auto it = m_metadataConnections.find(connectionId); it != m_metadataConnections.end()) {
+            metadataConn = std::move(it->second);
+            m_metadataConnections.erase(it);
+        }
         m_transactionManagers.erase(connectionId);
+        if (auto it = m_sshTunnels.find(connectionId); it != m_sshTunnels.end()) {
+            sshTunnel = std::move(it->second);
+            m_sshTunnels.erase(it);
+        }
     }
-
-    // Close SSH tunnel if exists
-    if (auto tunnel = m_sshTunnels.find(connectionId); tunnel != m_sshTunnels.end()) {
-        tunnel->second->disconnect();
-        m_sshTunnels.erase(tunnel);
-    }
+    // Disconnect outside lock to avoid blocking other threads
+    if (queryConn)
+        queryConn->disconnect();
+    if (metadataConn)
+        metadataConn->disconnect();
+    if (sshTunnel)
+        sshTunnel->disconnect();
 
     return JsonUtils::successResponse("{}");
 }
@@ -420,7 +454,7 @@ std::string IPCHandler::verifyDatabaseConnection(std::string_view params) {
     log<LogLevel::DEBUG>("[IPC] Attempting ODBC connection...");
     log_flush();
 
-    SQLServerDriver driver;
+    SQLServerDriver driver{};
     if (driver.connect(odbcString)) {
         driver.disconnect();
         return JsonUtils::successResponse(R"({"success":true,"message":"Connection successful"})");
@@ -442,12 +476,10 @@ std::string IPCHandler::executeSQL(std::string_view params) {
         std::string connectionId = std::string(connectionIdResult.value());
         std::string sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         // Split SQL into multiple statements
         auto statements = SQLParser::splitStatements(sqlQuery);
@@ -588,8 +620,8 @@ std::string IPCHandler::cancelRunningQuery(std::string_view params) {
     }
     auto connectionId = *connectionIdResult;
 
-    if (auto connection = m_activeConnections.find(connectionId); connection != m_activeConnections.end()) {
-        connection->second->cancel();
+    if (auto driver = getQueryDriver(connectionId)) {
+        driver->cancel();
     }
 
     return JsonUtils::successResponse("{}");
@@ -606,13 +638,11 @@ std::string IPCHandler::fetchTableList(std::string_view params) {
     auto connectionId = *connectionIdResult;
 
     try {
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             velocitydb::log<LogLevel::ERROR_LEVEL>(std::format("IPCHandler::fetchTableList: Connection not found: {}", connectionId));
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
         velocitydb::log<LogLevel::DEBUG>(std::format("IPCHandler::fetchTableList: Driver found for connection: {}", connectionId));
 
         // Filter to only include user tables and views (exclude system tables)
@@ -687,24 +717,78 @@ std::string IPCHandler::fetchColumnDefinitions(std::string_view params) {
             return JsonUtils::errorResponse("Invalid table name");
         }
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
+        // Parse schema.table format
+        std::string tbl{tableName};
+        std::string schema = "dbo";
+        auto removeBrackets = [](std::string& s) {
+            if (!s.empty() && s.front() == '[' && s.back() == ']') {
+                s = s.substr(1, s.length() - 2);
+            }
+        };
+        if (auto dotPos = tbl.find('.'); dotPos != std::string::npos) {
+            schema = tbl.substr(0, dotPos);
+            tbl = tbl.substr(dotPos + 1);
+            removeBrackets(schema);
+        }
+        removeBrackets(tbl);
 
-        // Use SchemaInspector to get column definitions (includes MS_Description comments)
-        m_schemaInspector->setDriver(driver);
-        auto columns = m_schemaInspector->getColumns(tableName);
+        auto escapeSQL = [](const std::string& s) {
+            std::string escaped;
+            escaped.reserve(s.size());
+            for (char c : s) {
+                if (c == '\'')
+                    escaped += "''";
+                else
+                    escaped += c;
+            }
+            return escaped;
+        };
+
+        auto columnQuery = std::format(R"(
+            SELECT
+                c.name AS column_name,
+                t.name AS data_type,
+                c.max_length,
+                c.is_nullable,
+                CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS is_primary_key,
+                CAST(ep.value AS NVARCHAR(MAX)) AS comment
+            FROM sys.columns c
+            INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
+            INNER JOIN sys.objects o ON c.object_id = o.object_id
+            INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+            LEFT JOIN (
+                SELECT ic.object_id, ic.column_id
+                FROM sys.index_columns ic
+                INNER JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+                WHERE i.is_primary_key = 1
+            ) pk ON c.object_id = pk.object_id AND c.column_id = pk.column_id
+            LEFT JOIN sys.extended_properties ep ON ep.major_id = c.object_id
+                AND ep.minor_id = c.column_id
+                AND ep.class = 1
+                AND ep.name = 'MS_Description'
+            WHERE o.name = '{}' AND s.name = '{}'
+            ORDER BY c.column_id
+        )",
+                                       escapeSQL(tbl), escapeSQL(schema));
+
+        ResultSet columnResult = driver->execute(columnQuery);
 
         std::string jsonResponse = "[";
-        for (size_t i = 0; i < columns.size(); ++i) {
+        for (size_t i = 0; i < columnResult.rows.size(); ++i) {
             if (i > 0)
                 jsonResponse += ',';
-            const auto& col = columns[i];
-            jsonResponse += std::format(R"({{"name":"{}","type":"{}","size":{},"nullable":{},"isPrimaryKey":{},"comment":"{}"}})", JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.type),
-                                        col.size, col.nullable ? "true" : "false", col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.comment));
+            const auto& row = columnResult.rows[i];
+            if (row.values.size() >= 5) {
+                std::string comment = row.values.size() >= 6 ? row.values[5] : "";
+                jsonResponse += std::format(R"({{"name":"{}","type":"{}","size":{},"nullable":{},"isPrimaryKey":{},"comment":"{}"}})", JsonUtils::escapeString(row.values[0]),
+                                            JsonUtils::escapeString(row.values[1]), std::stoi(row.values[2]), row.values[3] == "1" ? "true" : "false", row.values[4] == "1" ? "true" : "false",
+                                            JsonUtils::escapeString(comment));
+            }
         }
         jsonResponse += ']';
 
@@ -722,12 +806,11 @@ std::string IPCHandler::fetchDatabaseList(std::string_view params) {
     auto connectionId = *connectionIdResult;
 
     try {
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
         ResultSet queryResult = driver->execute("SELECT name FROM sys.databases ORDER BY name");
 
         std::string jsonResponse = "[";
@@ -755,19 +838,23 @@ std::string IPCHandler::startTransaction(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
         // Create TransactionManager for this connection if not exists
-        if (m_transactionManagers.find(connectionId) == m_transactionManagers.end()) {
-            auto txManager = std::make_unique<TransactionManager>();
-            txManager->setDriver(connection->second);  // shared_ptr directly
-            m_transactionManagers[connectionId] = std::move(txManager);
+        TransactionManager* txPtr = nullptr;
+        {
+            std::unique_lock lock(m_connectionsMutex);
+            if (m_transactionManagers.find(connectionId) == m_transactionManagers.end()) {
+                auto txManager = std::make_unique<TransactionManager>();
+                txManager->setDriver(driver);
+                m_transactionManagers[connectionId] = std::move(txManager);
+            }
+            txPtr = m_transactionManagers[connectionId].get();
         }
-
-        m_transactionManagers[connectionId]->begin();
+        txPtr->begin();
         return JsonUtils::successResponse("{}");
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -785,12 +872,16 @@ std::string IPCHandler::commitTransaction(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
 
-        auto txManager = m_transactionManagers.find(connectionId);
-        if (txManager == m_transactionManagers.end()) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        TransactionManager* txPtr = nullptr;
+        {
+            std::shared_lock lock(m_connectionsMutex);
+            auto txManager = m_transactionManagers.find(connectionId);
+            if (txManager == m_transactionManagers.end()) [[unlikely]] {
+                return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+            }
+            txPtr = txManager->second.get();
         }
-
-        txManager->second->commit();
+        txPtr->commit();
         return JsonUtils::successResponse("{}");
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -808,12 +899,16 @@ std::string IPCHandler::rollbackTransaction(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
 
-        auto txManager = m_transactionManagers.find(connectionId);
-        if (txManager == m_transactionManagers.end()) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        TransactionManager* txPtr = nullptr;
+        {
+            std::shared_lock lock(m_connectionsMutex);
+            auto txManager = m_transactionManagers.find(connectionId);
+            if (txManager == m_transactionManagers.end()) [[unlikely]] {
+                return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+            }
+            txPtr = txManager->second.get();
         }
-
-        txManager->second->rollback();
+        txPtr->rollback();
         return JsonUtils::successResponse("{}");
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -835,15 +930,14 @@ std::string IPCHandler::exportToCSV(std::string_view params) {
         std::string filepath = std::string(filepathResult.value());
         std::string sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
         ResultSet queryResult = driver->execute(sqlQuery);
 
-        ExportOptions options;
+        ExportOptions options{};
         if (auto delimiter = doc["delimiter"].get_string(); !delimiter.error()) {
             options.delimiter = std::string(delimiter.value());
         }
@@ -854,7 +948,7 @@ std::string IPCHandler::exportToCSV(std::string_view params) {
             options.nullValue = std::string(nullValue.value());
         }
 
-        CSVExporter exporter;
+        CSVExporter exporter{};
         if (exporter.exportData(queryResult, filepath, options)) {
             return JsonUtils::successResponse(std::format(R"({{"filepath":"{}"}})", JsonUtils::escapeString(filepath)));
         }
@@ -879,20 +973,19 @@ std::string IPCHandler::exportToJSON(std::string_view params) {
         std::string filepath = std::string(filepathResult.value());
         std::string sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
         ResultSet queryResult = driver->execute(sqlQuery);
 
-        JSONExporter exporter;
+        JSONExporter exporter{};
         if (auto prettyPrint = doc["prettyPrint"].get_bool(); !prettyPrint.error()) {
             exporter.setPrettyPrint(prettyPrint.value());
         }
 
-        ExportOptions options;
+        ExportOptions options{};
         if (exporter.exportData(queryResult, filepath, options)) {
             return JsonUtils::successResponse(std::format(R"({{"filepath":"{}"}})", JsonUtils::escapeString(filepath)));
         }
@@ -917,16 +1010,15 @@ std::string IPCHandler::exportToExcel(std::string_view params) {
         std::string filepath = std::string(filepathResult.value());
         std::string sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto& driver = connection->second;
         ResultSet queryResult = driver->execute(sqlQuery);
 
-        ExcelExporter exporter;
-        ExportOptions options;
+        ExcelExporter exporter{};
+        ExportOptions options{};
         if (exporter.exportData(queryResult, filepath, options)) {
             return JsonUtils::successResponse(std::format(R"({{"filepath":"{}"}})", JsonUtils::escapeString(filepath)));
         }
@@ -1122,12 +1214,10 @@ std::string IPCHandler::getExecutionPlan(std::string_view params) {
             actualPlan = actual.value();
         }
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         // Build execution plan query for SQL Server
         std::string planQuery;
@@ -1188,12 +1278,11 @@ std::string IPCHandler::executeAsyncQuery(std::string_view params) {
         std::string connectionId = std::string(connectionIdResult.value());
         std::string sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto driver = connection->second;  // Copy shared_ptr to extend lifetime during async execution
+        // shared_ptr extends lifetime during async execution
         std::string queryId = m_asyncExecutor->submitQuery(driver, sqlQuery);
 
         return JsonUtils::successResponse(std::format(R"({{"queryId":"{}"}})", queryId));
@@ -1345,13 +1434,12 @@ std::string IPCHandler::filterResultSet(std::string_view params) {
         auto filterType = std::string(filterTypeResult.value());
         auto filterValue = std::string(filterValueResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
         // First execute the query to get data
-        auto& driver = connection->second;
         ResultSet queryResult = driver->execute(sqlQuery);
 
         // Apply SIMD-optimized filter
@@ -1868,12 +1956,12 @@ std::string IPCHandler::searchObjects(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto pattern = std::string(patternResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        SearchOptions options;
+        SearchOptions options{};
         if (auto val = doc["searchTables"].get_bool(); !val.error())
             options.searchTables = val.value();
         if (auto val = doc["searchViews"].get_bool(); !val.error())
@@ -1889,7 +1977,7 @@ std::string IPCHandler::searchObjects(std::string_view params) {
         if (auto val = doc["maxResults"].get_int64(); !val.error())
             options.maxResults = static_cast<int>(val.value());
 
-        auto results = m_utilityContext->globalSearch().searchObjects(connection->second.get(), pattern, options);
+        auto results = m_utilityContext->globalSearch().searchObjects(driver.get(), pattern, options);
 
         std::string json = "[";
         for (size_t i = 0; i < results.size(); ++i) {
@@ -1927,12 +2015,12 @@ std::string IPCHandler::quickSearch(std::string_view params) {
         if (auto val = doc["limit"].get_int64(); !val.error())
             limit = static_cast<int>(val.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        auto results = m_utilityContext->globalSearch().quickSearch(connection->second.get(), prefix, limit);
+        auto results = m_utilityContext->globalSearch().quickSearch(driver.get(), prefix, limit);
 
         std::string json = "[";
         for (size_t i = 0; i < results.size(); ++i) {
@@ -1961,12 +2049,10 @@ std::string IPCHandler::fetchIndexes(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto indexQuery = std::format(R"(
             SELECT
@@ -2048,12 +2134,10 @@ std::string IPCHandler::fetchConstraints(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto constraintQuery = std::format(R"(
             SELECT
@@ -2136,12 +2220,10 @@ std::string IPCHandler::fetchForeignKeys(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto fkQuery = std::format(R"(
             SELECT
@@ -2252,12 +2334,10 @@ std::string IPCHandler::fetchReferencingForeignKeys(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto refFkQuery = std::format(R"(
             SELECT
@@ -2368,12 +2448,10 @@ std::string IPCHandler::fetchTriggers(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto triggerQuery = std::format(R"(
             SELECT
@@ -2460,12 +2538,10 @@ std::string IPCHandler::fetchTableMetadata(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         auto metadataQuery = std::format(R"(
             SELECT
@@ -2521,12 +2597,10 @@ std::string IPCHandler::fetchTableDDL(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         // Build CREATE TABLE DDL from column information
         auto columnQuery = std::format(R"(
@@ -2650,12 +2724,10 @@ std::string IPCHandler::executeSQLPaginated(std::string_view params) {
             }
         }
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         // Build paginated query using SQL Server OFFSET/FETCH
         // Note: OFFSET/FETCH requires ORDER BY clause
@@ -2690,12 +2762,10 @@ std::string IPCHandler::getRowCount(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto sqlQuery = std::string(sqlQueryResult.value());
 
-        auto connection = m_activeConnections.find(connectionId);
-        if (connection == m_activeConnections.end()) [[unlikely]] {
+        auto driver = getQueryDriver(connectionId);
+        if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
-
-        auto& driver = connection->second;
 
         // Optimize COUNT query for better performance:
         // 1. Use COUNT_BIG(*) instead of COUNT(*) for large tables

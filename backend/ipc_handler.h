@@ -1,8 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <expected>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -10,8 +12,6 @@
 namespace velocitydb {
 
 class SQLServerDriver;
-class ConnectionPool;
-class SchemaInspector;
 class TransactionManager;
 class QueryHistory;
 class ResultCache;
@@ -132,16 +132,19 @@ private:
     std::unique_ptr<UtilityContext> m_utilityContext;
 
     // Database-related members (to be migrated to DatabaseContext)
-    std::unique_ptr<ConnectionPool> m_connectionPool;
-    std::unique_ptr<SchemaInspector> m_schemaInspector;
     std::unordered_map<std::string, std::unique_ptr<TransactionManager>> m_transactionManagers;
     std::unique_ptr<QueryHistory> m_queryHistory;
     std::unique_ptr<ResultCache> m_resultCache;
     std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;
 
     std::unordered_map<std::string, std::shared_ptr<SQLServerDriver>> m_activeConnections;
+    std::unordered_map<std::string, std::shared_ptr<SQLServerDriver>> m_metadataConnections;
+    mutable std::shared_mutex m_connectionsMutex;
     std::unordered_map<std::string, std::unique_ptr<SshTunnel>> m_sshTunnels;
-    int m_connectionIdCounter = 1;
+    std::atomic<int> m_connectionIdCounter{1};
+
+    [[nodiscard]] std::shared_ptr<SQLServerDriver> getQueryDriver(const std::string& connectionId);
+    [[nodiscard]] std::shared_ptr<SQLServerDriver> getMetadataDriver(const std::string& connectionId);
 };
 
 }  // namespace velocitydb

@@ -86,7 +86,7 @@ public:
     void set_disable_cache(bool disable) { m_disableCache = disable; }
 
     ~webview() {
-        stopWorker();
+        stopWorkerPool();
         if (m_webviewController) {
             m_webviewController->Close();
         }
@@ -382,8 +382,8 @@ private:
 )";
         m_webviewWindow->AddScriptToExecuteOnDocumentCreated(script.c_str(), nullptr);
 
-        // Start worker thread for async IPC processing
-        startWorker();
+        // Start worker thread pool for async IPC processing
+        startWorkerPool();
 
         // Handle messages from JavaScript - dispatch to worker thread
         m_webviewWindow->add_WebMessageReceived(
@@ -469,7 +469,7 @@ private:
 
         case WM_DESTROY:
             if (self) {
-                self->stopWorker();
+                self->stopWorkerPool();
             }
             PostQuitMessage(0);
             return 0;
@@ -478,30 +478,38 @@ private:
         return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
-    void startWorker() {
+    void startWorkerPool() {
+        static constexpr size_t WORKER_POOL_SIZE = 4;
         m_workerRunning = true;
-        m_workerThread = std::thread([this]() {
-            while (m_workerRunning) {
-                std::function<void()> task;
-                {
-                    std::unique_lock lock(m_taskMutex);
-                    m_taskCv.wait(lock, [this] { return !m_taskQueue.empty() || !m_workerRunning; });
-                    if (!m_workerRunning && m_taskQueue.empty())
-                        break;
-                    task = std::move(m_taskQueue.front());
-                    m_taskQueue.pop();
+        m_workerThreads.reserve(WORKER_POOL_SIZE);
+        for (size_t i = 0; i < WORKER_POOL_SIZE; ++i) {
+            m_workerThreads.emplace_back([this]() {
+                while (m_workerRunning) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock lock(m_taskMutex);
+                        m_taskCv.wait(lock, [this] { return !m_taskQueue.empty() || !m_workerRunning; });
+                        if (!m_workerRunning && m_taskQueue.empty())
+                            break;
+                        task = std::move(m_taskQueue.front());
+                        m_taskQueue.pop();
+                    }
+                    task();
                 }
-                task();
-            }
-        });
+            });
+        }
     }
 
-    void stopWorker() {
+    void stopWorkerPool() {
+        if (m_workerThreads.empty()) return;
         m_workerRunning = false;
         m_taskCv.notify_all();
-        if (m_workerThread.joinable()) {
-            m_workerThread.join();
+        for (auto& thread : m_workerThreads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
         }
+        m_workerThreads.clear();
     }
 
     void dispatchToWorker(std::function<void()> task) {
@@ -525,8 +533,8 @@ private:
     int m_hints = WEBVIEW_HINT_NONE;
     std::map<std::string, std::function<std::string(const std::string&)>> m_bindings;
 
-    // Worker thread for async IPC processing
-    std::thread m_workerThread;
+    // Worker thread pool for async IPC processing
+    std::vector<std::thread> m_workerThreads;
     std::queue<std::function<void()>> m_taskQueue;
     std::mutex m_taskMutex;
     std::condition_variable m_taskCv;
