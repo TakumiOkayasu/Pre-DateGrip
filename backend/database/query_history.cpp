@@ -156,7 +156,7 @@ bool QueryHistory::load(std::string_view filepath) {
 
     try {
         simdjson::dom::parser parser;
-        simdjson::dom::element doc = parser.parse(jsonContent);
+        auto doc = parser.parse(jsonContent);
 
         if (!doc.is_array()) {
             return false;
@@ -164,7 +164,7 @@ bool QueryHistory::load(std::string_view filepath) {
 
         m_history.clear();
 
-        for (simdjson::dom::element item : doc.get_array()) {
+        for (auto item : doc.get_array()) {
             HistoryItem historyItem;
 
             if (auto id = item["id"].get_string(); !id.error()) {

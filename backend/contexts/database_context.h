@@ -1,8 +1,11 @@
 #pragma once
 
+#include "../interfaces/database_context.h"
+
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -11,8 +14,6 @@
 namespace velocitydb {
 
 class ConnectionRegistry;
-class IDatabaseDriver;
-class ISchemaProvider;
 class SchemaInspector;
 class AsyncQueryExecutor;
 class TransactionManager;
@@ -23,61 +24,63 @@ struct TableInfo;
 struct ColumnInfo;
 
 /// Context for database connection and query operations
-class DatabaseContext {
+class DatabaseContext : public IDatabaseContext {
 public:
     DatabaseContext();
-    ~DatabaseContext();
+    ~DatabaseContext() override;
 
     DatabaseContext(const DatabaseContext&) = delete;
     DatabaseContext& operator=(const DatabaseContext&) = delete;
-    DatabaseContext(DatabaseContext&&) noexcept;
-    DatabaseContext& operator=(DatabaseContext&&) noexcept;
+    DatabaseContext(DatabaseContext&&) = delete;
+    DatabaseContext& operator=(DatabaseContext&&) = delete;
 
-    // Connection management
-    // Note: connect() and testConnection() are handled by IPCHandler during migration
-    void disconnect(std::string_view connectionId);
+    // IDatabaseContext implementation (IPC handle methods)
+    // Connection lifecycle
+    [[nodiscard]] std::string handleConnect(std::string_view params) override;
+    [[nodiscard]] std::string handleDisconnect(std::string_view params) override;
+    [[nodiscard]] std::string handleTestConnection(std::string_view params) override;
 
     // Query execution
-    [[nodiscard]] std::expected<ResultSet, std::string> execute(std::string_view connectionId, std::string_view sql);
+    [[nodiscard]] std::string handleExecuteQuery(std::string_view params) override;
+    [[nodiscard]] std::string handleExecuteQueryPaginated(std::string_view params) override;
+    [[nodiscard]] std::string handleGetRowCount(std::string_view params) override;
+    [[nodiscard]] std::string handleCancelQuery(std::string_view params) override;
 
-    [[nodiscard]] std::expected<ResultSet, std::string> executePaginated(std::string_view connectionId, std::string_view sql, int offset, int limit);
+    // Async queries
+    [[nodiscard]] std::string handleExecuteAsyncQuery(std::string_view params) override;
+    [[nodiscard]] std::string handleGetAsyncQueryResult(std::string_view params) override;
+    [[nodiscard]] std::string handleCancelAsyncQuery(std::string_view params) override;
+    [[nodiscard]] std::string handleGetActiveQueries(std::string_view params) override;
 
-    [[nodiscard]] std::expected<int64_t, std::string> getRowCount(std::string_view connectionId, std::string_view tableName);
+    // Schema
+    [[nodiscard]] std::string handleGetDatabases(std::string_view params) override;
+    [[nodiscard]] std::string handleGetTables(std::string_view params) override;
+    [[nodiscard]] std::string handleGetColumns(std::string_view params) override;
+    [[nodiscard]] std::string handleGetIndexes(std::string_view params) override;
+    [[nodiscard]] std::string handleGetConstraints(std::string_view params) override;
+    [[nodiscard]] std::string handleGetForeignKeys(std::string_view params) override;
+    [[nodiscard]] std::string handleGetReferencingForeignKeys(std::string_view params) override;
+    [[nodiscard]] std::string handleGetTriggers(std::string_view params) override;
+    [[nodiscard]] std::string handleGetTableMetadata(std::string_view params) override;
+    [[nodiscard]] std::string handleGetTableDDL(std::string_view params) override;
+    [[nodiscard]] std::string handleGetExecutionPlan(std::string_view params) override;
 
-    void cancelQuery(std::string_view connectionId);
+    // Transactions
+    [[nodiscard]] std::string handleBeginTransaction(std::string_view params) override;
+    [[nodiscard]] std::string handleCommitTransaction(std::string_view params) override;
+    [[nodiscard]] std::string handleRollbackTransaction(std::string_view params) override;
 
-    // Async query operations
-    [[nodiscard]] std::expected<std::string, std::string> executeAsync(std::string_view connectionId, std::string_view sql);
+    // Cache & History
+    [[nodiscard]] std::string handleGetCacheStats(std::string_view params) override;
+    [[nodiscard]] std::string handleClearCache(std::string_view params) override;
+    [[nodiscard]] std::string handleGetQueryHistory(std::string_view params) override;
 
-    [[nodiscard]] std::expected<std::string, std::string> getAsyncResult(std::string_view queryId);
-    void cancelAsyncQuery(std::string_view queryId);
-    [[nodiscard]] std::string getActiveQueries();
+    // Filter
+    [[nodiscard]] std::string handleFilterResultSet(std::string_view params) override;
 
-    // Schema operations
-    [[nodiscard]] std::expected<std::vector<std::string>, std::string> getDatabases(std::string_view connectionId);
-
-    [[nodiscard]] std::expected<std::vector<TableInfo>, std::string> getTables(std::string_view connectionId, std::string_view database);
-
-    [[nodiscard]] std::expected<std::vector<ColumnInfo>, std::string> getColumns(std::string_view connectionId, std::string_view tableName);
-
-    [[nodiscard]] std::expected<std::string, std::string> getTableDDL(std::string_view connectionId, std::string_view tableName);
-
-    // Transaction operations
-    [[nodiscard]] std::expected<void, std::string> beginTransaction(std::string_view connectionId);
-    [[nodiscard]] std::expected<void, std::string> commitTransaction(std::string_view connectionId);
-    [[nodiscard]] std::expected<void, std::string> rollbackTransaction(std::string_view connectionId);
-
-    // Cache operations
-    [[nodiscard]] std::string getCacheStats();
-    void clearCache();
-
-    // Query history
-    [[nodiscard]] std::string getQueryHistory();
-    void addToHistory(std::string_view sql, bool success, int64_t executionTimeMs);
-
-    // Connection registry access (for migration)
-    [[nodiscard]] ConnectionRegistry& getRegistry() { return *m_registry; }
-    [[nodiscard]] const ConnectionRegistry& getRegistry() const { return *m_registry; }
+    // Driver access (for cross-context use)
+    [[nodiscard]] std::shared_ptr<SQLServerDriver> getQueryDriver(std::string_view connectionId) override;
+    [[nodiscard]] std::shared_ptr<SQLServerDriver> getMetadataDriver(std::string_view connectionId) override;
 
 private:
     std::unique_ptr<ConnectionRegistry> m_registry;
@@ -85,6 +88,7 @@ private:
     std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;
     std::unique_ptr<ResultCache> m_resultCache;
     std::unique_ptr<QueryHistory> m_queryHistory;
+    std::mutex m_txMutex;
     std::unordered_map<std::string, std::unique_ptr<TransactionManager>> m_transactionManagers;
 };
 

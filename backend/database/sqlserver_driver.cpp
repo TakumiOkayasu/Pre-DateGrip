@@ -21,7 +21,7 @@ static std::string wcharToUtf8(const wchar_t* wstr, size_t len) {
         return {};
     }
 
-    std::string utf8Str(static_cast<size_t>(utf8Len), '\0');
+    auto utf8Str = std::string(static_cast<size_t>(utf8Len), '\0');
     WideCharToMultiByte(CP_UTF8, 0, wstr, static_cast<int>(len), utf8Str.data(), utf8Len, nullptr, nullptr);
     return utf8Str;
 }
@@ -68,7 +68,7 @@ bool SQLServerDriver::connect(std::string_view connectionString) {
     SQLSetConnectAttr(m_dbc, SQL_ATTR_LOGIN_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(loginTimeout)), 0);
     SQLSetConnectAttr(m_dbc, SQL_ATTR_CONNECTION_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(loginTimeout)), 0);
 
-    std::string connStr(connectionString);
+    auto connStr = std::string(connectionString);
     SQLRETURN ret = SQLDriverConnectA(m_dbc, nullptr, reinterpret_cast<SQLCHAR*>(connStr.data()), SQL_NTS, outConnectionString.data(), static_cast<SQLSMALLINT>(outConnectionString.size()),
                                       &outConnectionStringLen, SQL_DRIVER_NOPROMPT);
 
@@ -150,7 +150,7 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
     constexpr SQLULEN queryTimeout = 300;  // 5 minutes
     SQLSetStmtAttr(m_stmt, SQL_ATTR_QUERY_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(queryTimeout)), 0);
 
-    std::string sqlStr(sql);
+    auto sqlStr = std::string(sql);
     ret = SQLExecDirectA(m_stmt, reinterpret_cast<SQLCHAR*>(sqlStr.data()), SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO && ret != SQL_NO_DATA) [[unlikely]] {
         storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, m_stmt);
@@ -183,7 +183,7 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
         // Use (std::min) to avoid Windows min macro interference
         colNameLen = (std::min)(colNameLen, static_cast<SQLSMALLINT>(colName.size() - 1));
 
-        std::string columnName = wcharToUtf8(reinterpret_cast<wchar_t*>(colName.data()), static_cast<size_t>(colNameLen));
+        auto columnName = wcharToUtf8(reinterpret_cast<wchar_t*>(colName.data()), static_cast<size_t>(colNameLen));
 
         // If column name is empty, use a default name (e.g., "Column1", "Column2")
         if (columnName.empty()) {

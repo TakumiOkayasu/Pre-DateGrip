@@ -89,7 +89,7 @@ std::string AsyncQueryExecutor::submitQuery(std::shared_ptr<SQLServerDriver> dri
         std::string sqlCopy(sql);
         task->future = std::async(std::launch::async, [driver, sqlCopy, task]() -> QueryResultVariant {
             try {
-                ResultSet result = driver->execute(sqlCopy);
+                auto result = driver->execute(sqlCopy);
                 task->endTime = std::chrono::steady_clock::now();
                 task->status = QueryStatus::Completed;
                 return result;

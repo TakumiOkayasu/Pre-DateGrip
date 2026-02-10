@@ -1,7 +1,9 @@
 #include "global_search.h"
 
 #include <algorithm>
+#include <cctype>
 #include <format>
+#include <ranges>
 
 namespace velocitydb {
 
@@ -13,7 +15,7 @@ std::vector<SearchResult> GlobalSearch::searchObjects(SQLServerDriver* driver, c
     }
 
     std::string query = buildSearchQuery(pattern, options);
-    ResultSet queryResult = driver->execute(query);
+    auto queryResult = driver->execute(query);
 
     for (const auto& row : queryResult.rows) {
         if (results.size() >= static_cast<size_t>(options.maxResults)) {
@@ -66,7 +68,7 @@ std::vector<std::string> GlobalSearch::quickSearch(SQLServerDriver* driver, cons
     )",
                                     limit, prefix, prefix);
 
-    ResultSet queryResult = driver->execute(query);
+    auto queryResult = driver->execute(query);
 
     results.reserve(queryResult.rows.size());
     for (const auto& row : queryResult.rows) {
@@ -156,10 +158,10 @@ bool GlobalSearch::matchesPattern(const std::string& text, const std::string& pa
     }
 
     // Case-insensitive search
-    std::string lowerText = text;
-    std::string lowerPattern = pattern;
-    std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
-    std::transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(), ::tolower);
+    auto lowerText = text;
+    auto lowerPattern = pattern;
+    std::ranges::transform(lowerText, lowerText.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(lowerPattern, lowerPattern.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return lowerText.find(lowerPattern) != std::string::npos;
 }
 

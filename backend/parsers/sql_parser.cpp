@@ -2,28 +2,18 @@
 
 #include <algorithm>
 #include <cctype>
+#include <ranges>
 #include <regex>
 
 namespace velocitydb {
 
 std::string_view SQLParser::trim(std::string_view str) {
-    // Trim leading whitespace
-    auto start = str.begin();
-    while (start != str.end() && std::isspace(static_cast<unsigned char>(*start))) {
-        ++start;
-    }
-
-    // Trim trailing whitespace
-    auto end = str.end();
-    while (end != start && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
-        --end;
-    }
-
-    // Calculate offset and length
-    size_t offset = start - str.begin();
-    size_t length = end - start;
-
-    return str.substr(offset, length);
+    constexpr auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+    auto start = std::ranges::find_if_not(str, isSpace);
+    auto end = std::ranges::find_if_not(str | std::views::reverse, isSpace).base();
+    if (start >= end)
+        return {};
+    return str.substr(start - str.begin(), end - start);
 }
 
 std::string SQLParser::toUpper(std::string_view str) {
@@ -44,14 +34,14 @@ ParsedSQL SQLParser::parseSQL(std::string_view sql) {
     }
 
     // Convert to uppercase for case-insensitive matching
-    std::string upperSQL = toUpper(trimmedSQL);
+    auto upperSQL = toUpper(trimmedSQL);
 
     // Check for USE statement using regex
     // Pattern: USE <database_name> (with optional semicolon)
     static const std::regex usePattern(R"(^\s*USE\s+(\[?[\w]+\]?)\s*;?\s*$)", std::regex::icase);
 
     std::smatch match;
-    std::string sqlStr(trimmedSQL);
+    auto sqlStr = std::string(trimmedSQL);
 
     if (std::regex_match(sqlStr, match, usePattern)) {
         result.type = "USE";
@@ -96,38 +86,40 @@ ParsedSQL SQLParser::parseSQL(std::string_view sql) {
 }
 
 bool SQLParser::isUseStatement(std::string_view sql) {
-    ParsedSQL parsed = parseSQL(sql);
+    auto parsed = parseSQL(sql);
     return parsed.type == "USE";
 }
 
 std::string SQLParser::extractDatabaseName(std::string_view sql) {
-    ParsedSQL parsed = parseSQL(sql);
+    auto parsed = parseSQL(sql);
     return parsed.database;
+}
+
+bool SQLParser::isReadOnlyQuery(std::string_view sql) {
+    auto trimmed = trim(sql);
+    constexpr auto ci = [](unsigned char a, unsigned char b) constexpr {
+        constexpr auto lo = [](unsigned char c) constexpr -> unsigned char { return (c >= 'A' && c <= 'Z') ? static_cast<unsigned char>(c + 32) : c; };
+        return lo(a) == lo(b);
+    };
+    using namespace std::string_view_literals;
+    if (std::ranges::starts_with(trimmed, "select"sv, ci))
+        return true;
+    if (!std::ranges::starts_with(trimmed, "with"sv, ci))
+        return false;
+    // WITH ... may be CTE + DML. Check that no INSERT/UPDATE/DELETE/MERGE appears outside string literals.
+    // Simple heuristic: find last top-level SELECT/INSERT/UPDATE/DELETE/MERGE keyword.
+    auto upper = toUpper(trimmed);
+    constexpr std::string_view dmlKeywords[] = {"INSERT", "UPDATE", "DELETE", "MERGE"};
+    return std::ranges::none_of(dmlKeywords, [&](auto kw) { return upper.find(kw) != std::string::npos; });
 }
 
 std::vector<std::string> SQLParser::splitStatements(std::string_view sql) {
     std::vector<std::string> statements;
-    std::string current;
-
-    for (char ch : sql) {
-        if (ch == ';') {
-            // Found semicolon - end of statement
-            std::string_view trimmed = trim(current);
-            if (!trimmed.empty()) {
-                statements.push_back(std::string(trimmed));
-            }
-            current.clear();
-        } else {
-            current += ch;
-        }
+    for (auto part : sql | std::views::split(';')) {
+        auto trimmed = trim({part.begin(), part.end()});
+        if (!trimmed.empty())
+            statements.emplace_back(trimmed);
     }
-
-    // Add last statement if no trailing semicolon
-    std::string_view trimmed = trim(current);
-    if (!trimmed.empty()) {
-        statements.push_back(std::string(trimmed));
-    }
-
     return statements;
 }
 

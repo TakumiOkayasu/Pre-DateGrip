@@ -23,11 +23,14 @@ set(LIB_SOURCES
     database/query_history.cpp
     database/transaction_manager.cpp
     database/odbc_driver_detector.cpp
+    database/connection_utils.cpp
     # Contexts
     contexts/database_context.cpp
     contexts/export_context.cpp
     contexts/settings_context.cpp
     contexts/utility_context.cpp
+    contexts/io_context.cpp
+    contexts/system_context.cpp
     # Parsers
     parsers/a5er_parser.cpp
     parsers/sql_formatter.cpp
@@ -75,11 +78,21 @@ set(HEADERS
     database/query_history.h
     database/transaction_manager.h
     database/odbc_driver_detector.h
+    database/connection_utils.h
+    # Interfaces (Context)
+    interfaces/system_context.h
+    interfaces/database_context.h
+    interfaces/export_context.h
+    interfaces/settings_context.h
+    interfaces/utility_context.h
+    interfaces/io_context.h
     # Contexts
     contexts/database_context.h
     contexts/export_context.h
     contexts/settings_context.h
     contexts/utility_context.h
+    contexts/io_context.h
+    contexts/system_context.h
     # Parsers
     parsers/a5er_parser.h
     parsers/sql_formatter.h

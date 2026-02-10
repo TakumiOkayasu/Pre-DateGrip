@@ -2,6 +2,7 @@
 
 #include "database/sqlserver_driver.h"
 
+#include <algorithm>
 #include <format>
 #include <sstream>
 
@@ -17,16 +18,8 @@ std::string JsonUtils::errorResponse(std::string_view message) {
 
 std::string JsonUtils::escapeString(std::string_view str) {
     // Fast path: check if string needs escaping
-    bool needsEscape = false;
-    for (char c : str) {
-        if (c == '"' || c == '\\' || c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || static_cast<unsigned char>(c) < 0x20) {
-            needsEscape = true;
-            break;
-        }
-    }
-
-    // If no special characters, return as-is (avoid allocation)
-    if (!needsEscape) {
+    constexpr auto needsEscaping = [](char c) { return c == '"' || c == '\\' || c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || static_cast<unsigned char>(c) < 0x20; };
+    if (!std::ranges::any_of(str, needsEscaping)) {
         return std::string(str);
     }
 

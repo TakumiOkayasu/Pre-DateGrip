@@ -31,6 +31,9 @@ public:
     /// @return The database name, or empty string if not a valid USE statement
     [[nodiscard]] static std::string extractDatabaseName(std::string_view sql);
 
+    /// Check if the SQL starts with SELECT or WITH (i.e. read-only query).
+    [[nodiscard]] static bool isReadOnlyQuery(std::string_view sql);
+
     /// Split SQL text into individual statements separated by semicolons
     /// @param sql The SQL text containing one or more statements
     /// @return Vector of individual SQL statements (trimmed, non-empty)

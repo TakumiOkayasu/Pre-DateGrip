@@ -15,7 +15,7 @@ namespace {
 std::string g_cachedDriver;
 bool g_driverDetected = false;
 
-bool isDriverAvailable(const std::string& driverName) {
+bool isDriverAvailable(std::string_view driverName) {
     SQLHENV env = SQL_NULL_HENV;
 
     if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS) {
@@ -37,7 +37,7 @@ bool isDriverAvailable(const std::string& driverName) {
 
     while (SQLDriversA(env, direction, driverDesc.data(), static_cast<SQLSMALLINT>(driverDesc.size()), &descLen, driverAttr.data(), static_cast<SQLSMALLINT>(driverAttr.size()), &attrLen) ==
            SQL_SUCCESS) {
-        if (std::string(reinterpret_cast<char*>(driverDesc.data())) == driverName) {
+        if (std::string_view(reinterpret_cast<char*>(driverDesc.data())) == driverName) {
             found = true;
             break;
         }
@@ -56,7 +56,7 @@ std::string detectBestSqlServerDriver() {
     }
 
     // Try drivers in order of preference (newest first)
-    static const std::array<std::string, 4> drivers = {"ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server", "ODBC Driver 13 for SQL Server", "SQL Server"};
+    static constexpr std::array drivers = {"ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server", "ODBC Driver 13 for SQL Server", "SQL Server"};
 
     for (const auto& driver : drivers) {
         if (isDriverAvailable(driver)) {
@@ -76,7 +76,7 @@ std::string buildDriverConnectionPrefix(std::string_view server, std::string_vie
     auto driver = detectBestSqlServerDriver();
     // ODBC Driver 18+ requires explicit SSL settings
     // TrustServerCertificate=yes allows self-signed certificates (common in dev environments)
-    if (driver.find("18") != std::string::npos || driver.find("19") != std::string::npos || driver.find("20") != std::string::npos) {
+    if (driver.contains("18") || driver.contains("19") || driver.contains("20")) {
         return std::format("Driver={{{}}};Server={};Database={};Encrypt=yes;TrustServerCertificate=yes;", driver, server, database);
     }
     return std::format("Driver={{{}}};Server={};Database={};", driver, server, database);

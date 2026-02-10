@@ -1,31 +1,18 @@
 #pragma once
 
-#include <atomic>
-#include <expected>
 #include <functional>
-#include <memory>
-#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
 namespace velocitydb {
 
-class SQLServerDriver;
-class TransactionManager;
-class QueryHistory;
-class ResultCache;
-class AsyncQueryExecutor;
-class SshTunnel;
+class ISystemContext;
 
-// Contexts
-class SettingsContext;
-class UtilityContext;
-
-/// Dispatches IPC requests from the frontend to appropriate backend operations
+/// Thin dispatcher: routes IPC requests to context methods via ISystemContext.
 class IPCHandler {
 public:
-    IPCHandler();
+    explicit IPCHandler(ISystemContext& ctx);
     ~IPCHandler();
 
     IPCHandler(const IPCHandler&) = delete;
@@ -37,114 +24,11 @@ public:
     [[nodiscard]] std::string dispatchRequest(std::string_view request);
 
 private:
-    void registerRequestRoutes();
+    void registerRoutes();
 
-    using RequestProcessor = std::function<std::string(std::string_view)>;
-    std::unordered_map<std::string, RequestProcessor> m_requestRoutes;
-
-    // Database connection operations
-    [[nodiscard]] std::string openDatabaseConnection(std::string_view params);
-    [[nodiscard]] std::string closeDatabaseConnection(std::string_view params);
-    [[nodiscard]] std::string verifyDatabaseConnection(std::string_view params);
-
-    // Query execution operations
-    [[nodiscard]] std::string executeSQL(std::string_view params);
-    [[nodiscard]] std::string executeSQLPaginated(std::string_view params);
-    [[nodiscard]] std::string getRowCount(std::string_view params);
-    [[nodiscard]] std::string cancelRunningQuery(std::string_view params);
-
-    // Async query operations
-    [[nodiscard]] std::string executeAsyncQuery(std::string_view params);
-    [[nodiscard]] std::string getAsyncQueryResult(std::string_view params);
-    [[nodiscard]] std::string cancelAsyncQuery(std::string_view params);
-    [[nodiscard]] std::string getActiveQueries(std::string_view params);
-
-    // Schema retrieval operations
-    [[nodiscard]] std::string fetchTableList(std::string_view params);
-    [[nodiscard]] std::string fetchColumnDefinitions(std::string_view params);
-    [[nodiscard]] std::string fetchDatabaseList(std::string_view params);
-
-    // Transaction control operations
-    [[nodiscard]] std::string startTransaction(std::string_view params);
-    [[nodiscard]] std::string commitTransaction(std::string_view params);
-    [[nodiscard]] std::string rollbackTransaction(std::string_view params);
-
-    // Export operations
-    [[nodiscard]] std::string exportToCSV(std::string_view params);
-    [[nodiscard]] std::string exportToJSON(std::string_view params);
-    [[nodiscard]] std::string exportToExcel(std::string_view params);
-
-    // Utility operations
-    [[nodiscard]] std::string formatSQLQuery(std::string_view params);
-    [[nodiscard]] std::string uppercaseKeywords(std::string_view params);
-    [[nodiscard]] std::string parseA5ERFile(std::string_view params);
-    [[nodiscard]] std::string parseA5ERContent(std::string_view params);
-    [[nodiscard]] std::string retrieveQueryHistory(std::string_view params);
-    [[nodiscard]] std::string getExecutionPlan(std::string_view params);
-    [[nodiscard]] std::string writeFrontendLog(std::string_view params);
-
-    // Cache operations
-    [[nodiscard]] std::string getCacheStats(std::string_view params);
-    [[nodiscard]] std::string clearCache(std::string_view params);
-
-    // Filter operations
-    [[nodiscard]] std::string filterResultSet(std::string_view params);
-
-    // Settings operations
-    [[nodiscard]] std::string getSettings(std::string_view params);
-    [[nodiscard]] std::string updateSettings(std::string_view params);
-    [[nodiscard]] std::string getConnectionProfiles(std::string_view params);
-    [[nodiscard]] std::string saveConnectionProfile(std::string_view params);
-    [[nodiscard]] std::string deleteConnectionProfile(std::string_view params);
-    [[nodiscard]] std::string getProfilePassword(std::string_view params);
-    [[nodiscard]] std::string getSshPassword(std::string_view params);
-    [[nodiscard]] std::string getSshKeyPassphrase(std::string_view params);
-
-    // Session operations
-    [[nodiscard]] std::string getSessionState(std::string_view params);
-    [[nodiscard]] std::string saveSessionState(std::string_view params);
-
-    // Search operations
-    [[nodiscard]] std::string searchObjects(std::string_view params);
-    [[nodiscard]] std::string quickSearch(std::string_view params);
-
-    // Table metadata operations
-    [[nodiscard]] std::string fetchIndexes(std::string_view params);
-    [[nodiscard]] std::string fetchConstraints(std::string_view params);
-    [[nodiscard]] std::string fetchForeignKeys(std::string_view params);
-    [[nodiscard]] std::string fetchReferencingForeignKeys(std::string_view params);
-    [[nodiscard]] std::string fetchTriggers(std::string_view params);
-    [[nodiscard]] std::string fetchTableMetadata(std::string_view params);
-    [[nodiscard]] std::string fetchTableDDL(std::string_view params);
-
-    // File operations
-    [[nodiscard]] std::string saveQueryToFile(std::string_view params);
-    [[nodiscard]] std::string loadQueryFromFile(std::string_view params);
-    [[nodiscard]] std::string browseFile(std::string_view params);
-
-    // Bookmark operations
-    [[nodiscard]] std::string getBookmarks(std::string_view params);
-    [[nodiscard]] std::string saveBookmark(std::string_view params);
-    [[nodiscard]] std::string deleteBookmark(std::string_view params);
-
-    // Contexts (new architecture)
-    std::unique_ptr<SettingsContext> m_settingsContext;
-    std::unique_ptr<UtilityContext> m_utilityContext;
-
-    // Database-related members (to be migrated to DatabaseContext)
-    std::unordered_map<std::string, std::unique_ptr<TransactionManager>> m_transactionManagers;
-    std::unique_ptr<QueryHistory> m_queryHistory;
-    std::unique_ptr<ResultCache> m_resultCache;
-    std::unique_ptr<AsyncQueryExecutor> m_asyncExecutor;
-
-    std::unordered_map<std::string, std::shared_ptr<SQLServerDriver>> m_activeConnections;
-    std::unordered_map<std::string, std::shared_ptr<SQLServerDriver>> m_metadataConnections;
-    mutable std::shared_mutex m_connectionsMutex;
-    std::unordered_map<std::string, std::unique_ptr<SshTunnel>> m_sshTunnels;
-    std::atomic<int> m_connectionIdCounter{1};
-
-    [[nodiscard]] std::shared_ptr<SQLServerDriver> getQueryDriver(const std::string& connectionId);
-    [[nodiscard]] std::shared_ptr<SQLServerDriver> getMetadataDriver(const std::string& connectionId);
+    using Handler = std::function<std::string(std::string_view)>;
+    std::unordered_map<std::string, Handler> m_routes;
+    ISystemContext& m_ctx;
 };
 
 }  // namespace velocitydb

@@ -5,6 +5,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 #include <sstream>
@@ -70,18 +71,14 @@ void SessionManager::addTab(const EditorTab& tab) {
 
 void SessionManager::updateTab(const EditorTab& tab) {
     std::lock_guard lock(m_mutex);
-    for (auto& existing : m_state.openTabs) {
-        if (existing.id == tab.id) {
-            existing = tab;
-            return;
-        }
+    if (auto it = std::ranges::find(m_state.openTabs, tab.id, &EditorTab::id); it != m_state.openTabs.end()) {
+        *it = tab;
     }
 }
 
 void SessionManager::removeTab(const std::string& tabId) {
     std::lock_guard lock(m_mutex);
-    auto& tabs = m_state.openTabs;
-    tabs.erase(std::remove_if(tabs.begin(), tabs.end(), [&tabId](const EditorTab& t) { return t.id == tabId; }), tabs.end());
+    std::erase_if(m_state.openTabs, [&tabId](const EditorTab& t) { return t.id == tabId; });
 }
 
 void SessionManager::setActiveTab(const std::string& tabId) {
@@ -179,7 +176,7 @@ std::string SessionManager::serializeSession() const {
 bool SessionManager::deserializeSession(std::string_view jsonStr) {
     try {
         simdjson::dom::parser parser;
-        simdjson::dom::element doc = parser.parse(jsonStr);
+        auto doc = parser.parse(jsonStr);
 
         // Basic state
         if (auto val = doc["activeConnectionId"].get_string(); !val.error())
