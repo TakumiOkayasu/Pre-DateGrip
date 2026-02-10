@@ -651,8 +651,12 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
       <div className={styles.statusBar}>
         <span>
           {columnFilters.length > 0
-            ? `${rows.length} / ${resultSet.rows.length} 件 (フィルタ中)`
-            : `${resultSet.rows.length} 件`}
+            ? resultSet.truncated
+              ? `${rows.length} / ${resultSet.rows.length.toLocaleString()}+ 件 (フィルタ中・行数制限あり)`
+              : `${rows.length} / ${resultSet.rows.length} 件 (フィルタ中)`
+            : resultSet.truncated
+              ? `先頭 ${resultSet.rows.length.toLocaleString()} 件を表示（テーブルにはさらにデータがあります）`
+              : `${resultSet.rows.length} 件`}
         </span>
         <span>|</span>
         <span>{resultSet.executionTimeMs.toFixed(2)} ms</span>

@@ -56,7 +56,7 @@ public:
     virtual void cancel() = 0;
 
     // Error handling
-    [[nodiscard]] virtual std::string_view getLastError() const noexcept = 0;
+    [[nodiscard]] virtual std::string getLastError() const = 0;
 
     // Driver identification
     [[nodiscard]] virtual DriverType getType() const noexcept = 0;

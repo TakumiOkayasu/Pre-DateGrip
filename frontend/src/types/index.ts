@@ -104,6 +104,7 @@ export interface ResultSet {
   rows: string[][];
   affectedRows: number;
   executionTimeMs: number;
+  truncated?: boolean;
 }
 
 export interface MultipleResultSet {

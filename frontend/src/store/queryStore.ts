@@ -36,14 +36,21 @@ export interface QueryState {
 
 let queryCounter = 0;
 
+// Row limit for data view (table open) to prevent OOM on large tables
+const DATA_VIEW_ROW_LIMIT = 10000;
+
 // Default query timeout (5 minutes)
 const DEFAULT_QUERY_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 100;
 
+// Per-query AbortControllers for cancelling polling loops on tab close
+const abortControllers = new Map<string, AbortController>();
+
 // Execute a query asynchronously with polling (non-blocking for UI)
 async function executeAsyncWithPolling(
   connectionId: string,
-  sql: string
+  sql: string,
+  signal?: AbortSignal
 ): Promise<{
   columns: { name: string; type: string; comment?: string }[];
   rows: string[][];
@@ -54,6 +61,11 @@ async function executeAsyncWithPolling(
 
   const startTime = Date.now();
   while (true) {
+    if (signal?.aborted) {
+      await bridge.cancelAsyncQuery(queryId).catch(() => {});
+      throw new DOMException('Query cancelled', 'AbortError');
+    }
+
     if (Date.now() - startTime > DEFAULT_QUERY_TIMEOUT_MS) {
       try {
         await bridge.cancelAsyncQuery(queryId);
@@ -89,14 +101,18 @@ async function executeAsyncWithPolling(
 async function fetchTableWithComments(
   connectionId: string,
   tableName: string,
-  sql: string
+  sql: string,
+  signal?: AbortSignal
 ): Promise<ResultSet> {
   const [columnDefinitions, result] = await Promise.all([
     bridge.getColumns(connectionId, tableName),
-    executeAsyncWithPolling(connectionId, sql),
+    executeAsyncWithPolling(connectionId, sql, signal),
   ]);
 
   const commentMap = new Map(columnDefinitions.map((col) => [col.name, col.comment]));
+
+  const isTruncated = result.rows.length > DATA_VIEW_ROW_LIMIT;
+  const displayRows = isTruncated ? result.rows.slice(0, DATA_VIEW_ROW_LIMIT) : result.rows;
 
   return {
     columns: result.columns.map((c) => ({
@@ -107,9 +123,10 @@ async function fetchTableWithComments(
       isPrimaryKey: false,
       comment: commentMap.get(c.name) || undefined,
     })),
-    rows: result.rows,
+    rows: displayRows,
     affectedRows: result.affectedRows,
     executionTimeMs: result.executionTimeMs,
+    truncated: isTruncated,
   };
 }
 
@@ -164,6 +181,13 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   },
 
   removeQuery: (id) => {
+    // Abort any in-flight polling loop (triggers backend cancel via AbortSignal)
+    const controller = abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      abortControllers.delete(id);
+    }
+
     const { queries, activeQueryId, results, errors, executingQueryIds } = get();
     const index = queries.findIndex((q) => q.id === id);
     const newQueries = queries.filter((q) => q.id !== id);
@@ -217,10 +241,13 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const query = get().queries.find((q) => q.id === id);
     if (!query || !query.content.trim()) return;
 
+    const controller = new AbortController();
+    abortControllers.set(id, controller);
+
     set((state) => startExecution(state, id));
 
     try {
-      const result = await executeAsyncWithPolling(connectionId, query.content);
+      const result = await executeAsyncWithPolling(connectionId, query.content, controller.signal);
 
       if (!result.columns || !result.rows) {
         throw new Error('Invalid query result: missing columns or rows');
@@ -255,6 +282,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         isFavorite: false,
       });
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set((state) => endExecution(state, id));
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : 'Query execution failed';
 
       useHistoryStore.getState().addHistory({
@@ -269,11 +300,17 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       });
 
       set((state) => failExecution(state, id, errorMessage));
+    } finally {
+      abortControllers.delete(id);
     }
   },
 
   executeSelectedText: async (id, connectionId, selectedText) => {
     if (!selectedText.trim()) return;
+
+    const controller = new AbortController();
+    abortControllers.set(id, controller);
+    const { signal } = controller;
 
     set((state) => startExecution(state, id));
 
@@ -287,6 +324,12 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       const startTime = Date.now();
 
       while (true) {
+        // Check if aborted (tab closed)
+        if (signal.aborted) {
+          await bridge.cancelAsyncQuery(queryId).catch(() => {});
+          throw new DOMException('Query cancelled', 'AbortError');
+        }
+
         // Check timeout
         if (Date.now() - startTime > maxPollTime) {
           // Try to cancel the query before throwing
@@ -379,6 +422,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set((state) => endExecution(state, id));
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : 'Query execution failed';
 
       useHistoryStore.getState().addHistory({
@@ -393,6 +440,8 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       });
 
       set((state) => failExecution(state, id, errorMessage));
+    } finally {
+      abortControllers.delete(id);
     }
   },
 
@@ -471,8 +520,8 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
     const id = `query-${++queryCounter}`;
     const sql = whereClause
-      ? `SELECT * FROM ${tableName} WHERE ${whereClause}`
-      : `SELECT * FROM ${tableName}`;
+      ? `SELECT TOP ${DATA_VIEW_ROW_LIMIT + 1} * FROM ${tableName} WHERE ${whereClause}`
+      : `SELECT TOP ${DATA_VIEW_ROW_LIMIT + 1} * FROM ${tableName}`;
     const tabName = whereClause ? `${tableName} (フィルタ済)` : tableName;
     const newQuery: Query = {
       id,
@@ -487,6 +536,9 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
     log.info(`[QueryStore] Creating new query tab: ${id} for table ${tableName}`);
 
+    const controller = new AbortController();
+    abortControllers.set(id, controller);
+
     set((state) => ({
       ...startExecution(state, id),
       queries: [...state.queries, newQuery],
@@ -497,7 +549,12 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       log.debug(`[QueryStore] Fetching table data for ${tableName}`);
       const fetchStart = performance.now();
 
-      const resultSet = await fetchTableWithComments(connectionId, tableName, sql);
+      const resultSet = await fetchTableWithComments(
+        connectionId,
+        tableName,
+        sql,
+        controller.signal
+      );
 
       set((state) => ({
         ...endExecution(state, id),
@@ -508,6 +565,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         `[QueryStore] Loaded ${resultSet.rows.length} rows with ${resultSet.columns.length} columns in ${(performance.now() - fetchStart).toFixed(2)}ms`
       );
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set((state) => endExecution(state, id));
+        return;
+      }
       log.error(`[QueryStore] Failed to fetch table data: ${error}`);
       set((state) =>
         failExecution(
@@ -516,6 +577,8 @@ export const useQueryStore = create<QueryState>((set, get) => ({
           error instanceof Error ? error.message : 'Failed to load table data'
         )
       );
+    } finally {
+      abortControllers.delete(id);
     }
   },
 
@@ -523,8 +586,11 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const query = get().queries.find((q) => q.id === id);
     if (!query?.sourceTable) return;
 
-    const baseSql = `SELECT * FROM ${query.sourceTable}`;
+    const baseSql = `SELECT TOP ${DATA_VIEW_ROW_LIMIT + 1} * FROM ${query.sourceTable}`;
     const sql = whereClause.trim() ? `${baseSql} WHERE ${whereClause}` : baseSql;
+
+    const controller = new AbortController();
+    abortControllers.set(id, controller);
 
     set((state) => ({
       ...startExecution(state, id),
@@ -532,16 +598,27 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     }));
 
     try {
-      const resultSet = await fetchTableWithComments(connectionId, query.sourceTable, sql);
+      const resultSet = await fetchTableWithComments(
+        connectionId,
+        query.sourceTable,
+        sql,
+        controller.signal
+      );
 
       set((state) => ({
         ...endExecution(state, id),
         results: { ...state.results, [id]: resultSet },
       }));
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set((state) => endExecution(state, id));
+        return;
+      }
       set((state) =>
         failExecution(state, id, error instanceof Error ? error.message : 'Failed to apply filter')
       );
+    } finally {
+      abortControllers.delete(id);
     }
   },
 
@@ -551,13 +628,17 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
     log.info(`[QueryStore] Refreshing data view: ${query.sourceTable}`);
 
+    const controller = new AbortController();
+    abortControllers.set(id, controller);
+
     set((state) => startExecution(state, id));
 
     try {
       const resultSet = await fetchTableWithComments(
         connectionId,
         query.sourceTable,
-        query.content
+        query.content,
+        controller.signal
       );
 
       set((state) => ({
@@ -567,6 +648,10 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
       log.info(`[QueryStore] Data view refreshed: ${resultSet.rows.length} rows`);
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set((state) => endExecution(state, id));
+        return;
+      }
       set((state) =>
         failExecution(
           state,
@@ -574,6 +659,8 @@ export const useQueryStore = create<QueryState>((set, get) => ({
           error instanceof Error ? error.message : 'データの更新に失敗しました'
         )
       );
+    } finally {
+      abortControllers.delete(id);
     }
   },
 
