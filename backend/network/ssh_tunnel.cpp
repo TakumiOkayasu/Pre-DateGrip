@@ -20,6 +20,7 @@
 #include <format>
 #include <fstream>
 #include <thread>
+#include <vector>
 
 namespace velocitydb {
 
@@ -55,6 +56,11 @@ inline int getLastSocketError() {
 #endif
 
 constexpr int BUFFER_SIZE = 16384;
+
+struct ClientSession {
+    socket_t socket;
+    LIBSSH2_CHANNEL* channel;
+};
 
 }  // namespace
 
@@ -192,7 +198,7 @@ public:
         log<LogLevel::INFO>(std::format("[SSH] Local listener bound to port {}", m_localPort));
 
         // Start listening
-        if (listen(m_listenerSocket, 1) != 0) {
+        if (listen(m_listenerSocket, SOMAXCONN) != 0) {
             log<LogLevel::ERROR_LEVEL>("[SSH] Failed to listen on socket");
             return std::unexpected(SshTunnelError{SshTunnelError::Code::TunnelFailed, "Failed to listen on socket"});
         }
@@ -216,32 +222,16 @@ public:
         log<LogLevel::DEBUG>("[SSH] Disconnecting SSH tunnel...");
         m_running = false;
 
-        // Close listener to unblock accept()
+        // Close listener to unblock select()
         if (m_listenerSocket != INVALID_SOCK) {
             closeSocket(m_listenerSocket);
             m_listenerSocket = INVALID_SOCK;
         }
 
-        // Signal client socket shutdown to unblock recv() in proxyData(),
-        // but do NOT closesocket() here — the proxy thread owns the client
-        // socket lifetime via its local `client` variable. Closing here
-        // causes double-close when proxyLoop() also calls closeSocket(client).
-        if (m_clientSocket != INVALID_SOCK) {
-            shutdown(m_clientSocket, SD_BOTH);
-        }
-
-        // Wait for proxy thread — it will clean up channel and client socket
+        // Wait for proxy thread — it will clean up all sessions
         if (m_proxyThread.joinable()) {
             log<LogLevel::DEBUG>("[SSH] Waiting for proxy thread to finish...");
             m_proxyThread.join();
-        }
-
-        // Channel should already be cleaned up by proxyLoop(), but guard
-        if (m_channel) {
-            libssh2_session_set_blocking(m_session, 1);
-            libssh2_channel_close(m_channel);
-            libssh2_channel_free(m_channel);
-            m_channel = nullptr;
         }
 
         // Clean up SSH session
@@ -274,204 +264,196 @@ public:
     [[nodiscard]] int getLocalPort() const { return m_localPort; }
 
 private:
-    void proxyLoop() {
-        log<LogLevel::DEBUG>("[SSH] Proxy thread started, waiting for connections...");
-        log_flush();
-
-        while (m_running) {
-            // Accept client connection
-            sockaddr_in clientAddr{};
-            socklen_t clientAddrLen = sizeof(clientAddr);
-
-            log<LogLevel::DEBUG>("[SSH] Waiting for client connection on accept()...");
-            log_flush();
-
-            socket_t client = accept(m_listenerSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrLen);
-            if (client == INVALID_SOCK) {
-                if (!m_running) {
-                    log<LogLevel::DEBUG>("[SSH] Accept interrupted by shutdown");
-                    break;  // Normal shutdown
+    void closeSession(ClientSession& s) {
+        if (s.channel) {
+            constexpr int MAX_CLOSE_RETRIES = 100;
+            int rc;
+            int retries = 0;
+            do {
+                rc = libssh2_channel_close(s.channel);
+                if (rc == LIBSSH2_ERROR_EAGAIN) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
-                int err = getLastSocketError();
-                log<LogLevel::WARNING>(std::format("[SSH] Accept failed with error: {}", err));
-                continue;
-            }
-
-            log<LogLevel::INFO>("[SSH] Client connected to tunnel!");
-            log_flush();
-
-            m_clientSocket = client;
-
-            // Open SSH channel for port forwarding
-            log<LogLevel::DEBUG>(std::format("[SSH] Opening direct-tcpip channel to {}:{}...", m_remoteHost, m_remotePort));
-            log_flush();
-
-            m_channel = libssh2_channel_direct_tcpip(m_session, m_remoteHost.c_str(), m_remotePort);
-            if (!m_channel) {
-                char* errMsg = nullptr;
-                libssh2_session_last_error(m_session, &errMsg, nullptr, 0);
-                log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Failed to open direct-tcpip channel: {}", errMsg ? errMsg : "unknown"));
-                log_flush();
-                closeSocket(client);
-                m_clientSocket = INVALID_SOCK;
-                continue;
-            }
-
-            log<LogLevel::INFO>("[SSH] SSH channel opened successfully");
-            log_flush();
-
-            // Set non-blocking mode for data transfer
-            libssh2_channel_set_blocking(m_channel, 0);
-
-            // Set socket to non-blocking
-#ifdef _WIN32
-            u_long mode = 1;
-            ioctlsocket(client, FIONBIO, &mode);
-#else
-            int flags = fcntl(client, F_GETFL, 0);
-            fcntl(client, F_SETFL, flags | O_NONBLOCK);
-#endif
-
-            // Proxy data between client and SSH channel
-            log<LogLevel::DEBUG>("[SSH] Starting data proxy...");
-            log_flush();
-            proxyData(client);
-
-            log<LogLevel::INFO>("[SSH] Data proxy ended");
-            log_flush();
-
-            // Cleanup — set blocking mode so channel_close completes fully
-            // instead of returning EAGAIN (which would leave channel half-closed
-            // and cause heap corruption on channel_free)
-            if (m_channel) {
-                libssh2_session_set_blocking(m_session, 1);
-                libssh2_channel_close(m_channel);
-                libssh2_channel_free(m_channel);
-                m_channel = nullptr;
-                libssh2_session_set_blocking(m_session, 0);
-            }
-
-            closeSocket(client);
-            m_clientSocket = INVALID_SOCK;
+            } while (rc == LIBSSH2_ERROR_EAGAIN && ++retries < MAX_CLOSE_RETRIES);
+            libssh2_channel_free(s.channel);
+            s.channel = nullptr;
         }
-
-        log<LogLevel::DEBUG>("[SSH] Proxy thread exiting");
-        log_flush();
+        if (s.socket != INVALID_SOCK) {
+            closeSocket(s.socket);
+            s.socket = INVALID_SOCK;
+        }
     }
 
-    void proxyData(socket_t client) {
+    void proxyLoop() {
+        log<LogLevel::DEBUG>("[SSH] Proxy thread started");
+        log_flush();
+
+        libssh2_session_set_blocking(m_session, 0);
+
+        std::vector<ClientSession> sessions;
         char buffer[BUFFER_SIZE];
-        int loopCount = 0;
-        int totalBytesFromClient = 0;
-        int totalBytesFromServer = 0;
 
         while (m_running) {
-            bool activity = false;
-            loopCount++;
+            fd_set readFds;
+            FD_ZERO(&readFds);
+            socket_t maxFd = 0;  // nfds is ignored on Windows
 
-            // Log periodically
-            if (loopCount % 1000 == 0) {
-                log<LogLevel::DEBUG>(std::format("[SSH] Proxy loop iteration {}, client->server: {} bytes, server->client: {} bytes", loopCount, totalBytesFromClient, totalBytesFromServer));
-                log_flush();
+            // Add listener socket
+            if (m_listenerSocket != INVALID_SOCK) {
+                FD_SET(m_listenerSocket, &readFds);
+                if (m_listenerSocket > maxFd)
+                    maxFd = m_listenerSocket;
             }
 
-            // Read from client, write to SSH channel
-            int bytesRead = recv(client, buffer, BUFFER_SIZE, 0);
-            if (bytesRead > 0) {
-                activity = true;
-                totalBytesFromClient += bytesRead;
-                log<LogLevel::DEBUG>(std::format("[SSH] Received {} bytes from client", bytesRead));
+            // Add SSH socket (data from server may arrive for any channel)
+            if (m_sshSocket != INVALID_SOCK) {
+                FD_SET(m_sshSocket, &readFds);
+                if (m_sshSocket > maxFd)
+                    maxFd = m_sshSocket;
+            }
 
-                int totalWritten = 0;
-                while (totalWritten < bytesRead && m_running) {
-                    int written = static_cast<int>(libssh2_channel_write(m_channel, buffer + totalWritten, bytesRead - totalWritten));
-                    if (written > 0) {
-                        totalWritten += written;
-                        log<LogLevel::DEBUG>(std::format("[SSH] Wrote {} bytes to SSH channel (total: {})", written, totalWritten));
-                    } else if (written == LIBSSH2_ERROR_EAGAIN) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // Add all client sockets
+            for (const auto& s : sessions) {
+                FD_SET(s.socket, &readFds);
+                if (s.socket > maxFd)
+                    maxFd = s.socket;
+            }
+
+            // 50ms timeout — allows m_running check and keepalive
+            timeval tv{0, 50000};
+            int ready = select(static_cast<int>(maxFd + 1), &readFds, nullptr, nullptr, &tv);
+            if (ready < 0) {
+                if (!m_running)
+                    break;
+                continue;
+            }
+
+            // Accept new connections
+            if (m_listenerSocket != INVALID_SOCK && FD_ISSET(m_listenerSocket, &readFds)) {
+                sockaddr_in clientAddr{};
+                socklen_t len = sizeof(clientAddr);
+                socket_t client = accept(m_listenerSocket, reinterpret_cast<sockaddr*>(&clientAddr), &len);
+                if (client != INVALID_SOCK) {
+                    log<LogLevel::INFO>("[SSH] Client connected to tunnel");
+
+                    // Temporarily block for channel open (with 5s timeout to avoid stalling
+                    // existing sessions indefinitely if SSH server is slow to respond)
+                    libssh2_session_set_blocking(m_session, 1);
+                    libssh2_session_set_timeout(m_session, 5000);
+                    auto* ch = libssh2_channel_direct_tcpip(m_session, m_remoteHost.c_str(), m_remotePort);
+                    libssh2_session_set_timeout(m_session, 0);
+                    libssh2_session_set_blocking(m_session, 0);
+
+                    if (ch) {
+#ifdef _WIN32
+                        u_long mode = 1;
+                        ioctlsocket(client, FIONBIO, &mode);
+#else
+                        int flags = fcntl(client, F_GETFL, 0);
+                        fcntl(client, F_SETFL, flags | O_NONBLOCK);
+#endif
+                        sessions.push_back({client, ch});
+                        log<LogLevel::INFO>(std::format("[SSH] Channel opened, active sessions: {}", sessions.size()));
                     } else {
                         char* errMsg = nullptr;
                         libssh2_session_last_error(m_session, &errMsg, nullptr, 0);
-                        log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Channel write error: {} ({})", written, errMsg ? errMsg : "unknown"));
-                        log_flush();
-                        return;  // Error
+                        log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Channel open failed: {}", errMsg ? errMsg : "unknown"));
+                        closeSocket(client);
+                    }
+                    log_flush();
+                }
+            }
+
+            // Process each session
+            std::vector<size_t> toRemove;
+            for (size_t i = 0; i < sessions.size(); ++i) {
+                auto& s = sessions[i];
+                bool dead = false;
+
+                // Client → SSH channel
+                if (FD_ISSET(s.socket, &readFds)) {
+                    int bytesRead = recv(s.socket, buffer, BUFFER_SIZE, 0);
+                    if (bytesRead > 0) {
+                        int written = 0;
+                        while (written < bytesRead && m_running) {
+                            int rc = static_cast<int>(libssh2_channel_write(s.channel, buffer + written, bytesRead - written));
+                            if (rc > 0) {
+                                written += rc;
+                            } else if (rc == LIBSSH2_ERROR_EAGAIN) {
+                                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                            } else {
+                                dead = true;
+                                break;
+                            }
+                        }
+                    } else if (bytesRead == 0) {
+                        dead = true;
+                    } else {
+#ifdef _WIN32
+                        if (WSAGetLastError() != WSAEWOULDBLOCK)
+                            dead = true;
+#else
+                        if (errno != EAGAIN && errno != EWOULDBLOCK)
+                            dead = true;
+#endif
                     }
                 }
-            } else if (bytesRead == 0) {
-                log<LogLevel::INFO>("[SSH] Client disconnected (recv returned 0)");
-                log_flush();
-                return;  // Client disconnected
-            } else {
-#ifdef _WIN32
-                int err = WSAGetLastError();
-                if (err != WSAEWOULDBLOCK) {
-                    log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Recv error: {}", err));
-                    log_flush();
-                    return;
-                }
-#else
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Recv error: {}", errno));
-                    log_flush();
-                    return;
-                }
-#endif
-            }
 
-            // Read from SSH channel, write to client
-            ssize_t channelRead = libssh2_channel_read(m_channel, buffer, BUFFER_SIZE);
-            if (channelRead > 0) {
-                activity = true;
-                totalBytesFromServer += static_cast<int>(channelRead);
-                log<LogLevel::DEBUG>(std::format("[SSH] Received {} bytes from SSH channel", channelRead));
-
-                int totalSent = 0;
-                while (totalSent < channelRead && m_running) {
-                    int sent = send(client, buffer + totalSent, static_cast<int>(channelRead - totalSent), 0);
-                    if (sent > 0) {
-                        totalSent += sent;
-                        log<LogLevel::DEBUG>(std::format("[SSH] Sent {} bytes to client (total: {})", sent, totalSent));
-                    } else if (sent < 0) {
+                // SSH channel → Client
+                if (!dead) {
+                    auto channelRead = libssh2_channel_read(s.channel, buffer, BUFFER_SIZE);
+                    if (channelRead > 0) {
+                        int sent = 0;
+                        while (sent < static_cast<int>(channelRead) && m_running) {
+                            int rc = send(s.socket, buffer + sent, static_cast<int>(channelRead) - sent, 0);
+                            if (rc > 0) {
+                                sent += rc;
+                            } else if (rc < 0) {
 #ifdef _WIN32
-                        int err = WSAGetLastError();
-                        if (err == WSAEWOULDBLOCK) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                            continue;
-                        }
-                        log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Send error: {}", err));
+                                if (WSAGetLastError() == WSAEWOULDBLOCK) {
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                    continue;
+                                }
 #else
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                            continue;
-                        }
-                        log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Send error: {}", errno));
+                                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                    continue;
+                                }
 #endif
-                        log_flush();
-                        return;  // Error
+                                dead = true;
+                                break;
+                            }
+                        }
+                    } else if (channelRead == 0 || libssh2_channel_eof(s.channel)) {
+                        dead = true;
+                    } else if (channelRead != LIBSSH2_ERROR_EAGAIN) {
+                        dead = true;
                     }
                 }
-            } else if (channelRead == 0 || libssh2_channel_eof(m_channel)) {
-                log<LogLevel::INFO>("[SSH] SSH channel closed (EOF)");
-                log_flush();
-                return;  // Channel closed
-            } else if (channelRead != LIBSSH2_ERROR_EAGAIN) {
-                char* errMsg = nullptr;
-                libssh2_session_last_error(m_session, &errMsg, nullptr, 0);
-                log<LogLevel::ERROR_LEVEL>(std::format("[SSH] Channel read error: {} ({})", channelRead, errMsg ? errMsg : "unknown"));
-                log_flush();
-                return;  // Error
+
+                if (dead)
+                    toRemove.push_back(i);
             }
 
-            // Send SSH keepalive when idle to prevent server-side timeout
-            if (!activity) {
-                int secondsToNext = 0;
-                libssh2_keepalive_send(m_session, &secondsToNext);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // Remove dead sessions (reverse order to keep indices valid)
+            for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it) {
+                closeSession(sessions[*it]);
+                sessions.erase(sessions.begin() + static_cast<ptrdiff_t>(*it));
+                log<LogLevel::INFO>(std::format("[SSH] Session removed, active: {}", sessions.size()));
+                log_flush();
             }
+
+            // Keepalive
+            int secondsToNext = 0;
+            libssh2_keepalive_send(m_session, &secondsToNext);
         }
 
-        log<LogLevel::DEBUG>(std::format("[SSH] Proxy data loop ended. Total: client->server: {} bytes, server->client: {} bytes", totalBytesFromClient, totalBytesFromServer));
+        // Cleanup all remaining sessions
+        for (auto& s : sessions) {
+            closeSession(s);
+        }
+
+        log<LogLevel::DEBUG>("[SSH] Proxy thread exiting");
         log_flush();
     }
 
@@ -510,9 +492,7 @@ private:
 
     socket_t m_sshSocket = INVALID_SOCK;
     socket_t m_listenerSocket = INVALID_SOCK;
-    socket_t m_clientSocket = INVALID_SOCK;
     LIBSSH2_SESSION* m_session = nullptr;
-    LIBSSH2_CHANNEL* m_channel = nullptr;
     bool m_libssh2Initialized = false;
     std::atomic<bool> m_connected{false};
     std::atomic<bool> m_running{false};
