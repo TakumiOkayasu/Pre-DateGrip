@@ -51,28 +51,24 @@ bool CSVExporter::exportData(const ResultSet& data, const std::string& filepath,
 }
 
 std::string CSVExporter::escapeCSV(const std::string& value, const ExportOptions& options) const {
-    bool needsQuote = options.quoteStrings;
-
-    // Check if quoting is needed
-    if (!needsQuote) {
-        needsQuote = value.find(options.delimiter) != std::string::npos || value.find('"') != std::string::npos || value.find('\n') != std::string::npos || value.find('\r') != std::string::npos;
-    }
+    auto needsQuote = options.quoteStrings || value.contains(options.delimiter) || value.contains('"') || value.contains('\n') || value.contains('\r');
 
     if (!needsQuote) {
         return value;
     }
 
-    std::ostringstream result;
-    result << '"';
+    std::string result;
+    result.reserve(value.size() + 2);
+    result += '"';
     for (char c : value) {
         if (c == '"') {
-            result << "\"\"";
+            result += "\"\"";
         } else {
-            result << c;
+            result += c;
         }
     }
-    result << '"';
-    return result.str();
+    result += '"';
+    return result;
 }
 
 }  // namespace velocitydb

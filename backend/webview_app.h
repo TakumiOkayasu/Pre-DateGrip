@@ -14,6 +14,7 @@ class webview;
 namespace velocitydb {
 
 class IPCHandler;
+class SystemContext;
 class SettingsManager;
 
 class WebViewApp {
@@ -43,6 +44,8 @@ private:
     void saveWindowSettings();
 
     HINSTANCE m_hInstance;
+    // Order matters: m_systemContext must outlive m_ipcHandler (holds reference to it)
+    std::unique_ptr<SystemContext> m_systemContext;
     std::unique_ptr<IPCHandler> m_ipcHandler;
     std::unique_ptr<webview::webview> m_webview;
     std::unique_ptr<SettingsManager> m_settingsManager;

@@ -38,7 +38,7 @@ bool ConnectionPool::addConnection(const ConnectionInfo& info) {
     std::lock_guard lock(m_mutex);
 
     auto driver = std::make_shared<SQLServerDriver>();
-    std::string connStr = buildConnectionString(info);
+    auto connStr = buildConnectionString(info);
 
     if (!driver->connect(connStr)) [[unlikely]] {
         return false;
@@ -86,7 +86,7 @@ std::vector<ConnectionInfo> ConnectionPool::getConnections() const {
 
 bool ConnectionPool::testConnection(const ConnectionInfo& info) {
     auto driver = std::make_shared<SQLServerDriver>();
-    std::string connStr = buildConnectionString(info);
+    auto connStr = buildConnectionString(info);
 
     bool success = driver->connect(connStr);
     if (success) {
@@ -101,10 +101,8 @@ std::string ConnectionPool::buildConnectionString(const ConnectionInfo& info) co
 
     switch (info.dbType) {
         case DbType::PostgreSQL: {
-            // PostgreSQL ODBC Driver
-            // Server format: host or host,port -> need to split
-            std::string host = info.server;
-            std::string port = "5432";
+            auto host = info.server;
+            auto port = std::string("5432");
             if (auto commaPos = host.find(','); commaPos != std::string::npos) {
                 port = host.substr(commaPos + 1);
                 host = host.substr(0, commaPos);
@@ -114,9 +112,8 @@ std::string ConnectionPool::buildConnectionString(const ConnectionInfo& info) co
             break;
         }
         case DbType::MySQL: {
-            // MySQL ODBC Driver
-            std::string host = info.server;
-            std::string port = "3306";
+            auto host = info.server;
+            auto port = std::string("3306");
             if (auto commaPos = host.find(','); commaPos != std::string::npos) {
                 port = host.substr(commaPos + 1);
                 host = host.substr(0, commaPos);

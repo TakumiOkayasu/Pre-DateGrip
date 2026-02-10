@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../interfaces/utility_context.h"
+
 #include <expected>
 #include <memory>
 #include <string>
@@ -15,17 +17,25 @@ class SIMDFilter;
 struct ResultSet;
 
 /// Context for utility operations (formatting, search, parsing, filtering)
-class UtilityContext {
+class UtilityContext : public IUtilityContext {
 public:
     UtilityContext();
-    ~UtilityContext();
+    ~UtilityContext() override;
 
     UtilityContext(const UtilityContext&) = delete;
     UtilityContext& operator=(const UtilityContext&) = delete;
     UtilityContext(UtilityContext&&) noexcept;
     UtilityContext& operator=(UtilityContext&&) noexcept;
 
-    // Direct access to services (for migration)
+    // IUtilityContext implementation (IPC handle methods)
+    [[nodiscard]] std::string handleFormatSQL(std::string_view params) override;
+    [[nodiscard]] std::string handleUppercaseKeywords(std::string_view params) override;
+    [[nodiscard]] std::string handleParseA5ER(std::string_view params) override;
+    [[nodiscard]] std::string handleParseA5ERContent(std::string_view params) override;
+    [[nodiscard]] std::string handleSearchObjects(IDatabaseContext& db, std::string_view params) override;
+    [[nodiscard]] std::string handleQuickSearch(IDatabaseContext& db, std::string_view params) override;
+
+    // Direct access to services (for legacy/migration use)
     [[nodiscard]] SQLFormatter& sqlFormatter() { return *m_sqlFormatter; }
     [[nodiscard]] const SQLFormatter& sqlFormatter() const { return *m_sqlFormatter; }
     [[nodiscard]] A5ERParser& a5erParser() { return *m_a5erParser; }
@@ -34,21 +44,6 @@ public:
     [[nodiscard]] const SIMDFilter& simdFilter() const { return *m_simdFilter; }
     [[nodiscard]] GlobalSearch& globalSearch() { return *m_globalSearch; }
     [[nodiscard]] const GlobalSearch& globalSearch() const { return *m_globalSearch; }
-
-    // SQL formatting
-    [[nodiscard]] std::string formatSQL(std::string_view sql);
-    [[nodiscard]] std::string uppercaseKeywords(std::string_view sql);
-
-    // Global search
-    [[nodiscard]] std::string searchObjects(std::string_view connectionId, std::string_view query, std::string_view objectType = "");
-
-    [[nodiscard]] std::string quickSearch(std::string_view connectionId, std::string_view query, size_t maxResults = 10);
-
-    // A5:SQL parser
-    [[nodiscard]] std::expected<std::string, std::string> parseA5ERFile(std::string_view filePath);
-
-    // SIMD filtering
-    [[nodiscard]] std::expected<ResultSet, std::string> filterResultSet(const ResultSet& data, std::string_view filterText, const std::vector<int>& columnIndices);
 
 private:
     std::unique_ptr<SQLFormatter> m_sqlFormatter;

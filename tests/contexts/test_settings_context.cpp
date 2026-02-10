@@ -32,22 +32,24 @@ TEST_F(SettingsContextTest, AccessSessionManager) {
     EXPECT_GE(state.windowHeight, 0);
 }
 
-TEST_F(SettingsContextTest, GetProfilePasswordNotFound) {
-    // Non-existent profile should return error
-    auto result = ctx.getProfilePassword("non_existent_profile_id");
-    EXPECT_FALSE(result.has_value());
+TEST_F(SettingsContextTest, HandleGetProfilePasswordNotFound) {
+    // Non-existent profile should return error JSON
+    auto result = ctx.handleGetProfilePassword(R"({"profileId":"non_existent_profile_id"})");
+    EXPECT_FALSE(result.empty());
+    EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsContextTest, GetSshPasswordNotFound) {
-    // Non-existent profile should return error
-    auto result = ctx.getSshPassword("non_existent_profile_id");
-    EXPECT_FALSE(result.has_value());
+TEST_F(SettingsContextTest, HandleGetSshPasswordNotFound) {
+    // Non-existent profile should return error JSON
+    auto result = ctx.handleGetSshPassword(R"({"profileId":"non_existent_profile_id"})");
+    EXPECT_FALSE(result.empty());
+    EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsContextTest, DeleteNonExistentProfile) {
+TEST_F(SettingsContextTest, HandleDeleteNonExistentProfile) {
     // Deleting non-existent profile should succeed (idempotent)
-    auto result = ctx.deleteConnectionProfile("non_existent_profile_id");
-    EXPECT_TRUE(result.has_value());
+    auto result = ctx.handleDeleteConnectionProfile(R"({"profileId":"non_existent_profile_id"})");
+    EXPECT_FALSE(result.empty());
 }
 
 }  // namespace

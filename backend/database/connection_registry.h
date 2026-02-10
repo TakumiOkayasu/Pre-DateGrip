@@ -27,13 +27,19 @@ public:
     ConnectionRegistry(ConnectionRegistry&&) = delete;
     ConnectionRegistry& operator=(ConnectionRegistry&&) = delete;
 
-    /// Add a new connection and return its unique ID
-    [[nodiscard]] std::string add(DriverPtr driver);
+    /// Add a new connection pair (query + metadata) and return its unique ID
+    [[nodiscard]] std::string add(DriverPtr queryDriver, DriverPtr metadataDriver);
 
-    /// Remove a connection by ID
+    /// Remove a connection by ID (disconnects both query and metadata drivers)
     void remove(std::string_view id);
 
-    /// Get a connection by ID
+    /// Get the query driver by ID
+    [[nodiscard]] std::expected<DriverPtr, std::string> getQueryDriver(std::string_view id) const;
+
+    /// Get the metadata driver by ID
+    [[nodiscard]] std::expected<DriverPtr, std::string> getMetadataDriver(std::string_view id) const;
+
+    /// Get a connection by ID (alias for getQueryDriver, for backwards compatibility)
     [[nodiscard]] std::expected<DriverPtr, std::string> get(std::string_view id) const;
 
     /// Check if a connection exists
@@ -53,7 +59,8 @@ public:
 
 private:
     mutable std::shared_mutex m_mutex;
-    std::unordered_map<std::string, DriverPtr> m_connections;
+    std::unordered_map<std::string, DriverPtr> m_queryConnections;
+    std::unordered_map<std::string, DriverPtr> m_metadataConnections;
     std::unordered_map<std::string, std::unique_ptr<SshTunnel>> m_tunnels;
     std::atomic<int> m_counter{1};
 };

@@ -6,6 +6,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 #include <sstream>
@@ -77,26 +78,20 @@ void SettingsManager::addConnectionProfile(const ConnectionProfile& profile) {
 
 void SettingsManager::updateConnectionProfile(const ConnectionProfile& profile) {
     std::lock_guard lock(m_mutex);
-    for (auto& existing : m_settings.connectionProfiles) {
-        if (existing.id == profile.id) {
-            existing = profile;
-            return;
-        }
+    if (auto it = std::ranges::find(m_settings.connectionProfiles, profile.id, &ConnectionProfile::id); it != m_settings.connectionProfiles.end()) {
+        *it = profile;
     }
 }
 
 void SettingsManager::removeConnectionProfile(const std::string& id) {
     std::lock_guard lock(m_mutex);
-    auto& profiles = m_settings.connectionProfiles;
-    profiles.erase(std::remove_if(profiles.begin(), profiles.end(), [&id](const ConnectionProfile& p) { return p.id == id; }), profiles.end());
+    std::erase_if(m_settings.connectionProfiles, [&id](const ConnectionProfile& p) { return p.id == id; });
 }
 
 std::optional<ConnectionProfile> SettingsManager::getConnectionProfile(const std::string& id) const {
     std::lock_guard lock(m_mutex);
-    for (const auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == id) {
-            return profile;
-        }
+    if (auto it = std::ranges::find(m_settings.connectionProfiles, id, &ConnectionProfile::id); it != m_settings.connectionProfiles.end()) {
+        return *it;
     }
     return std::nullopt;
 }
@@ -108,42 +103,39 @@ const std::vector<ConnectionProfile>& SettingsManager::getConnectionProfiles() c
 std::expected<void, std::string> SettingsManager::setProfilePassword(const std::string& profileId, std::string_view plainPassword) {
     std::lock_guard lock(m_mutex);
 
-    for (auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (plainPassword.empty()) {
-                profile.encryptedPassword.clear();
-                profile.savePassword = false;
-                return {};
-            }
-
-            auto encryptResult = CredentialProtector::encrypt(plainPassword);
-            if (!encryptResult) {
-                return std::unexpected(encryptResult.error());
-            }
-
-            profile.encryptedPassword = encryptResult.value();
-            profile.savePassword = true;
-            return {};
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (plainPassword.empty()) {
+        it->encryptedPassword.clear();
+        it->savePassword = false;
+        return {};
+    }
+
+    auto encryptResult = CredentialProtector::encrypt(plainPassword);
+    if (!encryptResult) {
+        return std::unexpected(encryptResult.error());
+    }
+
+    it->encryptedPassword = encryptResult.value();
+    it->savePassword = true;
+    return {};
 }
 
 std::expected<std::string, std::string> SettingsManager::getProfilePassword(const std::string& profileId) const {
     std::lock_guard lock(m_mutex);
 
-    for (const auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (profile.encryptedPassword.empty()) {
-                return std::string{};
-            }
-
-            return CredentialProtector::decrypt(profile.encryptedPassword);
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (it->encryptedPassword.empty()) {
+        return std::string{};
+    }
+    return CredentialProtector::decrypt(it->encryptedPassword);
 }
 
 std::filesystem::path SettingsManager::getSettingsPath() const {
@@ -153,79 +145,73 @@ std::filesystem::path SettingsManager::getSettingsPath() const {
 std::expected<void, std::string> SettingsManager::setSshPassword(const std::string& profileId, std::string_view plainPassword) {
     std::lock_guard lock(m_mutex);
 
-    for (auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (plainPassword.empty()) {
-                profile.ssh.encryptedPassword.clear();
-                return {};
-            }
-
-            auto encryptResult = CredentialProtector::encrypt(plainPassword);
-            if (!encryptResult) {
-                return std::unexpected(encryptResult.error());
-            }
-
-            profile.ssh.encryptedPassword = encryptResult.value();
-            return {};
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (plainPassword.empty()) {
+        it->ssh.encryptedPassword.clear();
+        return {};
+    }
+
+    auto encryptResult = CredentialProtector::encrypt(plainPassword);
+    if (!encryptResult) {
+        return std::unexpected(encryptResult.error());
+    }
+
+    it->ssh.encryptedPassword = encryptResult.value();
+    return {};
 }
 
 std::expected<std::string, std::string> SettingsManager::getSshPassword(const std::string& profileId) const {
     std::lock_guard lock(m_mutex);
 
-    for (const auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (profile.ssh.encryptedPassword.empty()) {
-                return std::string{};
-            }
-
-            return CredentialProtector::decrypt(profile.ssh.encryptedPassword);
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (it->ssh.encryptedPassword.empty()) {
+        return std::string{};
+    }
+    return CredentialProtector::decrypt(it->ssh.encryptedPassword);
 }
 
 std::expected<void, std::string> SettingsManager::setSshKeyPassphrase(const std::string& profileId, std::string_view passphrase) {
     std::lock_guard lock(m_mutex);
 
-    for (auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (passphrase.empty()) {
-                profile.ssh.encryptedKeyPassphrase.clear();
-                return {};
-            }
-
-            auto encryptResult = CredentialProtector::encrypt(passphrase);
-            if (!encryptResult) {
-                return std::unexpected(encryptResult.error());
-            }
-
-            profile.ssh.encryptedKeyPassphrase = encryptResult.value();
-            return {};
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (passphrase.empty()) {
+        it->ssh.encryptedKeyPassphrase.clear();
+        return {};
+    }
+
+    auto encryptResult = CredentialProtector::encrypt(passphrase);
+    if (!encryptResult) {
+        return std::unexpected(encryptResult.error());
+    }
+
+    it->ssh.encryptedKeyPassphrase = encryptResult.value();
+    return {};
 }
 
 std::expected<std::string, std::string> SettingsManager::getSshKeyPassphrase(const std::string& profileId) const {
     std::lock_guard lock(m_mutex);
 
-    for (const auto& profile : m_settings.connectionProfiles) {
-        if (profile.id == profileId) {
-            if (profile.ssh.encryptedKeyPassphrase.empty()) {
-                return std::string{};
-            }
-
-            return CredentialProtector::decrypt(profile.ssh.encryptedKeyPassphrase);
-        }
+    auto it = std::ranges::find(m_settings.connectionProfiles, profileId, &ConnectionProfile::id);
+    if (it == m_settings.connectionProfiles.end()) {
+        return std::unexpected("Profile not found: " + profileId);
     }
 
-    return std::unexpected("Profile not found: " + profileId);
+    if (it->ssh.encryptedKeyPassphrase.empty()) {
+        return std::string{};
+    }
+    return CredentialProtector::decrypt(it->ssh.encryptedKeyPassphrase);
 }
 
 std::string SettingsManager::serializeSettings() const {
@@ -311,7 +297,7 @@ std::string SettingsManager::serializeSettings() const {
 bool SettingsManager::deserializeSettings(std::string_view jsonStr) {
     try {
         simdjson::dom::parser parser;
-        simdjson::dom::element doc = parser.parse(jsonStr);
+        auto doc = parser.parse(jsonStr);
 
         // General settings
         if (auto general = doc["general"]; !general.error()) {

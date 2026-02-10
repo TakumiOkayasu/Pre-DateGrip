@@ -1,5 +1,6 @@
 #include "webview_app.h"
 
+#include "contexts/system_context.h"
 #include "ipc_handler.h"
 #include "simdjson.h"
 #include "utils/logger.h"
@@ -40,7 +41,12 @@ std::string extractFirstArgument(const std::string& jsonArray) {
 
 }  // namespace
 
-WebViewApp::WebViewApp(HINSTANCE hInstance) : m_hInstance(hInstance), m_ipcHandler(std::make_unique<IPCHandler>()), m_webview(nullptr), m_settingsManager(std::make_unique<SettingsManager>()) {
+WebViewApp::WebViewApp(HINSTANCE hInstance)
+    : m_hInstance(hInstance)
+    , m_systemContext(std::make_unique<SystemContext>())
+    , m_ipcHandler(std::make_unique<IPCHandler>(*m_systemContext))
+    , m_webview(nullptr)
+    , m_settingsManager(std::make_unique<SettingsManager>()) {
     // Load settings
     m_settingsManager->load();
 }

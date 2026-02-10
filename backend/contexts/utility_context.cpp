@@ -1,10 +1,13 @@
 #include "utility_context.h"
 
 #include "../database/sqlserver_driver.h"
+#include "../interfaces/database_context.h"
 #include "../parsers/a5er_parser.h"
 #include "../parsers/sql_formatter.h"
 #include "../utils/global_search.h"
+#include "../utils/json_utils.h"
 #include "../utils/simd_filter.h"
+#include "simdjson.h"
 
 #include <format>
 
@@ -17,60 +20,245 @@ UtilityContext::~UtilityContext() = default;
 UtilityContext::UtilityContext(UtilityContext&&) noexcept = default;
 UtilityContext& UtilityContext::operator=(UtilityContext&&) noexcept = default;
 
-std::string UtilityContext::formatSQL(std::string_view sql) {
-    return m_sqlFormatter->format(std::string(sql));
+// ─── IPC handle methods ─────────────────────────────────────────────
+
+namespace {
+
+std::string serializeA5ERModelToJson(const A5ERModel& model, const std::string& ddl = "") {
+    std::string tablesJson = "[";
+    for (size_t i = 0; i < model.tables.size(); ++i) {
+        const auto& table = model.tables[i];
+        if (i > 0)
+            tablesJson += ',';
+
+        std::string columnsJson = "[";
+        for (size_t j = 0; j < table.columns.size(); ++j) {
+            const auto& col = table.columns[j];
+            if (j > 0)
+                columnsJson += ',';
+            columnsJson += std::format(R"({{"name":"{}","logicalName":"{}","type":"{}","size":{},"scale":{},"nullable":{},"isPrimaryKey":{},"defaultValue":"{}","comment":"{}"}})",
+                                       JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.logicalName), JsonUtils::escapeString(col.type), col.size, col.scale,
+                                       col.nullable ? "true" : "false", col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.defaultValue), JsonUtils::escapeString(col.comment));
+        }
+        columnsJson += "]";
+
+        std::string indexesJson = "[";
+        for (size_t j = 0; j < table.indexes.size(); ++j) {
+            const auto& idx = table.indexes[j];
+            if (j > 0)
+                indexesJson += ',';
+
+            std::string idxColumnsJson = "[";
+            for (size_t k = 0; k < idx.columns.size(); ++k) {
+                if (k > 0)
+                    idxColumnsJson += ',';
+                idxColumnsJson += std::format(R"("{}")", JsonUtils::escapeString(idx.columns[k]));
+            }
+            idxColumnsJson += "]";
+
+            indexesJson += std::format(R"({{"name":"{}","columns":{},"isUnique":{}}})", JsonUtils::escapeString(idx.name), idxColumnsJson, idx.isUnique ? "true" : "false");
+        }
+        indexesJson += "]";
+
+        tablesJson += std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
+                                  JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), columnsJson, indexesJson, table.posX, table.posY);
+    }
+    tablesJson += "]";
+
+    std::string relationsJson = "[";
+    for (size_t i = 0; i < model.relations.size(); ++i) {
+        const auto& rel = model.relations[i];
+        if (i > 0)
+            relationsJson += ',';
+        relationsJson += std::format(R"({{"name":"{}","parentTable":"{}","childTable":"{}","parentColumn":"{}","childColumn":"{}","cardinality":"{}"}})", JsonUtils::escapeString(rel.name),
+                                     JsonUtils::escapeString(rel.parentTable), JsonUtils::escapeString(rel.childTable), JsonUtils::escapeString(rel.parentColumn),
+                                     JsonUtils::escapeString(rel.childColumn), JsonUtils::escapeString(rel.cardinality));
+    }
+    relationsJson += "]";
+
+    std::string json = "{";
+    json += "\"name\":\"" + JsonUtils::escapeString(model.name) + "\",";
+    json += "\"databaseType\":\"" + JsonUtils::escapeString(model.databaseType) + "\",";
+    json += "\"tables\":" + tablesJson + ",";
+    json += "\"relations\":" + relationsJson + ",";
+    json += "\"ddl\":\"" + JsonUtils::escapeString(ddl) + "\"}";
+    return json;
 }
 
-std::string UtilityContext::uppercaseKeywords(std::string_view sql) {
-    return m_sqlFormatter->uppercaseKeywords(std::string(sql));
-}
+}  // namespace
 
-std::string UtilityContext::searchObjects(std::string_view connectionId, std::string_view query, std::string_view objectType) {
-    // GlobalSearch needs driver - implementation deferred to IPCHandler migration
-    return "[]";
-}
-
-std::string UtilityContext::quickSearch(std::string_view connectionId, std::string_view query, size_t maxResults) {
-    return "[]";
-}
-
-std::expected<std::string, std::string> UtilityContext::parseA5ERFile(std::string_view filePath) {
+std::string UtilityContext::handleFormatSQL(std::string_view params) {
     try {
-        auto model = m_a5erParser->parse(std::string(filePath));
-        // Simplified JSON serialization
-        std::string json = std::format(R"({{"name":"{}","databaseType":"{}","tableCount":{}}})", model.name, model.databaseType, model.tables.size());
-        return json;
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
+
+        auto sqlResult = doc["sql"].get_string();
+        if (sqlResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing sql field");
+        }
+        std::string sqlQuery = std::string(sqlResult.value());
+
+        constexpr size_t MAX_SQL_SIZE = 100000;
+        if (sqlQuery.size() > MAX_SQL_SIZE) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("SQL too large ({} chars). Maximum size is {} chars.", sqlQuery.size(), MAX_SQL_SIZE));
+        }
+
+        auto finalSQL = m_sqlFormatter->format(sqlQuery);
+        return JsonUtils::successResponse(std::format(R"({{"sql":"{}"}})", JsonUtils::escapeString(finalSQL)));
     } catch (const std::exception& e) {
-        return std::unexpected(e.what());
+        return JsonUtils::errorResponse(e.what());
     }
 }
 
-std::expected<ResultSet, std::string> UtilityContext::filterResultSet(const ResultSet& data, std::string_view filterText, const std::vector<int>& columnIndices) {
-    // Use SIMDFilter to filter rows containing the filter text
-    ResultSet filtered;
-    filtered.columns = data.columns;
+std::string UtilityContext::handleUppercaseKeywords(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
 
-    // For each specified column, find rows containing the filter text
-    std::vector<size_t> matchingRows;
-    for (int colIdx : columnIndices) {
-        if (colIdx >= 0 && colIdx < static_cast<int>(data.columns.size())) {
-            auto matches = m_simdFilter->filterContains(data, static_cast<size_t>(colIdx), std::string(filterText));
-            matchingRows.insert(matchingRows.end(), matches.begin(), matches.end());
+        auto sqlResult = doc["sql"].get_string();
+        if (sqlResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing sql field");
         }
+        std::string sqlQuery = std::string(sqlResult.value());
+
+        auto uppercasedSQL = m_sqlFormatter->uppercaseKeywords(sqlQuery);
+        return JsonUtils::successResponse(std::format(R"({{"sql":"{}"}})", JsonUtils::escapeString(uppercasedSQL)));
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
     }
+}
 
-    // Remove duplicates and add matching rows to result
-    std::ranges::sort(matchingRows);
-    auto last = std::unique(matchingRows.begin(), matchingRows.end());
-    matchingRows.erase(last, matchingRows.end());
+std::string UtilityContext::handleParseA5ER(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
 
-    for (size_t rowIdx : matchingRows) {
-        if (rowIdx < data.rows.size()) {
-            filtered.rows.push_back(data.rows[rowIdx]);
+        auto filepathResult = doc["filepath"].get_string();
+        if (filepathResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing filepath field");
         }
-    }
 
-    return filtered;
+        A5ERModel model = m_a5erParser->parse(std::string(filepathResult.value()));
+        return JsonUtils::successResponse(serializeA5ERModelToJson(model, m_a5erParser->generateDDL(model)));
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string UtilityContext::handleParseA5ERContent(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
+
+        auto contentResult = doc["content"].get_string();
+        if (contentResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing content field");
+        }
+
+        A5ERModel model = m_a5erParser->parseFromString(std::string(contentResult.value()));
+
+        auto filenameResult = doc["filename"].get_string();
+        if (!filenameResult.error() && model.name.empty()) {
+            model.name = std::string(filenameResult.value());
+        }
+
+        return JsonUtils::successResponse(serializeA5ERModelToJson(model, m_a5erParser->generateDDL(model)));
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string UtilityContext::handleSearchObjects(IDatabaseContext& db, std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto patternResult = doc["pattern"].get_string();
+        if (connectionIdResult.error() || patternResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or pattern");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto pattern = std::string(patternResult.value());
+
+        auto driver = db.getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        SearchOptions options{};
+        if (auto val = doc["searchTables"].get_bool(); !val.error())
+            options.searchTables = val.value();
+        if (auto val = doc["searchViews"].get_bool(); !val.error())
+            options.searchViews = val.value();
+        if (auto val = doc["searchProcedures"].get_bool(); !val.error())
+            options.searchProcedures = val.value();
+        if (auto val = doc["searchFunctions"].get_bool(); !val.error())
+            options.searchFunctions = val.value();
+        if (auto val = doc["searchColumns"].get_bool(); !val.error())
+            options.searchColumns = val.value();
+        if (auto val = doc["caseSensitive"].get_bool(); !val.error())
+            options.caseSensitive = val.value();
+        if (auto val = doc["maxResults"].get_int64(); !val.error())
+            options.maxResults = static_cast<int>(val.value());
+
+        auto results = m_globalSearch->searchObjects(driver.get(), pattern, options);
+
+        std::string json = "[";
+        for (size_t i = 0; i < results.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            const auto& r = results[i];
+            json += "{";
+            json += std::format("\"objectType\":\"{}\",", JsonUtils::escapeString(r.objectType));
+            json += std::format("\"schemaName\":\"{}\",", JsonUtils::escapeString(r.schemaName));
+            json += std::format("\"objectName\":\"{}\",", JsonUtils::escapeString(r.objectName));
+            json += std::format("\"parentName\":\"{}\"", JsonUtils::escapeString(r.parentName));
+            json += "}";
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string UtilityContext::handleQuickSearch(IDatabaseContext& db, std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
+
+        auto connectionIdResult = doc["connectionId"].get_string();
+        auto prefixResult = doc["prefix"].get_string();
+        if (connectionIdResult.error() || prefixResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required fields: connectionId or prefix");
+        }
+        auto connectionId = std::string(connectionIdResult.value());
+        auto prefix = std::string(prefixResult.value());
+        int limit = 20;
+        if (auto val = doc["limit"].get_int64(); !val.error())
+            limit = static_cast<int>(val.value());
+
+        auto driver = db.getMetadataDriver(connectionId);
+        if (!driver) [[unlikely]] {
+            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
+        }
+
+        auto results = m_globalSearch->quickSearch(driver.get(), prefix, limit);
+
+        std::string json = "[";
+        for (size_t i = 0; i < results.size(); ++i) {
+            if (i > 0)
+                json += ',';
+            json += std::format("\"{}\"", JsonUtils::escapeString(results[i]));
+        }
+        json += "]";
+
+        return JsonUtils::successResponse(json);
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
 }
 
 }  // namespace velocitydb
