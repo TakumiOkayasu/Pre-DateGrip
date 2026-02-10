@@ -31,8 +31,8 @@ public:
 
     DatabaseContext(const DatabaseContext&) = delete;
     DatabaseContext& operator=(const DatabaseContext&) = delete;
-    DatabaseContext(DatabaseContext&&) noexcept;
-    DatabaseContext& operator=(DatabaseContext&&) noexcept;
+    DatabaseContext(DatabaseContext&&) = delete;
+    DatabaseContext& operator=(DatabaseContext&&) = delete;
 
     // IDatabaseContext implementation (IPC handle methods)
     // Connection lifecycle

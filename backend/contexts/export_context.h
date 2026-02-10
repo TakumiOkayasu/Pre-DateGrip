@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../interfaces/export_context_if.h"
+#include "../interfaces/export_context.h"
 
 #include <memory>
 #include <string>

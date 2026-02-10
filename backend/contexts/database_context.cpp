@@ -126,8 +126,6 @@ DatabaseContext::DatabaseContext()
     , m_queryHistory(std::make_unique<QueryHistory>()) {}
 
 DatabaseContext::~DatabaseContext() = default;
-DatabaseContext::DatabaseContext(DatabaseContext&&) noexcept = default;
-DatabaseContext& DatabaseContext::operator=(DatabaseContext&&) noexcept = default;
 
 // ─── Driver access ──────────────────────────────────────────────────
 
