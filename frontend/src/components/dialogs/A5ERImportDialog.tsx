@@ -1,12 +1,17 @@
 import { useCallback, useState } from 'react';
+import type { ERDiagramModel } from '../../utils/erDiagramParser';
+import { parseERDiagram } from '../../utils/erDiagramParser';
+// A5ERテキストパーサーを登録するため副作用インポート
+import '../../utils/a5erTextParser';
 import styles from './A5ERImportDialog.module.css';
 
 interface A5ERImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (tables: A5ERTable[], relations: A5ERRelation[]) => void;
+  onImport: (model: ERDiagramModel) => void;
 }
 
+// Legacy types kept for DDL generation compatibility
 export interface A5ERTable {
   name: string;
   schema: string;
@@ -35,8 +40,7 @@ export interface A5ERRelation {
 
 export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialogProps) {
   const [fileName, setFileName] = useState<string>('');
-  const [parsedTables, setParsedTables] = useState<A5ERTable[]>([]);
-  const [parsedRelations, setParsedRelations] = useState<A5ERRelation[]>([]);
+  const [parsedModel, setParsedModel] = useState<ERDiagramModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatedDDL, setGeneratedDDL] = useState<string>('');
   const [showDDL, setShowDDL] = useState(false);
@@ -51,13 +55,65 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
     try {
       const content = await file.text();
 
-      // Parse A5:ER format (simplified XML parsing)
-      const { tables, relations } = parseA5ERContent(content);
-      setParsedTables(tables);
-      setParsedRelations(relations);
+      // 新パーサーレジストリで自動判定（テキスト形式 / XML形式）
+      let model: ERDiagramModel;
+      try {
+        model = parseERDiagram(content, file.name);
+      } catch {
+        // 新パーサーで処理できない場合はレガシーXMLパーサーにフォールバック
+        const { tables, relations } = parseA5ERContent(content);
+        model = {
+          name: file.name,
+          tables: tables.map((t) => ({
+            name: t.name,
+            logicalName: '',
+            comment: '',
+            posX: 0,
+            posY: 0,
+            columns: t.columns.map((c) => ({
+              name: c.name,
+              logicalName: '',
+              type: c.type,
+              nullable: c.nullable,
+              isPrimaryKey: c.isPrimaryKey,
+              defaultValue: '',
+              comment: '',
+            })),
+            indexes: [],
+          })),
+          relations: relations.map((r) => ({
+            name: `${r.sourceTable}_${r.targetTable}`,
+            sourceTable: r.sourceTable,
+            targetTable: r.targetTable,
+            sourceColumn: r.sourceColumn,
+            targetColumn: r.targetColumn,
+            cardinality: r.cardinality,
+          })),
+        };
+      }
 
-      // Generate DDL
-      const ddl = generateDDL(tables, relations);
+      setParsedModel(model);
+
+      // Generate DDL from model
+      const legacyTables: A5ERTable[] = model.tables.map((t) => ({
+        name: t.name,
+        schema: 'dbo',
+        columns: t.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          nullable: c.nullable,
+          isPrimaryKey: c.isPrimaryKey,
+          isForeignKey: false,
+        })),
+      }));
+      const legacyRelations: A5ERRelation[] = model.relations.map((r) => ({
+        sourceTable: r.sourceTable,
+        targetTable: r.targetTable,
+        sourceColumn: r.sourceColumn,
+        targetColumn: r.targetColumn,
+        cardinality: r.cardinality,
+      }));
+      const ddl = generateDDL(legacyTables, legacyRelations);
       setGeneratedDDL(ddl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse file');
@@ -65,9 +121,11 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
   }, []);
 
   const handleImport = useCallback(() => {
-    onImport(parsedTables, parsedRelations);
+    if (parsedModel) {
+      onImport(parsedModel);
+    }
     onClose();
-  }, [parsedTables, parsedRelations, onImport, onClose]);
+  }, [parsedModel, onImport, onClose]);
 
   const handleCopyDDL = useCallback(async () => {
     await navigator.clipboard.writeText(generatedDDL);
@@ -96,19 +154,18 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
 
           {error && <div className={styles.error}>{error}</div>}
 
-          {parsedTables.length > 0 && (
+          {parsedModel && parsedModel.tables.length > 0 && (
             <div className={styles.summary}>
               <h3>解析結果</h3>
               <p>
-                {parsedTables.length} テーブル, {parsedRelations.length} リレーション
+                {parsedModel.tables.length} テーブル, {parsedModel.relations.length} リレーション
               </p>
 
               <div className={styles.tableList}>
-                {parsedTables.map((table) => (
+                {parsedModel.tables.map((table) => (
                   <div key={table.name} className={styles.tableItem}>
                     <span className={styles.tableName}>
-                      {table.schema ? `${table.schema}.` : ''}
-                      {table.name}
+                      {table.logicalName ? `${table.name} (${table.logicalName})` : table.name}
                     </span>
                     <span className={styles.columnCount}>{table.columns.length} カラム</span>
                   </div>
@@ -131,7 +188,7 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
           <button onClick={onClose}>キャンセル</button>
           <button
             onClick={handleImport}
-            disabled={parsedTables.length === 0}
+            disabled={!parsedModel || parsedModel.tables.length === 0}
             className={styles.importButton}
           >
             ER図にインポート

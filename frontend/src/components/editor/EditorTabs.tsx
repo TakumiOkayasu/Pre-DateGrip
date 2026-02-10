@@ -15,6 +15,23 @@ const SqlIcon = (
   </svg>
 );
 
+// ER diagram icon
+const ERDiagramIcon = (
+  <svg
+    className={styles.tabIcon}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.2"
+  >
+    <rect x="1" y="1" width="5" height="4" rx="0.5" />
+    <rect x="10" y="1" width="5" height="4" rx="0.5" />
+    <rect x="5.5" y="11" width="5" height="4" rx="0.5" />
+    <path d="M3.5 5v3.5h4.5V11" />
+    <path d="M12.5 5v3.5h-4.5V11" />
+  </svg>
+);
+
 // Plus icon for add button
 const PlusIcon = (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -41,7 +58,7 @@ export function EditorTabs() {
             className={`${styles.tab} ${query.id === activeQueryId ? styles.active : ''}`}
             onClick={() => setActive(query.id)}
           >
-            {SqlIcon}
+            {query.isERDiagram ? ERDiagramIcon : SqlIcon}
             <span className={styles.tabName}>
               {query.isDirty && <span className={styles.dirty}>●</span>}
               {query.name}

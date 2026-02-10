@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { bridge } from '../api/bridge';
 import type { ERRelationEdge, ERTableNode } from '../types';
+import type { ERDiagramModel } from '../utils/erDiagramParser';
 
 interface ERDiagramState {
   tables: ERTableNode[];
@@ -22,7 +23,11 @@ interface ERDiagramState {
   // Import from A5:ER file
   loadFromA5ERFile: (filepath: string) => Promise<void>;
 
+  // Import from parsed ER diagram model
+  loadFromParsedModel: (model: ERDiagramModel) => void;
+
   // Import from A5:ER (legacy)
+  /** @deprecated Use loadFromParsedModel instead */
   importFromA5ER: (
     tables: {
       name: string;
@@ -218,6 +223,55 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
     }
   },
 
+  loadFromParsedModel: (model) => {
+    const nodeWidth = 200;
+    const nodeHeight = 150;
+    const horizontalGap = 80;
+    const verticalGap = 80;
+    const columns = 4;
+
+    const erTables: ERTableNode[] = model.tables.map((table, i) => {
+      // ファイルに位置情報があればそれを使用、なければ自動レイアウト
+      const hasPosition = table.posX !== 0 || table.posY !== 0;
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+
+      return {
+        id: table.name,
+        type: 'table',
+        data: {
+          tableName: table.name,
+          columns: table.columns.map((c) => ({
+            name: c.name,
+            type: c.type,
+            size: 0,
+            nullable: c.nullable,
+            isPrimaryKey: c.isPrimaryKey,
+            comment: c.logicalName || c.comment || undefined,
+          })),
+        },
+        position: hasPosition
+          ? { x: table.posX, y: table.posY }
+          : { x: col * (nodeWidth + horizontalGap), y: row * (nodeHeight + verticalGap) },
+      };
+    });
+
+    const erRelations: ERRelationEdge[] = model.relations.map((rel, i) => ({
+      id: `rel-${i}-${rel.name}`,
+      source: rel.sourceTable,
+      target: rel.targetTable,
+      type: 'relation',
+      data: {
+        cardinality: rel.cardinality,
+        sourceColumn: rel.sourceColumn,
+        targetColumn: rel.targetColumn,
+      },
+    }));
+
+    set({ tables: erTables, relations: erRelations });
+  },
+
+  /** @deprecated Use loadFromParsedModel instead */
   importFromA5ER: (tables, relations) => {
     const nodeWidth = 200;
     const nodeHeight = 150;
