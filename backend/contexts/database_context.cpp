@@ -744,10 +744,11 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
                 std::string_view sizeStr = row.values[2];
                 int colSize = 0;
                 std::from_chars(sizeStr.data(), sizeStr.data() + sizeStr.size(), colSize);
-                std::string comment = row.values.size() >= 6 ? row.values[5] : "";
+                auto comment = row.values.size() >= 6 ? row.values[5] : std::string{};
+                auto nullable = row.values[3] == "1" ? "true" : "false";
+                auto isPk = row.values[4] == "1" ? "true" : "false";
                 jsonResponse += std::format(R"({{"name":"{}","type":"{}","size":{},"nullable":{},"isPrimaryKey":{},"comment":"{}"}})", JsonUtils::escapeString(row.values[0]),
-                                            JsonUtils::escapeString(row.values[1]), colSize, row.values[3] == "1" ? "true" : "false", row.values[4] == "1" ? "true" : "false",
-                                            JsonUtils::escapeString(comment));
+                                            JsonUtils::escapeString(row.values[1]), colSize, nullable, isPk, JsonUtils::escapeString(comment));
             }
         }
         jsonResponse += ']';
@@ -1323,12 +1324,14 @@ std::string DatabaseContext::handleCommitTransaction(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
 
-        std::lock_guard lock(m_txMutex);
-        auto it = m_transactionManagers.find(connectionId);
-        if (it == m_transactionManagers.end()) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        {
+            std::lock_guard lock(m_txMutex);
+            auto it = m_transactionManagers.find(connectionId);
+            if (it == m_transactionManagers.end()) [[unlikely]] {
+                return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+            }
+            it->second->commit();
         }
-        it->second->commit();
         return JsonUtils::successResponse("{}");
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -1346,12 +1349,14 @@ std::string DatabaseContext::handleRollbackTransaction(std::string_view params) 
         }
         auto connectionId = std::string(connectionIdResult.value());
 
-        std::lock_guard lock(m_txMutex);
-        auto it = m_transactionManagers.find(connectionId);
-        if (it == m_transactionManagers.end()) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+        {
+            std::lock_guard lock(m_txMutex);
+            auto it = m_transactionManagers.find(connectionId);
+            if (it == m_transactionManagers.end()) [[unlikely]] {
+                return JsonUtils::errorResponse(std::format("No transaction manager for connection: {}", connectionId));
+            }
+            it->second->rollback();
         }
-        it->second->rollback();
         return JsonUtils::successResponse("{}");
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
