@@ -1,11 +1,11 @@
 import { Handle, Position } from '@xyflow/react';
 import { memo } from 'react';
-import type { Column } from '../../types';
+import type { ERColumn } from '../../types';
 import styles from './TableNode.module.css';
 
 interface TableNodeData {
   tableName: string;
-  columns: Column[];
+  columns: ERColumn[];
 }
 
 interface TableNodeProps {
@@ -18,6 +18,24 @@ const icons = {
   table: '\uD83D\uDCCB', // 📋
   key: '\uD83D\uDD11', // 🔑
 };
+
+function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
+  return (
+    <div
+      className={`${styles.column} ${isPK ? styles.primaryKey : ''}`}
+      title={col.comment || undefined}
+    >
+      {isPK && <span className={styles.keyIcon}>{icons.key}</span>}
+      <span className={styles.columnName}>
+        {!isPK && !col.nullable ? '*' : ''}
+        {col.name}
+        {col.logicalName && <span className={styles.logicalName}> ({col.logicalName})</span>}
+      </span>
+      <span className={styles.columnType}>{col.type}</span>
+      {col.defaultValue && <span className={styles.defaultValue}>={col.defaultValue}</span>}
+    </div>
+  );
+}
 
 export const TableNode = memo(function TableNode({ data, selected }: TableNodeProps) {
   const { tableName, columns } = data;
@@ -35,29 +53,15 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
       </div>
 
       <div className={styles.columns}>
-        {primaryKeys.map((col) => (
-          <div key={col.name} className={`${styles.column} ${styles.primaryKey}`}>
-            <span className={styles.keyIcon}>{icons.key}</span>
-            <span className={styles.columnName}>{col.name}</span>
-            <span className={styles.columnType}>{col.type}</span>
-          </div>
+        {primaryKeys.map((col, i) => (
+          <ColumnRow key={`pk-${i}-${col.name}`} col={col} isPK />
         ))}
 
         {primaryKeys.length > 0 && regularColumns.length > 0 && <div className={styles.divider} />}
 
-        {regularColumns.slice(0, 10).map((col) => (
-          <div key={col.name} className={styles.column}>
-            <span className={styles.columnName}>
-              {col.nullable ? '' : '*'}
-              {col.name}
-            </span>
-            <span className={styles.columnType}>{col.type}</span>
-          </div>
+        {regularColumns.map((col, i) => (
+          <ColumnRow key={`col-${i}-${col.name}`} col={col} isPK={false} />
         ))}
-
-        {regularColumns.length > 10 && (
-          <div className={styles.moreColumns}>+{regularColumns.length - 10} more columns</div>
-        )}
       </div>
 
       <Handle type="source" position={Position.Right} className={styles.handle} />

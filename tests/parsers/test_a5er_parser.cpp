@@ -92,8 +92,8 @@ Page=MAIN
 Left=100
 Top=200
 Field="id","id","INT","NOT NULL",1,"",""
-Field="name","display_name","NVARCHAR(100)","NOT NULL",0,"",""
-Field="email","email_addr","NVARCHAR(255)","NULL",0,"",""
+Field="name","display_name","NVARCHAR(100)","NOT NULL","","",""
+Field="email","email_addr","NVARCHAR(255)","NULL","","",""
 DEL
 
 [Entity]
@@ -104,8 +104,8 @@ Page=MAIN
 Left=400
 Top=200
 Field="id","id","INT","NOT NULL",1,"",""
-Field="user_id","user_ref","INT","NOT NULL",0,"",""
-Field="amount","price","DECIMAL(10,2)","NOT NULL",0,"0",""
+Field="user_id","user_ref","INT","NOT NULL","","",""
+Field="amount","price","DECIMAL(10,2)","NOT NULL","","0",""
 DEL
 
 [Relation]
@@ -141,6 +141,59 @@ TEST_F(A5ERParserTest, TextFormatTableProperties) {
     EXPECT_EQ(users.comment, "User master");
     EXPECT_EQ(users.posX, 100.0);
     EXPECT_EQ(users.posY, 200.0);
+}
+
+TEST_F(A5ERParserTest, TextFormatPageProperty) {
+    auto model = parser.parseFromString(BASIC_TEXT_INPUT);
+
+    EXPECT_EQ(model.tables[0].page, "MAIN");
+    EXPECT_EQ(model.tables[1].page, "MAIN");
+}
+
+TEST_F(A5ERParserTest, TextFormatMultiplePages) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=users
+LName=User
+Page=MAIN
+Left=100
+Top=200
+Field="id","id","INT","NOT NULL",0,"",""
+DEL
+
+[Entity]
+PName=logs
+LName=Log
+Page=SUB
+Left=100
+Top=200
+Field="id","id","INT","NOT NULL",0,"",""
+DEL
+
+[Entity]
+PName=orders
+LName=Order
+Page=MAIN
+Left=400
+Top=200
+Field="id","id","INT","NOT NULL",0,"",""
+DEL
+)a5er";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables.size(), 3);
+    EXPECT_EQ(model.tables[0].page, "MAIN");
+    EXPECT_EQ(model.tables[1].page, "SUB");
+    EXPECT_EQ(model.tables[2].page, "MAIN");
+}
+
+TEST_F(A5ERParserTest, TextFormatEmptyPage) {
+    const char* input = "# A5:ER FORMAT:19\n\n[Entity]\nPName=test\nLName=Test\nDEL\n";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables.size(), 1);
+    EXPECT_EQ(model.tables[0].page, "");
 }
 
 TEST_F(A5ERParserTest, TextFormatColumns) {
@@ -211,8 +264,8 @@ TEST_F(A5ERParserTest, TextFormatIndexes) {
 PName=users
 LName=User
 Field="id","id","INT","NOT NULL",1,"",""
-Field="email","email_addr","NVARCHAR(255)","NOT NULL",0,"",""
-Field="name","display_name","NVARCHAR(100)","NULL",0,"",""
+Field="email","email_addr","NVARCHAR(255)","NOT NULL","","",""
+Field="name","display_name","NVARCHAR(100)","NULL","","",""
 Index=IX_users_email=0,email
 Index=UQ_users_name=1,name
 DEL
@@ -245,7 +298,7 @@ TEST_F(A5ERParserTest, TextFormatQuotedCSVWithCommaInType) {
 [Entity]
 PName=test
 LName=Test
-Field="price","unit_price","DECIMAL(10,2)","NOT NULL",0,"",""
+Field="price","unit_price","DECIMAL(10,2)","NOT NULL","","",""
 DEL
 )a5er";
     auto model = parser.parseFromString(input);
@@ -259,6 +312,127 @@ TEST_F(A5ERParserTest, TextFormatNoEntities) {
 
     EXPECT_EQ(model.tables.size(), 0);
     EXPECT_EQ(model.relations.size(), 0);
+}
+
+// === DELなし形式（FORMAT:19 実ファイル互換）===
+
+static const char* NO_DEL_TEXT_INPUT = R"a5er(# A5:ER FORMAT:19
+# A5:ER ENCODING:UTF-8
+
+[Entity]
+PName=users
+LName=User
+Comment=User master
+Page=MAIN
+Left=100
+Top=200
+Field="id","id","INT","NOT NULL",0,"",""
+Field="name","display_name","NVARCHAR(100)","NOT NULL","","",""
+Field="email","email_addr","NVARCHAR(255)","NULL","","",""
+
+[Entity]
+PName=orders
+LName=Order
+Comment=
+Page=MAIN
+Left=400
+Top=200
+Field="id","id","INT","NOT NULL",0,"",""
+Field="user_id","user_ref","INT","NOT NULL","","",""
+Field="amount","price","DECIMAL(10,2)","NOT NULL","","0",""
+
+[Relation]
+Entity1=users
+Entity2=orders
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Dependence=0
+)a5er";
+
+TEST_F(A5ERParserTest, TextFormatNoDEL) {
+    auto model = parser.parseFromString(NO_DEL_TEXT_INPUT);
+
+    EXPECT_EQ(model.tables.size(), 2);
+    EXPECT_EQ(model.relations.size(), 1);
+    EXPECT_EQ(model.tables[0].name, "users");
+    EXPECT_EQ(model.tables[1].name, "orders");
+    EXPECT_EQ(model.relations[0].parentTable, "users");
+    EXPECT_EQ(model.relations[0].cardinality, "1:N");
+}
+
+TEST_F(A5ERParserTest, TextFormatPKOrderZero) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=test
+LName=Test
+Field="id","id","INT","NOT NULL",0,"",""
+Field="name","name","NVARCHAR(100)","NULL","","",""
+DEL
+)a5er";
+    auto model = parser.parseFromString(input);
+    const auto& cols = model.tables[0].columns;
+
+    ASSERT_EQ(cols.size(), 2);
+    EXPECT_TRUE(cols[0].isPrimaryKey);   // PKorder=0 → PK
+    EXPECT_FALSE(cols[1].isPrimaryKey);  // 空文字 → 非PK
+}
+
+TEST_F(A5ERParserTest, TextFormatUTF8BOM) {
+    std::string input = "\xEF\xBB\xBF# A5:ER FORMAT:19\n\n[Entity]\nPName=bom_test\nLName=BOM\nDEL\n";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables.size(), 1);
+    EXPECT_EQ(model.tables[0].name, "bom_test");
+}
+
+TEST_F(A5ERParserTest, TextFormatCompositePK) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=order_items
+LName=OrderItem
+Field="order_id","order_id","INT","NOT NULL",0,"",""
+Field="item_id","item_id","INT","NOT NULL",1,"",""
+Field="quantity","quantity","INT","NOT NULL","","",""
+DEL
+)a5er";
+    auto model = parser.parseFromString(input);
+    const auto& cols = model.tables[0].columns;
+
+    ASSERT_EQ(cols.size(), 3);
+    EXPECT_TRUE(cols[0].isPrimaryKey);   // PKorder=0
+    EXPECT_TRUE(cols[1].isPrimaryKey);   // PKorder=1
+    EXPECT_FALSE(cols[2].isPrimaryKey);  // 空文字 → 非PK
+}
+
+TEST_F(A5ERParserTest, TextFormatMixedDELAndNoDEL) {
+    const char* input = R"a5er(# A5:ER FORMAT:19
+
+[Entity]
+PName=table_a
+LName=A
+Field="id","id","INT","NOT NULL",0,"",""
+DEL
+
+[Entity]
+PName=table_b
+LName=B
+Field="id","id","INT","NOT NULL",0,"",""
+
+[Entity]
+PName=table_c
+LName=C
+Field="id","id","INT","NOT NULL",0,"",""
+)a5er";
+    auto model = parser.parseFromString(input);
+
+    ASSERT_EQ(model.tables.size(), 3);
+    EXPECT_EQ(model.tables[0].name, "table_a");
+    EXPECT_EQ(model.tables[1].name, "table_b");
+    EXPECT_EQ(model.tables[2].name, "table_c");
 }
 
 }  // namespace test

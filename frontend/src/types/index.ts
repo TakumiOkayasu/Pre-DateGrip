@@ -99,6 +99,12 @@ export interface Column {
   comment?: string;
 }
 
+/** ER図表示用の拡張カラム型（Column + ER固有属性） */
+export interface ERColumn extends Column {
+  logicalName?: string;
+  defaultValue?: string;
+}
+
 export interface ResultSet {
   columns: Column[];
   rows: string[][];
@@ -257,7 +263,8 @@ export interface ERTableNode {
   type: 'table';
   data: {
     tableName: string;
-    columns: Column[];
+    columns: ERColumn[];
+    page?: string;
   };
   position: { x: number; y: number };
 }

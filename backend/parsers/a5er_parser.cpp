@@ -34,10 +34,15 @@ A5ERModel A5ERParser::parse(const std::string& filepath) {
 }
 
 A5ERModel A5ERParser::parseFromString(const std::string& content) {
-    if (isTextFormat(content)) {
-        return parseTextFormat(content);
+    // UTF-8 BOM除去（BOMなし時はコピー回避）
+    const bool hasBom = content.size() >= 3 && content[0] == '\xEF' && content[1] == '\xBB' && content[2] == '\xBF';
+    const std::string stripped = hasBom ? content.substr(3) : std::string{};
+    const std::string& input = hasBom ? stripped : content;
+
+    if (isTextFormat(input)) {
+        return parseTextFormat(input);
     }
-    return parseXmlFormat(content);
+    return parseXmlFormat(input);
 }
 
 A5ERModel A5ERParser::parseXmlFormat(const std::string& content) {
@@ -62,6 +67,7 @@ A5ERModel A5ERParser::parseXmlFormat(const std::string& content) {
         table.name = entityNode.attribute("Name").as_string();
         table.logicalName = entityNode.attribute("LogicalName").as_string();
         table.comment = entityNode.attribute("Comment").as_string();
+        table.page = entityNode.attribute("Page").as_string();
         table.posX = entityNode.attribute("X").as_double();
         table.posY = entityNode.attribute("Y").as_double();
 
@@ -197,12 +203,16 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
 
         // セクションヘッダ判定: [Entity], [Relation] 等
         if (line.size() >= 3 && line.front() == '[' && line.back() == ']') {
+            // 前セクションを保存（新ヘッダが暗黙の区切り）
+            if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation")) {
+                sections.push_back({currentType, std::move(currentLines)});
+            }
             currentType = line.substr(1, line.size() - 2);
             currentLines.clear();
             continue;
         }
 
-        // セクション終端（Entity/Relation のみ保持、Header/Diagram等はスキップ）
+        // 明示的セクション終端（DEL行）
         if (line == "DEL" && !currentType.empty()) {
             if (currentType == "Entity" || currentType == "Relation") {
                 sections.push_back({currentType, std::move(currentLines)});
@@ -215,6 +225,11 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
         if (!currentType.empty()) {
             currentLines.push_back(line);
         }
+    }
+
+    // 最終セクション保存（DELなしファイル対応）
+    if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation")) {
+        sections.push_back({currentType, std::move(currentLines)});
     }
 
     // props から値を取得するヘルパー
@@ -260,9 +275,8 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
                     if (parts.size() > 3)
                         col.nullable = (parts[3] != "NOT NULL");
                     if (parts.size() > 4) {
-                        int pkOrder = 0;
-                        std::from_chars(parts[4].data(), parts[4].data() + parts[4].size(), pkOrder);
-                        col.isPrimaryKey = (pkOrder > 0);
+                        // A5:ER Field[4]: PK順序。数値(0,1,...)=PK、空文字=非PK
+                        col.isPrimaryKey = !parts[4].empty();
                     }
                     if (parts.size() > 5)
                         col.defaultValue = parts[5];
@@ -302,6 +316,7 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
             table.name = getProp(props, "PName");
             table.logicalName = getProp(props, "LName");
             table.comment = getProp(props, "Comment");
+            table.page = getProp(props, "Page");
             table.posX = getPropDouble(props, "Left");
             table.posY = getPropDouble(props, "Top");
 

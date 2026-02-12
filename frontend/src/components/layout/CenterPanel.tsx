@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { useERDiagramStore } from '../../store/erDiagramStore';
 import { useActiveQuery } from '../../store/queryStore';
 import { log } from '../../utils/logger';
 import { EditorTabs } from '../editor/EditorTabs';
@@ -16,9 +15,6 @@ const ERDiagramView = lazy(() =>
   import('../diagram/ERDiagram').then((module) => ({ default: module.ERDiagram }))
 );
 
-const EMPTY_TABLES: ReturnType<typeof useERDiagramStore.getState>['tables'] = [];
-const EMPTY_RELATIONS: ReturnType<typeof useERDiagramStore.getState>['relations'] = [];
-
 // Loading fallback for Monaco Editor
 function EditorLoadingFallback() {
   return (
@@ -33,8 +29,6 @@ export function CenterPanel() {
   const activeQuery = useActiveQuery();
   const isDataView = activeQuery?.isDataView === true;
   const isERDiagram = activeQuery?.isERDiagram === true;
-  const tables = useERDiagramStore((s) => (isERDiagram ? s.tables : EMPTY_TABLES));
-  const relations = useERDiagramStore((s) => (isERDiagram ? s.relations : EMPTY_RELATIONS));
 
   log.debug(
     `[CenterPanel] Render: activeQuery=${activeQuery?.id}, isDataView=${isDataView}, isERDiagram=${isERDiagram}`
@@ -46,7 +40,7 @@ export function CenterPanel() {
       <div className={styles.editorContainer}>
         <Suspense fallback={<EditorLoadingFallback />}>
           {isERDiagram ? (
-            <ERDiagramView tables={tables} relations={relations} />
+            <ERDiagramView />
           ) : isDataView ? (
             <ResultGrid queryId={activeQuery?.id} />
           ) : (

@@ -60,8 +60,9 @@ std::string serializeA5ERModelToJson(const A5ERModel& model, const std::string& 
         }
         indexesJson += "]";
 
-        tablesJson += std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
-                                  JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), columnsJson, indexesJson, table.posX, table.posY);
+        tablesJson +=
+            std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","page":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
+                        JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), JsonUtils::escapeString(table.page), columnsJson, indexesJson, table.posX, table.posY);
     }
     tablesJson += "]";
 
