@@ -28,6 +28,7 @@ struct A5ERTable {
     std::string name;
     std::string logicalName;
     std::string comment;
+    std::string page;  // A5:ER Page property (e.g. "MAIN")
     std::vector<A5ERColumn> columns;
     std::vector<A5ERIndex> indexes;
     double posX;

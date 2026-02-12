@@ -10,6 +10,7 @@ export interface ERDiagramTable {
   name: string;
   logicalName: string;
   comment: string;
+  page: string;
   posX: number;
   posY: number;
   columns: ERDiagramColumn[];

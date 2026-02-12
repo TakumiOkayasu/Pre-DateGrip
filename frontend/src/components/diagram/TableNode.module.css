@@ -3,7 +3,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   min-width: 180px;
-  max-width: 250px;
+  max-width: 320px;
   font-size: 11px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
@@ -37,8 +37,6 @@
 
 .columns {
   padding: 6px 0;
-  max-height: 200px;
-  overflow-y: auto;
 }
 
 .column {
@@ -68,23 +66,28 @@
   text-overflow: ellipsis;
 }
 
+.logicalName {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
 .columnType {
   color: var(--text-secondary);
   font-size: 10px;
   white-space: nowrap;
 }
 
+.defaultValue {
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
 .divider {
   height: 1px;
   background-color: var(--border-color);
   margin: 4px 10px;
-}
-
-.moreColumns {
-  padding: 4px 10px;
-  color: var(--text-secondary);
-  font-style: italic;
-  text-align: center;
 }
 
 .handle {

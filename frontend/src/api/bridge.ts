@@ -1,4 +1,5 @@
 import type { IPCRequest, IPCResponse } from '../types';
+import { DEFAULT_PAGE } from '../utils/erDiagramConstants';
 import type { ERDiagramModel } from '../utils/erDiagramParser';
 import { log } from '../utils/logger';
 
@@ -34,6 +35,7 @@ export interface A5ERParseResult {
     }[];
     posX: number;
     posY: number;
+    page: string;
   }[];
   relations: {
     name: string;
@@ -54,6 +56,7 @@ export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string)
       name: t.name,
       logicalName: t.logicalName,
       comment: t.comment,
+      page: t.page || DEFAULT_PAGE,
       posX: t.posX,
       posY: t.posY,
       columns: t.columns.map((c) => ({

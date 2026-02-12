@@ -1,13 +1,18 @@
 import { create } from 'zustand';
-import { bridge } from '../api/bridge';
+import { bridge, toERDiagramModel } from '../api/bridge';
 import type { ERRelationEdge, ERTableNode } from '../types';
+import { DEFAULT_PAGE, GRID_LAYOUT } from '../utils/erDiagramConstants';
 import type { ERDiagramModel } from '../utils/erDiagramParser';
+import { extractPages } from '../utils/erDiagramUtils';
 
 interface ERDiagramState {
   tables: ERTableNode[];
   relations: ERRelationEdge[];
   isLoading: boolean;
   error: string | null;
+
+  // Page state
+  selectedPage: string;
 
   // Actions
   setTables: (tables: ERTableNode[]) => void;
@@ -16,6 +21,7 @@ interface ERDiagramState {
   updateTablePosition: (id: string, position: { x: number; y: number }) => void;
   removeTable: (id: string) => void;
   clearDiagram: () => void;
+  setSelectedPage: (page: string) => void;
 
   // Reverse engineering
   loadFromDatabase: (connectionId: string, database: string) => Promise<void>;
@@ -25,33 +31,14 @@ interface ERDiagramState {
 
   // Import from parsed ER diagram model
   loadFromParsedModel: (model: ERDiagramModel) => void;
-
-  // Import from A5:ER (legacy)
-  /** @deprecated Use loadFromParsedModel instead */
-  importFromA5ER: (
-    tables: {
-      name: string;
-      schema: string;
-      columns: {
-        name: string;
-        type: string;
-        nullable: boolean;
-        isPrimaryKey: boolean;
-      }[];
-    }[],
-    relations: {
-      sourceTable: string;
-      targetTable: string;
-      cardinality: '1:1' | '1:N' | 'N:M';
-    }[]
-  ) => void;
 }
 
-export const useERDiagramStore = create<ERDiagramState>((set) => ({
+export const useERDiagramStore = create<ERDiagramState>((set, get) => ({
   tables: [],
   relations: [],
   isLoading: false,
   error: null,
+  selectedPage: DEFAULT_PAGE,
 
   setTables: (tables) => set({ tables }),
 
@@ -77,49 +64,19 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
   },
 
   clearDiagram: () => {
-    set({ tables: [], relations: [] });
+    set({ tables: [], relations: [], selectedPage: DEFAULT_PAGE });
   },
+
+  setSelectedPage: (page) => set({ selectedPage: page }),
 
   loadFromA5ERFile: async (filepath) => {
     set({ isLoading: true, error: null });
 
     try {
-      const model = await bridge.parseA5ER(filepath);
-
-      // Convert A5ER model to ERTableNode format
-      const erTables: ERTableNode[] = model.tables.map((table) => ({
-        id: table.name,
-        type: 'table',
-        data: {
-          tableName: table.name,
-          columns: table.columns.map((c) => ({
-            name: c.name,
-            type: c.type,
-            size: c.size,
-            nullable: c.nullable,
-            isPrimaryKey: c.isPrimaryKey,
-          })),
-        },
-        position: {
-          x: table.posX || 0,
-          y: table.posY || 0,
-        },
-      }));
-
-      // Convert A5ER relations to ERRelationEdge format
-      const erRelations: ERRelationEdge[] = model.relations.map((rel, i) => ({
-        id: `rel-${i}-${rel.name}`,
-        source: rel.parentTable,
-        target: rel.childTable,
-        type: 'relation',
-        data: {
-          cardinality: (rel.cardinality as '1:1' | '1:N' | 'N:M') || '1:N',
-          sourceColumn: rel.parentColumn,
-          targetColumn: rel.childColumn,
-        },
-      }));
-
-      set({ tables: erTables, relations: erRelations, isLoading: false });
+      const result = await bridge.parseA5ER(filepath);
+      const model = toERDiagramModel(result);
+      get().loadFromParsedModel(model);
+      set({ isLoading: false });
     } catch (err) {
       set({
         isLoading: false,
@@ -137,12 +94,7 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
       const tables: ERTableNode[] = [];
       const relations: ERRelationEdge[] = [];
 
-      // Layout configuration
-      const nodeWidth = 200;
-      const nodeHeight = 150;
-      const horizontalGap = 80;
-      const verticalGap = 80;
-      const columns = 4;
+      const { columns: gridColumns, nodeWidth, nodeHeight, gap } = GRID_LAYOUT;
 
       // Load columns for each table
       for (let i = 0; i < tablesData.length; i++) {
@@ -156,8 +108,8 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
         try {
           const columnsData = await bridge.getColumns(connectionId, fullTableName);
 
-          const col = i % columns;
-          const row = Math.floor(i / columns);
+          const col = i % gridColumns;
+          const row = Math.floor(i / gridColumns);
 
           tables.push({
             id: fullTableName,
@@ -173,8 +125,8 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
               })),
             },
             position: {
-              x: col * (nodeWidth + horizontalGap),
-              y: row * (nodeHeight + verticalGap),
+              x: col * (nodeWidth + gap),
+              y: row * (nodeHeight + gap),
             },
           });
         } catch (err) {
@@ -214,7 +166,7 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
         });
       });
 
-      set({ tables, relations, isLoading: false });
+      set({ tables, relations, isLoading: false, selectedPage: DEFAULT_PAGE });
     } catch (err) {
       set({
         isLoading: false,
@@ -224,35 +176,34 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
   },
 
   loadFromParsedModel: (model) => {
-    const nodeWidth = 200;
-    const nodeHeight = 150;
-    const horizontalGap = 80;
-    const verticalGap = 80;
-    const columns = 4;
+    const { columns: gridColumns, nodeWidth, nodeHeight, gap } = GRID_LAYOUT;
 
     const erTables: ERTableNode[] = model.tables.map((table, i) => {
       // ファイルに位置情報があればそれを使用、なければ自動レイアウト
       const hasPosition = table.posX !== 0 || table.posY !== 0;
-      const col = i % columns;
-      const row = Math.floor(i / columns);
+      const col = i % gridColumns;
+      const row = Math.floor(i / gridColumns);
 
       return {
         id: table.name,
         type: 'table',
         data: {
           tableName: table.name,
+          page: table.page || DEFAULT_PAGE,
           columns: table.columns.map((c) => ({
             name: c.name,
             type: c.type,
             size: 0,
             nullable: c.nullable,
             isPrimaryKey: c.isPrimaryKey,
+            logicalName: c.logicalName || undefined,
+            defaultValue: c.defaultValue || undefined,
             comment: c.logicalName || c.comment || undefined,
           })),
         },
         position: hasPosition
           ? { x: table.posX, y: table.posY }
-          : { x: col * (nodeWidth + horizontalGap), y: row * (nodeHeight + verticalGap) },
+          : { x: col * (nodeWidth + gap), y: row * (nodeHeight + gap) },
       };
     });
 
@@ -268,53 +219,12 @@ export const useERDiagramStore = create<ERDiagramState>((set) => ({
       },
     }));
 
-    set({ tables: erTables, relations: erRelations });
-  },
-
-  /** @deprecated Use loadFromParsedModel instead */
-  importFromA5ER: (tables, relations) => {
-    const nodeWidth = 200;
-    const nodeHeight = 150;
-    const horizontalGap = 80;
-    const verticalGap = 80;
-    const columns = 4;
-
-    const erTables: ERTableNode[] = tables.map((table, i) => {
-      const col = i % columns;
-      const row = Math.floor(i / columns);
-
-      return {
-        id: table.schema ? `${table.schema}.${table.name}` : table.name,
-        type: 'table',
-        data: {
-          tableName: table.name,
-          columns: table.columns.map((c) => ({
-            name: c.name,
-            type: c.type,
-            size: 0,
-            nullable: c.nullable,
-            isPrimaryKey: c.isPrimaryKey,
-          })),
-        },
-        position: {
-          x: col * (nodeWidth + horizontalGap),
-          y: row * (nodeHeight + verticalGap),
-        },
-      };
+    // 最初のページを初期選択
+    const pages = extractPages(erTables);
+    set({
+      tables: erTables,
+      relations: erRelations,
+      selectedPage: pages[0] || DEFAULT_PAGE,
     });
-
-    const erRelations: ERRelationEdge[] = relations.map((rel, i) => ({
-      id: `rel-${i}`,
-      source: rel.sourceTable,
-      target: rel.targetTable,
-      type: 'relation',
-      data: {
-        cardinality: rel.cardinality,
-        sourceColumn: 'id',
-        targetColumn: `${rel.sourceTable.toLowerCase()}_id`,
-      },
-    }));
-
-    set({ tables: erTables, relations: erRelations });
   },
 }));
