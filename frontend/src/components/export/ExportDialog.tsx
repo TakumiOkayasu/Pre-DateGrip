@@ -1,21 +1,12 @@
 import { useCallback, useState } from 'react';
 import type { ResultSet } from '../../types';
 import styles from './ExportDialog.module.css';
+import { type ExportFormat, type ExportOptions, getExporter } from './exporters';
 
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   resultSet: ResultSet | null;
-}
-
-type ExportFormat = 'csv' | 'json' | 'sql' | 'html';
-
-interface ExportOptions {
-  format: ExportFormat;
-  includeHeaders: boolean;
-  delimiter: string;
-  nullValue: string;
-  tableName: string;
 }
 
 export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) {
@@ -30,74 +21,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
 
   const generateExport = useCallback((): string => {
     if (!resultSet) return '';
-
-    const { columns, rows } = resultSet;
-    const { format, includeHeaders, delimiter, nullValue, tableName } = options;
-
-    switch (format) {
-      case 'csv': {
-        const lines: string[] = [];
-        if (includeHeaders) {
-          lines.push(columns.map((c) => `"${c.name}"`).join(delimiter));
-        }
-        rows.forEach((row) => {
-          const values = row.map((val) => {
-            if (val === null || val === '') return nullValue;
-            // Escape quotes
-            const escaped = String(val).replace(/"/g, '""');
-            return `"${escaped}"`;
-          });
-          lines.push(values.join(delimiter));
-        });
-        return lines.join('\n');
-      }
-
-      case 'json': {
-        const data = rows.map((row) => {
-          const obj: Record<string, string | null> = {};
-          columns.forEach((col, idx) => {
-            const val = row[idx];
-            obj[col.name] = val === '' ? null : val;
-          });
-          return obj;
-        });
-        return JSON.stringify(data, null, 2);
-      }
-
-      case 'sql': {
-        const lines: string[] = [];
-        rows.forEach((row) => {
-          const values = row.map((val) => {
-            if (val === null || val === '') return 'NULL';
-            const escaped = String(val).replace(/'/g, "''");
-            return `N'${escaped}'`;
-          });
-          lines.push(
-            `INSERT INTO [${tableName}] ([${columns.map((c) => c.name).join('], [')}]) VALUES (${values.join(', ')});`
-          );
-        });
-        return lines.join('\n');
-      }
-
-      case 'html': {
-        const headerRow = includeHeaders
-          ? `<tr>${columns.map((c) => `<th>${escapeHtml(c.name)}</th>`).join('')}</tr>`
-          : '';
-        const dataRows = rows
-          .map((row) => {
-            const cells = row.map((val) => {
-              const display = val === null || val === '' ? nullValue : val;
-              return `<td>${escapeHtml(String(display))}</td>`;
-            });
-            return `<tr>${cells.join('')}</tr>`;
-          })
-          .join('\n');
-        return `<table>\n<thead>\n${headerRow}\n</thead>\n<tbody>\n${dataRows}\n</tbody>\n</table>`;
-      }
-
-      default:
-        return '';
-    }
+    return getExporter(options.format).generate(resultSet, options);
   }, [resultSet, options]);
 
   const handleCopy = useCallback(async () => {
@@ -114,12 +38,14 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
       json: 'json',
       sql: 'sql',
       html: 'html',
+      markdown: 'md',
     };
     const mimeTypes: Record<ExportFormat, string> = {
       csv: 'text/csv',
       json: 'application/json',
       sql: 'text/plain',
       html: 'text/html',
+      markdown: 'text/markdown',
     };
     const blob = new Blob([text], { type: mimeTypes[options.format] });
     const url = URL.createObjectURL(blob);
@@ -158,6 +84,7 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
               <option value="json">JSON</option>
               <option value="sql">SQL INSERT</option>
               <option value="html">HTMLテーブル</option>
+              <option value="markdown">Markdown</option>
             </select>
           </div>
 
@@ -176,7 +103,9 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
             </div>
           )}
 
-          {(options.format === 'csv' || options.format === 'html') && (
+          {(options.format === 'csv' ||
+            options.format === 'html' ||
+            options.format === 'markdown') && (
             <div className={styles.field}>
               <label>
                 <input
@@ -212,8 +141,10 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
           <div className={styles.preview}>
             <label>プレビュー</label>
             <pre>
-              {generateExport().slice(0, 1000)}
-              {generateExport().length > 1000 ? '...' : ''}
+              {(() => {
+                const text = generateExport();
+                return text.length > 1000 ? `${text.slice(0, 1000)}...` : text;
+              })()}
             </pre>
           </div>
         </div>
@@ -234,12 +165,4 @@ export function ExportDialog({ isOpen, onClose, resultSet }: ExportDialogProps) 
       </div>
     </div>
   );
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

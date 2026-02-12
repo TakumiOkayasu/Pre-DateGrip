@@ -1,0 +1,162 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { toQueryResult } from '../../store/query/helpers/asyncPolling';
+import {
+  endExecution,
+  failExecution,
+  generateQueryId,
+  getQueryCounter,
+  resetQueryCounter,
+  startExecution,
+} from '../../store/query/helpers/executionState';
+import type { QueryState } from '../../store/query/types';
+import type { AsyncPollResult } from '../../types';
+
+/** helpers under test only use data fields — action stubs are unnecessary */
+function makeState(overrides?: Partial<QueryState>): QueryState {
+  return {
+    queries: [],
+    activeQueryId: null,
+    results: {},
+    executingQueryIds: new Set<string>(),
+    errors: {},
+    isExecuting: false,
+    ...overrides,
+  } as QueryState;
+}
+
+describe('executionState helpers', () => {
+  describe('generateQueryId / resetQueryCounter', () => {
+    beforeEach(() => {
+      resetQueryCounter();
+    });
+
+    it('should generate incrementing ids', () => {
+      expect(generateQueryId()).toBe('query-1');
+      expect(generateQueryId()).toBe('query-2');
+      expect(getQueryCounter()).toBe(2);
+    });
+
+    it('should reset counter', () => {
+      generateQueryId();
+      generateQueryId();
+      resetQueryCounter();
+      expect(getQueryCounter()).toBe(0);
+      expect(generateQueryId()).toBe('query-1');
+    });
+  });
+
+  describe('startExecution', () => {
+    it('should add id to executingQueryIds and clear error', () => {
+      const state = makeState({ errors: { 'q-1': 'old error' } });
+      const result = startExecution(state, 'q-1');
+
+      expect(result.executingQueryIds?.has('q-1')).toBe(true);
+      expect(result.errors?.['q-1']).toBeNull();
+      expect(result.isExecuting).toBe(true);
+    });
+
+    it('should preserve other executing ids', () => {
+      const state = makeState({ executingQueryIds: new Set(['q-1']) });
+      const result = startExecution(state, 'q-2');
+
+      expect(result.executingQueryIds?.has('q-1')).toBe(true);
+      expect(result.executingQueryIds?.has('q-2')).toBe(true);
+    });
+  });
+
+  describe('endExecution', () => {
+    it('should remove id and set isExecuting to false when empty', () => {
+      const state = makeState({ executingQueryIds: new Set(['q-1']), isExecuting: true });
+      const result = endExecution(state, 'q-1');
+
+      expect(result.executingQueryIds?.has('q-1')).toBe(false);
+      expect(result.isExecuting).toBe(false);
+    });
+
+    it('should keep isExecuting true when other queries remain', () => {
+      const state = makeState({ executingQueryIds: new Set(['q-1', 'q-2']), isExecuting: true });
+      const result = endExecution(state, 'q-1');
+
+      expect(result.executingQueryIds?.has('q-2')).toBe(true);
+      expect(result.isExecuting).toBe(true);
+    });
+  });
+
+  describe('failExecution', () => {
+    it('should end execution and set error', () => {
+      const state = makeState({ executingQueryIds: new Set(['q-1']), isExecuting: true });
+      const result = failExecution(state, 'q-1', 'Something broke');
+
+      expect(result.executingQueryIds?.has('q-1')).toBe(false);
+      expect(result.isExecuting).toBe(false);
+      expect(result.errors?.['q-1']).toBe('Something broke');
+    });
+  });
+});
+
+describe('toQueryResult', () => {
+  it('should convert single result', () => {
+    const pollResult: AsyncPollResult = {
+      columns: [{ name: 'id', type: 'int', comment: 'ID列' }],
+      rows: [['1'], ['2']],
+      affectedRows: 0,
+      executionTimeMs: 50,
+    };
+
+    const { queryResult, totalAffectedRows, totalExecutionTimeMs } = toQueryResult(pollResult);
+
+    expect(totalAffectedRows).toBe(0);
+    expect(totalExecutionTimeMs).toBe(50);
+    expect('columns' in queryResult && queryResult.columns[0].name).toBe('id');
+    expect('columns' in queryResult && queryResult.columns[0].comment).toBe('ID列');
+    expect('columns' in queryResult && queryResult.columns[0].size).toBe(0);
+    expect('rows' in queryResult && queryResult.rows).toHaveLength(2);
+  });
+
+  it('should convert multiple results and sum totals', () => {
+    const pollResult: AsyncPollResult = {
+      multipleResults: true,
+      results: [
+        {
+          statement: 'SELECT 1',
+          data: {
+            columns: [{ name: 'a', type: 'int' }],
+            rows: [['1']],
+            affectedRows: 5,
+            executionTimeMs: 10,
+          },
+        },
+        {
+          statement: 'SELECT 2',
+          data: {
+            columns: [{ name: 'b', type: 'varchar' }],
+            rows: [['x']],
+            affectedRows: 3,
+            executionTimeMs: 20,
+          },
+        },
+      ],
+    };
+
+    const { queryResult, totalAffectedRows, totalExecutionTimeMs } = toQueryResult(pollResult);
+
+    expect(totalAffectedRows).toBe(8);
+    expect(totalExecutionTimeMs).toBe(30);
+    expect('multipleResults' in queryResult && queryResult.multipleResults).toBe(true);
+  });
+
+  it('should map comment field through mapAsyncColumn', () => {
+    const pollResult: AsyncPollResult = {
+      columns: [{ name: 'user_name', type: 'nvarchar', comment: 'ユーザー名' }],
+      rows: [],
+      affectedRows: 0,
+      executionTimeMs: 0,
+    };
+
+    const { queryResult } = toQueryResult(pollResult);
+    const col = 'columns' in queryResult ? queryResult.columns[0] : null;
+    expect(col?.comment).toBe('ユーザー名');
+    expect(col?.nullable).toBe(true);
+    expect(col?.isPrimaryKey).toBe(false);
+  });
+});

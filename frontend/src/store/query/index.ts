@@ -1,6 +1,3 @@
-// Backward-compatible redirect to new Omusubi-structured location
-
-export type { QueryState } from './query';
 export {
   useActiveQuery,
   useIsActiveDataView,
@@ -12,4 +9,6 @@ export {
   useQueryError,
   useQueryResult,
   useQueryStore,
-} from './query';
+} from './queryStore';
+
+export type { QueryState } from './types';

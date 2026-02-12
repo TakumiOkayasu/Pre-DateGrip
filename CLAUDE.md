@@ -14,6 +14,7 @@ Windows専用RDBMS管理ツール（DataGripライクUI）。SQL Server対象。
 ## アーキテクチャ（Big Picture）
 
 ### IPC通信フロー
+
 1. Frontend → `window.ipc(method, params)` でメッセージ送信
 2. Backend → `ipc_handler.cpp` でルーティング・JSON解析
 3. Backend → 各機能モジュール（`database/`, `parsers/`, `exporters/`）で処理
@@ -21,12 +22,14 @@ Windows専用RDBMS管理ツール（DataGripライクUI）。SQL Server対象。
 5. Frontend → `api/bridge.ts` でPromiseラップしてReactで利用
 
 ### データベース層の仕組み
+
 - **ConnectionPool**: 最大10接続を維持、非アクティブ接続を自動切断
 - **AsyncQueryExecutor**: 別スレッドでクエリ実行、メインスレッドをブロックしない
 - **ResultCache**: LRUキャッシュ（100MB）、同一クエリの高速化
 - **TransactionManager**: BEGIN/COMMIT/ROLLBACK管理（C++実装済み、UI未実装）
 
 ### セッション管理
+
 - `utils/session_manager.cpp` がウィンドウ状態・開いているタブ・接続プロファイルをJSONで永続化
 - アプリ終了時に自動保存、起動時に復元
 
@@ -79,6 +82,7 @@ ruff check scripts/ && ruff format --check scripts/  # Python
 ## コーディング規約（重要ポイント）
 
 ### C++ (backend/)
+
 - **C++23機能を使用**: `std::expected`, `std::format`, `std::ranges`
 - **RAII原則**: スマートポインタ、リソース管理
 - **ODBC戻り値は必ずチェック**: `SQL_SUCCESS`の確認必須
@@ -86,11 +90,13 @@ ruff check scripts/ && ruff format --check scripts/  # Python
 - **clang-format 21**: 自動フォーマット
 
 ### TypeScript/React (frontend/)
+
 - **非nullアサーション (`!`) 禁止**: 明示的なnullチェックを使用
 - **CSS Modules**: スタイル衝突を防止
 - **Zustand**: 状態管理
 
 ### Python (scripts/)
+
 - **Ruff**: Lint + Format
 - **型ヒント必須**: Python 3.14+の型システムを活用
 

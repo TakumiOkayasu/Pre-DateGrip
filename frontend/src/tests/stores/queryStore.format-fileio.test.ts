@@ -1,0 +1,175 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useQueryStore } from '../../store/queryStore';
+
+vi.mock('../../api/bridge', () => ({
+  bridge: {
+    executeAsyncQuery: vi.fn(),
+    getAsyncQueryResult: vi.fn(),
+    cancelAsyncQuery: vi.fn(),
+    cancelQuery: vi.fn(),
+    getColumns: vi.fn(),
+    formatSQL: vi.fn(),
+    saveQueryToFile: vi.fn(),
+    loadQueryFromFile: vi.fn(),
+  },
+}));
+
+import { bridge } from '../../api/bridge';
+
+const mockedBridge = vi.mocked(bridge);
+
+describe('formatQuery', () => {
+  beforeEach(() => {
+    useQueryStore.setState({
+      queries: [],
+      activeQueryId: null,
+      results: {},
+      executingQueryIds: new Set<string>(),
+      errors: {},
+      isExecuting: false,
+    });
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should format query content via bridge', async () => {
+    const { addQuery, updateQuery } = useQueryStore.getState();
+    addQuery('conn_1');
+    const queryId = useQueryStore.getState().queries[0].id;
+    updateQuery(queryId, 'select * from users');
+
+    mockedBridge.formatSQL.mockResolvedValue({ sql: 'SELECT *\nFROM users' });
+
+    await useQueryStore.getState().formatQuery(queryId);
+
+    const state = useQueryStore.getState();
+    expect(state.queries[0].content).toBe('SELECT *\nFROM users');
+    expect(state.queries[0].isDirty).toBe(true);
+    expect(mockedBridge.formatSQL).toHaveBeenCalledWith('select * from users');
+  });
+
+  it('should not format empty content', async () => {
+    const { addQuery } = useQueryStore.getState();
+    addQuery('conn_1');
+    const queryId = useQueryStore.getState().queries[0].id;
+
+    await useQueryStore.getState().formatQuery(queryId);
+
+    expect(mockedBridge.formatSQL).not.toHaveBeenCalled();
+  });
+
+  it('should not format data view tabs', async () => {
+    useQueryStore.setState({
+      queries: [
+        {
+          id: 'dv-1',
+          name: 'Users',
+          content: 'SELECT TOP 1001 * FROM Users',
+          connectionId: 'conn_1',
+          isDirty: false,
+          isDataView: true,
+          sourceTable: 'Users',
+        },
+      ],
+      activeQueryId: 'dv-1',
+    });
+
+    await useQueryStore.getState().formatQuery('dv-1');
+
+    expect(mockedBridge.formatSQL).not.toHaveBeenCalled();
+  });
+
+  it('should set error on format failure', async () => {
+    const { addQuery, updateQuery } = useQueryStore.getState();
+    addQuery('conn_1');
+    const queryId = useQueryStore.getState().queries[0].id;
+    updateQuery(queryId, 'INVALID');
+
+    mockedBridge.formatSQL.mockRejectedValue(new Error('Parse error'));
+
+    await useQueryStore.getState().formatQuery(queryId);
+
+    expect(useQueryStore.getState().errors[queryId]).toBe('Parse error');
+  });
+});
+
+describe('File I/O', () => {
+  beforeEach(() => {
+    useQueryStore.setState({
+      queries: [],
+      activeQueryId: null,
+      results: {},
+      executingQueryIds: new Set<string>(),
+      errors: {},
+      isExecuting: false,
+    });
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('saveToFile', () => {
+    it('should save content and update filePath', async () => {
+      const { addQuery, updateQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+      updateQuery(queryId, 'SELECT 1');
+
+      mockedBridge.saveQueryToFile.mockResolvedValue({ filePath: 'C:\\test.sql' });
+
+      await useQueryStore.getState().saveToFile(queryId);
+
+      const state = useQueryStore.getState();
+      expect(state.queries[0].filePath).toBe('C:\\test.sql');
+      expect(state.queries[0].isDirty).toBe(false);
+    });
+
+    it('should not save empty content', async () => {
+      const { addQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+
+      await useQueryStore.getState().saveToFile(queryId);
+
+      expect(mockedBridge.saveQueryToFile).not.toHaveBeenCalled();
+    });
+
+    it('should ignore cancelled save dialog', async () => {
+      const { addQuery, updateQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+      updateQuery(queryId, 'SELECT 1');
+
+      mockedBridge.saveQueryToFile.mockRejectedValue(new Error('Save cancelled'));
+
+      await useQueryStore.getState().saveToFile(queryId);
+
+      expect(useQueryStore.getState().errors[queryId]).toBeUndefined();
+    });
+  });
+
+  describe('loadFromFile', () => {
+    it('should load content and update filePath', async () => {
+      const { addQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+
+      mockedBridge.loadQueryFromFile.mockResolvedValue({
+        filePath: 'C:\\loaded.sql',
+        content: 'SELECT * FROM loaded_table',
+      });
+
+      await useQueryStore.getState().loadFromFile(queryId);
+
+      const state = useQueryStore.getState();
+      expect(state.queries[0].content).toBe('SELECT * FROM loaded_table');
+      expect(state.queries[0].filePath).toBe('C:\\loaded.sql');
+      expect(state.queries[0].isDirty).toBe(false);
+    });
+  });
+});

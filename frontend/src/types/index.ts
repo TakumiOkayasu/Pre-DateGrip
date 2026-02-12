@@ -117,6 +117,55 @@ export interface MultipleResultSet {
 
 export type QueryResult = ResultSet | MultipleResultSet;
 
+// Async query types (lightweight, from polling result)
+export interface AsyncColumn {
+  name: string;
+  type: string;
+  comment?: string;
+}
+
+export type AsyncPollResult =
+  | {
+      multipleResults?: false;
+      columns: AsyncColumn[];
+      rows: string[][];
+      affectedRows: number;
+      executionTimeMs: number;
+    }
+  | {
+      multipleResults: true;
+      results: Array<{
+        statement: string;
+        data: {
+          columns: AsyncColumn[];
+          rows: string[][];
+          affectedRows: number;
+          executionTimeMs: number;
+        };
+      }>;
+    };
+
+// Async query result response (from backend polling API)
+export interface AsyncQueryResultResponse {
+  queryId: string;
+  status: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
+  error?: string;
+  columns?: AsyncColumn[];
+  rows?: string[][];
+  affectedRows?: number;
+  executionTimeMs?: number;
+  multipleResults?: boolean;
+  results?: Array<{
+    statement: string;
+    data: {
+      columns: AsyncColumn[];
+      rows: string[][];
+      affectedRows: number;
+      executionTimeMs: number;
+    };
+  }>;
+}
+
 // History types
 export interface HistoryItem {
   id: string;
