@@ -1,0 +1,107 @@
+import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+import { bridge } from '../../api/bridge';
+import { useHistoryStore } from '../historyStore';
+import type { AbortRegistrable } from './interfaces/AbortRegistrable';
+import type { HistoryRecordable } from './interfaces/HistoryRecordable';
+import { createDataViewSlice } from './slices/dataViewSlice';
+import { createERDiagramSlice } from './slices/erDiagramSlice';
+import { createFileIOSlice } from './slices/fileIOSlice';
+import { createFormatSlice } from './slices/formatSlice';
+import { createExecuteSlice } from './slices/queryExecuteSlice';
+import { createManageSlice } from './slices/queryManageSlice';
+import type { QueryState } from './types';
+
+// DI: History adapter (Omusubi Context Layer — bridge between stores)
+const historyAdapter: HistoryRecordable = {
+  addHistory: (entry) => useHistoryStore.getState().addHistory(entry),
+};
+
+// DI: Abort controller registry (Omusubi Context Layer — owns mutable state)
+const abortControllers = new Map<string, AbortController>();
+const abortAdapter: AbortRegistrable = {
+  register: (id, controller) => abortControllers.set(id, controller),
+  abort: (id) => {
+    const controller = abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      abortControllers.delete(id);
+    }
+  },
+  unregister: (id) => {
+    abortControllers.delete(id);
+  },
+};
+
+export const useQueryStore = create<QueryState>((set, get) => ({
+  // Shared state
+  queries: [],
+  activeQueryId: null,
+  results: {},
+  executingQueryIds: new Set<string>(),
+  errors: {},
+  isExecuting: false,
+
+  // Slices (Device Layer implementations injected via DI)
+  ...createManageSlice(set, get, { abort: abortAdapter }),
+  ...createExecuteSlice(set, get, { bridge, history: historyAdapter, abort: abortAdapter }),
+  ...createDataViewSlice(set, get, { bridge, abort: abortAdapter }),
+  ...createFileIOSlice(set, get, { bridge }),
+  ...createFormatSlice(set, get, { bridge }),
+  ...createERDiagramSlice(set, get),
+}));
+
+// Optimized selectors to prevent unnecessary re-renders
+export const useQueries = () => useQueryStore(useShallow((state) => state.queries));
+
+export const useActiveQuery = () =>
+  useQueryStore((state) => {
+    const query = state.queries.find((q) => q.id === state.activeQueryId);
+    return query ?? null;
+  });
+
+export const useIsActiveDataView = () =>
+  useQueryStore(
+    (state) => state.queries.find((q) => q.id === state.activeQueryId)?.isDataView === true
+  );
+
+export const useIsActiveERDiagram = () =>
+  useQueryStore(
+    (state) => state.queries.find((q) => q.id === state.activeQueryId)?.isERDiagram === true
+  );
+
+export const useQueryById = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? state.queries.find((q) => q.id === queryId) : undefined));
+
+export const useQueryResult = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? (state.results[queryId] ?? null) : null));
+
+/** Per-query error selector */
+export const useQueryError = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? (state.errors[queryId] ?? null) : null));
+
+/** Per-query executing state selector */
+export const useIsQueryExecuting = (queryId: string | null | undefined) =>
+  useQueryStore((state) => (queryId ? state.executingQueryIds.has(queryId) : false));
+
+export const useQueryActions = () =>
+  useQueryStore(
+    useShallow((state) => ({
+      addQuery: state.addQuery,
+      removeQuery: state.removeQuery,
+      updateQuery: state.updateQuery,
+      renameQuery: state.renameQuery,
+      setActive: state.setActive,
+      executeQuery: state.executeQuery,
+      executeSelectedText: state.executeSelectedText,
+      cancelQuery: state.cancelQuery,
+      formatQuery: state.formatQuery,
+      clearError: state.clearError,
+      openTableData: state.openTableData,
+      applyWhereFilter: state.applyWhereFilter,
+      refreshDataView: state.refreshDataView,
+      saveToFile: state.saveToFile,
+      loadFromFile: state.loadFromFile,
+      openERDiagram: state.openERDiagram,
+    }))
+  );
