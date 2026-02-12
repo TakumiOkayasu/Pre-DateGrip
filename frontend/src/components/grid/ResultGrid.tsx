@@ -408,12 +408,26 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
         callbacks={gridCallbacks}
       />
 
-      <GridStatusBar
-        resultSet={resultSet}
-        filteredRowCount={rows.length}
-        isFiltered={columnFilters.length > 0}
-        isEditMode={isEditMode}
-      />
+      <div className={styles.statusBar}>
+        <span>
+          {columnFilters.length > 0
+            ? resultSet.truncated
+              ? `${rows.length} / ${resultSet.rows.length.toLocaleString()}+ 件 (フィルタ中・行数制限あり)`
+              : `${rows.length} / ${resultSet.rows.length} 件 (フィルタ中)`
+            : resultSet.truncated
+              ? `先頭 ${resultSet.rows.length.toLocaleString()} 件を表示（テーブルにはさらにデータがあります）`
+              : `${resultSet.rows.length} 件`}
+        </span>
+        <span>|</span>
+        <span>{resultSet.executionTimeMs.toFixed(2)} ms</span>
+        {resultSet.affectedRows > 0 && (
+          <>
+            <span>|</span>
+            <span>{resultSet.affectedRows} 件更新</span>
+          </>
+        )}
+        {isEditMode && <span className={styles.editModeIndicator}>編集モード</span>}
+      </div>
 
       <ExportDialog
         isOpen={isExportDialogOpen}
