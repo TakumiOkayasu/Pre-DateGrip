@@ -28,3 +28,6 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "cr-lf"  # Windows project
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]

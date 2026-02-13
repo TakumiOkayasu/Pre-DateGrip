@@ -17,7 +17,7 @@ def run_command(
     cmd: list[str],
     description: str,
     cwd: Path | None = None,
-    env: dict | None = None,
+    env: dict[str, str] | None = None,
     capture_output: bool = False,
 ) -> tuple[bool, str]:
     """Run a command and return success status and output."""
@@ -34,8 +34,10 @@ def run_command(
 
     try:
         if capture_output:
-            result = subprocess.run(cmd, cwd=cwd, env=merged_env, capture_output=True, text=True)
-            return result.returncode == 0, result.stderr
+            result = subprocess.run(
+                cmd, cwd=cwd, env=merged_env, capture_output=True, encoding="utf-8"
+            )
+            return result.returncode == 0, result.stderr or ""
         else:
             result = subprocess.run(cmd, cwd=cwd, env=merged_env)
             return result.returncode == 0, ""
@@ -142,7 +144,7 @@ def get_msvc_env() -> dict[str, str]:
     return env
 
 
-def check_build_tools(env: dict) -> bool:
+def check_build_tools(env: dict[str, str]) -> bool:
     """Check if required build tools are available."""
     # Check CMake
     try:
