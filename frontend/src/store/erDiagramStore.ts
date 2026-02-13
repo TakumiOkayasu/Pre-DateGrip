@@ -189,6 +189,7 @@ export const useERDiagramStore = create<ERDiagramState>((set, get) => ({
         type: 'table',
         data: {
           tableName: table.name,
+          logicalName: table.logicalName || undefined,
           page: table.page || DEFAULT_PAGE,
           columns: table.columns.map((c) => ({
             name: c.name,

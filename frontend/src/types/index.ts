@@ -265,6 +265,7 @@ export interface ERTableNode {
   type: 'table';
   data: {
     tableName: string;
+    logicalName?: string;
     columns: ERColumn[];
     page?: string;
   };
