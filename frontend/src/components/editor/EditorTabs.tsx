@@ -1,4 +1,6 @@
-import { useQueryStore } from '../../store/queryStore';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueries, useQueryActions, useQueryStore } from '../../store/queryStore';
+import type { Query } from '../../types';
 import styles from './EditorTabs.module.css';
 
 // SQL file icon
@@ -46,17 +48,78 @@ const CloseIcon = (
   </svg>
 );
 
+function buildTooltip(query: Query): string {
+  const parts = [query.name];
+  if (query.logicalName) {
+    parts.push(query.logicalName);
+  } else if (query.isDataView && query.sourceTable && query.sourceTable !== query.name) {
+    parts.push(query.sourceTable);
+  }
+  return parts.join('\n');
+}
+
 export function EditorTabs() {
-  const { queries, activeQueryId, addQuery, removeQuery, setActive } = useQueryStore();
+  const queries = useQueries();
+  const activeQueryId = useQueryStore((state) => state.activeQueryId);
+  const { addQuery, removeQuery, setActive } = useQueryActions();
+
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const checkOverflow = useCallback(() => {
+    const el = tabsRef.current;
+    if (el) {
+      setIsOverflowing(el.scrollWidth > el.clientWidth);
+    }
+  }, []);
+
+  // ResizeObserver + scroll で溢れ検知
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+
+    checkOverflow();
+
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(el);
+    el.addEventListener('scroll', checkOverflow);
+
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', checkOverflow);
+    };
+  }, [checkOverflow]);
+
+  // タブ数変更時に溢れ再チェック
+  // biome-ignore lint/correctness/useExhaustiveDependencies: queries.length is intentional to recheck overflow on tab count change
+  useEffect(() => {
+    checkOverflow();
+  }, [queries.length, checkOverflow]);
+
+  // メニュー外クリックで閉じる
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
 
   return (
     <div className={styles.container}>
-      <div className={styles.tabs}>
+      <div className={styles.tabs} ref={tabsRef}>
         {queries.map((query) => (
           <div
             key={query.id}
             className={`${styles.tab} ${query.id === activeQueryId ? styles.active : ''}`}
             onClick={() => setActive(query.id)}
+            title={buildTooltip(query)}
           >
             {query.isERDiagram ? ERDiagramIcon : SqlIcon}
             <span className={styles.tabName}>
@@ -76,6 +139,34 @@ export function EditorTabs() {
           </div>
         ))}
       </div>
+      {isOverflowing && (
+        <div className={styles.overflowMenuWrapper} ref={menuRef}>
+          <button
+            className={styles.overflowButton}
+            onClick={() => setMenuOpen((prev) => !prev)}
+            title="全タブ一覧"
+          >
+            ▾
+          </button>
+          {menuOpen && (
+            <div className={styles.overflowMenu}>
+              {queries.map((query) => (
+                <button
+                  key={query.id}
+                  className={`${styles.overflowMenuItem} ${query.id === activeQueryId ? styles.activeItem : ''}`}
+                  onClick={() => {
+                    setActive(query.id);
+                    setMenuOpen(false);
+                  }}
+                >
+                  {query.isERDiagram ? ERDiagramIcon : SqlIcon}
+                  <span className={styles.overflowMenuItemName}>{query.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <button className={styles.addButton} onClick={() => addQuery()} title="新規クエリ (Ctrl+N)">
         {PlusIcon}
       </button>

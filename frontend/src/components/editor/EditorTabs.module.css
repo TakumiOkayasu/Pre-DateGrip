@@ -26,6 +26,9 @@
   gap: 6px;
   padding: 0 12px;
   min-height: 35px;
+  max-width: 200px;
+  min-width: 80px;
+  flex-shrink: 1;
   background-color: var(--tab-inactive-bg);
   border-right: 1px solid var(--border-color);
   cursor: pointer;
@@ -74,6 +77,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .dirty {
@@ -140,4 +146,79 @@
 .addButton svg {
   width: 14px;
   height: 14px;
+}
+
+/* Overflow dropdown button */
+.overflowButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 35px;
+  padding: 0;
+  background-color: var(--bg-secondary);
+  border: none;
+  border-left: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
+}
+
+.overflowButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Overflow dropdown menu */
+.overflowMenuWrapper {
+  position: relative;
+}
+
+.overflowMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 4px 0;
+}
+
+.overflowMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.overflowMenuItem:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.overflowMenuItem.activeItem {
+  color: var(--accent-color);
+  background-color: var(--bg-tertiary);
+}
+
+.overflowMenuItemName {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -26,7 +26,12 @@ export interface QueryState {
   cancelQuery: (connectionId: string) => Promise<void>;
   formatQuery: (id: string) => Promise<void>;
   clearError: (id?: string) => void;
-  openTableData: (connectionId: string, tableName: string, whereClause?: string) => Promise<void>;
+  openTableData: (
+    connectionId: string,
+    tableName: string,
+    whereClause?: string,
+    logicalName?: string
+  ) => Promise<void>;
   applyWhereFilter: (id: string, connectionId: string, whereClause: string) => Promise<void>;
   refreshDataView: (id: string, connectionId: string) => Promise<void>;
   saveToFile: (id: string) => Promise<void>;
@@ -496,7 +501,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     }
   },
 
-  openTableData: async (connectionId, tableName, whereClause) => {
+  openTableData: async (connectionId, tableName, whereClause, logicalName) => {
     log.info(
       `[QueryStore] openTableData called for table: ${tableName}, connection: ${connectionId}${whereClause ? `, WHERE: ${whereClause}` : ''}`
     );
@@ -532,6 +537,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       sourceTable: tableName,
       isDataView: true,
       useServerSideRowModel: false, // Use client-side model (server-side requires Enterprise license)
+      logicalName,
     };
 
     log.info(`[QueryStore] Creating new query tab: ${id} for table ${tableName}`);

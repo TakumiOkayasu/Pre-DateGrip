@@ -79,6 +79,7 @@ export interface Query {
   isDataView?: boolean; // True when viewing table data (show grid instead of editor)
   isERDiagram?: boolean; // True when viewing ER diagram
   useServerSideRowModel?: boolean; // Use AG Grid Server-Side Row Model for large tables
+  logicalName?: string; // テーブル論理名（A5:ER由来、ツールチップ用）
 }
 
 // Bookmark types
