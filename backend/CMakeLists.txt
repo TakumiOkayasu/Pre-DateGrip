@@ -33,6 +33,7 @@ set(LIB_SOURCES
     contexts/system_context.cpp
     # Parsers
     parsers/a5er_parser.cpp
+    parsers/a5er_utils.cpp
     parsers/sql_formatter.cpp
     parsers/sql_parser.cpp
     # Exporters
@@ -95,6 +96,7 @@ set(HEADERS
     contexts/system_context.h
     # Parsers
     parsers/a5er_parser.h
+    parsers/a5er_utils.h
     parsers/sql_formatter.h
     parsers/sql_parser.h
     # Exporters

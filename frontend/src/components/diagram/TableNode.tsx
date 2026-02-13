@@ -1,4 +1,4 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, type HandleType, Position } from '@xyflow/react';
 import { memo } from 'react';
 import type { ERColumn } from '../../types';
 import styles from './TableNode.module.css';
@@ -19,7 +19,24 @@ const icons = {
   key: '\uD83D\uDD11', // 🔑
 };
 
+const INT_RE = /\b(tiny|small|big)?int\b/i;
+const HIDDEN_HANDLE: React.CSSProperties = { opacity: 0, width: 6, height: 6 };
+
+type HandleDef = { type: HandleType; position: Position; id: string };
+const HANDLE_DEFS: HandleDef[] = [
+  { type: 'target', position: Position.Top, id: 'target-top' },
+  { type: 'target', position: Position.Right, id: 'target-right' },
+  { type: 'target', position: Position.Bottom, id: 'target-bottom' },
+  { type: 'target', position: Position.Left, id: 'target-left' },
+  { type: 'source', position: Position.Top, id: 'source-top' },
+  { type: 'source', position: Position.Right, id: 'source-right' },
+  { type: 'source', position: Position.Bottom, id: 'source-bottom' },
+  { type: 'source', position: Position.Left, id: 'source-left' },
+];
+
 function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
+  const isInt = INT_RE.test(col.type);
+
   return (
     <div
       className={`${styles.column} ${isPK ? styles.primaryKey : ''}`}
@@ -29,9 +46,9 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
       <span className={styles.columnName}>
         {!isPK && !col.nullable ? '*' : ''}
         {col.name}
-        {col.logicalName && <span className={styles.logicalName}> ({col.logicalName})</span>}
       </span>
-      <span className={styles.columnType}>{col.type}</span>
+      {col.logicalName && <span className={styles.logicalName}>({col.logicalName})</span>}
+      <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>{col.type}</span>
       {col.defaultValue && <span className={styles.defaultValue}>={col.defaultValue}</span>}
     </div>
   );
@@ -45,7 +62,9 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
 
   return (
     <div className={`${styles.container} ${selected ? styles.selected : ''}`}>
-      <Handle type="target" position={Position.Left} className={styles.handle} />
+      {HANDLE_DEFS.map((h) => (
+        <Handle key={h.id} type={h.type} position={h.position} id={h.id} style={HIDDEN_HANDLE} />
+      ))}
 
       <div className={styles.header}>
         <span className={styles.icon}>{icons.table}</span>
@@ -63,8 +82,6 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
           <ColumnRow key={`col-${i}-${col.name}`} col={col} isPK={false} />
         ))}
       </div>
-
-      <Handle type="source" position={Position.Right} className={styles.handle} />
     </div>
   );
 });

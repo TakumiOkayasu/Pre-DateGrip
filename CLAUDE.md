@@ -102,6 +102,16 @@ ruff check scripts/ && ruff format --check scripts/  # Python
 
 詳細: `docs/CODING_STANDARDS.md`
 
+## 設計参照
+
+アーキテクチャ設計時は以下を参考にすること:
+
+- [pre-omusubi architecture](https://github.com/TakumiOkayasu/pre-omusubi/blob/main/docs/architecture.md)
+  - ISP（インターフェース分離原則）: 単一責任のインターフェース
+  - Context Pattern: DIコンテナとして機能、テスト時のモック差し替え容易
+  - パフォーマンス最適化: キャッシュ活用、冗長計算の回避
+  - 関心事の分離: レイヤー構造による責務の明確化
+
 ## ドキュメント参照
 
 必要に応じて以下を読み込んで情報を提供:
