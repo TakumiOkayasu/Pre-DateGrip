@@ -26,7 +26,7 @@ export function createDataViewSlice(
   const { bridge, abort } = deps;
 
   return {
-    openTableData: async (connectionId, tableName, whereClause) => {
+    openTableData: async (connectionId, tableName, whereClause, logicalName) => {
       log.info(
         `[QueryStore] openTableData called for table: ${tableName}, connection: ${connectionId}${whereClause ? `, WHERE: ${whereClause}` : ''}`
       );
@@ -60,6 +60,7 @@ export function createDataViewSlice(
         sourceTable: tableName,
         isDataView: true,
         useServerSideRowModel: false,
+        logicalName,
       };
 
       log.info(`[QueryStore] Creating new query tab: ${id} for table ${tableName}`);
