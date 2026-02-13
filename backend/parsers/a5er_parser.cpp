@@ -1,5 +1,7 @@
 #include "a5er_parser.h"
 
+#include "a5er_utils.h"
+
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -279,9 +281,9 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
                         col.isPrimaryKey = !parts[4].empty();
                     }
                     if (parts.size() > 5)
-                        col.defaultValue = parts[5];
+                        col.defaultValue = a5er::unescape(parts[5]);
                     if (parts.size() > 6)
-                        col.comment = parts[6];
+                        col.comment = a5er::unescape(parts[6]);
                     col.size = 0;
                     col.scale = 0;
                     table.columns.push_back(std::move(col));

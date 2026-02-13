@@ -6,10 +6,9 @@ import {
   MarkerType,
   type Node,
   ReactFlow,
-  useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import { useERDiagramContext } from '../../hooks/useERDiagramContext';
 import type { ERRelationEdge, ERTableNode } from '../../types';
@@ -21,9 +20,61 @@ interface ERDiagramProps {
   onTableClick?: (tableId: string) => void;
 }
 
+type XY = { x: number; y: number };
+type PosMap = Map<string, XY>;
+
 const nodeTypes = {
   table: TableNode,
 };
+
+const DEFAULT_HANDLES = { sourceHandle: 'source-right', targetHandle: 'target-left' };
+
+/** ノード位置から最適なHandle方向を選択 */
+function getBestHandles(
+  sourcePos: XY,
+  targetPos: XY
+): { sourceHandle: string; targetHandle: string } {
+  const dx = targetPos.x - sourcePos.x;
+  const dy = targetPos.y - sourcePos.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0
+      ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+      : { sourceHandle: 'source-left', targetHandle: 'target-right' };
+  }
+  return dy >= 0
+    ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+    : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+}
+
+/** リレーションからEdge配列を生成（posMapベース） */
+function buildEdges(relations: ERRelationEdge[], posMap: PosMap): Edge[] {
+  return relations.map((rel) => {
+    const srcPos = posMap.get(rel.source);
+    const tgtPos = posMap.get(rel.target);
+    const handles = srcPos && tgtPos ? getBestHandles(srcPos, tgtPos) : DEFAULT_HANDLES;
+
+    return {
+      id: rel.id,
+      source: rel.source,
+      target: rel.target,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      type: 'smoothstep',
+      animated: false,
+      label: rel.data.cardinality,
+      labelStyle: { fontSize: 10, fill: '#888' },
+      labelBgStyle: { fill: '#1e1e1e', fillOpacity: 0.8 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 15,
+        height: 15,
+        color: '#888',
+      },
+      style: { stroke: '#888', strokeWidth: 1 },
+    };
+  });
+}
 
 /** 「すべて」タブ時のグリッド再配置 */
 function applyGridLayout(tables: ERTableNode[]): ERTableNode[] {
@@ -57,30 +108,27 @@ function ERDiagramFlow({
     [tables]
   );
 
-  const initialEdges: Edge[] = useMemo(
-    () =>
-      relations.map((rel) => ({
-        id: rel.id,
-        source: rel.source,
-        target: rel.target,
-        type: 'smoothstep',
-        animated: false,
-        label: rel.data.cardinality,
-        labelStyle: { fontSize: 10, fill: '#888' },
-        labelBgStyle: { fill: '#1e1e1e', fillOpacity: 0.8 },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 15,
-          height: 15,
-          color: '#888',
-        },
-        style: { stroke: '#888', strokeWidth: 1 },
-      })),
-    [relations]
+  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+
+  // エッジ用ポジション: ドラッグ終了時のみ更新（毎フレーム再計算を回避）
+  const [edgePosMap, setEdgePosMap] = useState<PosMap>(
+    () => new Map(tables.map((t) => [t.id, t.position]))
   );
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const edges: Edge[] = useMemo(() => buildEdges(relations, edgePosMap), [relations, edgePosMap]);
+
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, _node: Node, draggedNodes: Node[]) => {
+      setEdgePosMap((prev) => {
+        const next = new Map(prev);
+        for (const n of draggedNodes) {
+          next.set(n.id, n.position);
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -94,7 +142,7 @@ function ERDiagramFlow({
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
+      onNodeDragStop={handleNodeDragStop}
       onNodeClick={handleNodeClick}
       nodeTypes={nodeTypes}
       fitView
