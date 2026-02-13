@@ -45,10 +45,12 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
       {isPK && <span className={styles.keyIcon}>{icons.key}</span>}
       <span className={styles.columnName}>
         {!isPK && !col.nullable ? '*' : ''}
-        {col.name}
+        {col.logicalName || col.name}
+        {col.logicalName && <span className={styles.logicalName}>({col.name})</span>}
       </span>
-      {col.logicalName && <span className={styles.logicalName}>({col.logicalName})</span>}
-      <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>{col.type}</span>
+      <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>
+        {col.type.toLowerCase()}
+      </span>
       {col.defaultValue && <span className={styles.defaultValue}>={col.defaultValue}</span>}
     </div>
   );

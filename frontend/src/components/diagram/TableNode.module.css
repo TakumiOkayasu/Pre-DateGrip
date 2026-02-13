@@ -71,11 +71,6 @@
   color: var(--text-secondary);
   font-size: 9px;
   opacity: 0.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-  flex-shrink: 1;
 }
 
 .columnType {
