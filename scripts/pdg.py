@@ -28,6 +28,7 @@ Examples:
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 # Add _lib to path
@@ -36,11 +37,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _lib import build, lint, test, utils
 
 
-def cmd_build(args):
+def cmd_build(args: argparse.Namespace) -> bool:
     """Handle build command."""
-    target = args.target
-    clean = args.clean
-    build_type = args.type
+    target: str = args.target
+    clean: bool = args.clean
+    build_type: str = args.type
 
     if target == "backend":
         return build.build_backend(build_type=build_type, clean=clean)
@@ -53,16 +54,17 @@ def cmd_build(args):
         return False
 
 
-def cmd_debug(args):
+def cmd_debug(args: argparse.Namespace) -> bool:
     """Handle debug command - quick backend debug build."""
-    return build.build_backend(build_type="Debug", clean=args.clean)
+    clean: bool = args.clean
+    return build.build_backend(build_type="Debug", clean=clean)
 
 
-def cmd_test(args):
+def cmd_test(args: argparse.Namespace) -> bool:
     """Handle test command."""
-    target = args.target
-    watch = args.watch
-    build_type = args.type
+    target: str = args.target
+    watch: bool = args.watch
+    build_type: str = args.type
 
     if target == "backend":
         return test.test_backend(build_type=build_type)
@@ -73,14 +75,14 @@ def cmd_test(args):
         return False
 
 
-def cmd_lint(args):
+def cmd_lint(args: argparse.Namespace) -> bool:
     """Handle lint command."""
-    fix = args.fix
-    unsafe = args.unsafe
+    fix: bool = args.fix
+    unsafe: bool = args.unsafe
     return lint.lint_all(fix=fix, unsafe=unsafe)
 
 
-def cmd_dev(args):
+def cmd_dev(_args: argparse.Namespace) -> bool:
     """Handle dev command - start frontend dev server."""
     project_root = utils.get_project_root()
     frontend_dir = project_root / "frontend"
@@ -105,7 +107,7 @@ def cmd_dev(args):
     return success
 
 
-def cmd_package(args):
+def cmd_package(_args: argparse.Namespace) -> bool:
     """Handle package command."""
     project_root = utils.get_project_root()
     dist_dir = project_root / "dist"
@@ -160,129 +162,27 @@ def cmd_package(args):
     return True
 
 
-def cmd_release(args):
+def cmd_release(args: argparse.Namespace) -> bool:
     """Handle release command - create versioned release package."""
-    import re
     import shutil
-    import subprocess
     import zipfile
+
+    from _lib.release import (
+        generate_release_notes,
+        get_latest_tag,
+        increment_version,
+    )
 
     project_root = utils.get_project_root()
     dist_dir = project_root / "dist"
 
-    def get_latest_tag() -> str | None:
-        """Get latest semver tag from git."""
-        result = subprocess.run(
-            ["git", "tag", "--sort=-v:refname"],
-            capture_output=True,
-            text=True,
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            return None
-        tags = result.stdout.strip().split("\n")
-        for tag in tags:
-            if re.match(r"^v?\d+\.\d+\.\d+$", tag):
-                return tag.lstrip("v")
-        return None
-
-    def increment_version(version: str, bump: str) -> str:
-        """Increment version number."""
-        parts = [int(x) for x in version.split(".")]
-        if bump == "major":
-            return f"{parts[0] + 1}.0.0"
-        elif bump == "minor":
-            return f"{parts[0]}.{parts[1] + 1}.0"
-        else:  # patch
-            return f"{parts[0]}.{parts[1]}.{parts[2] + 1}"
-
-    def get_commits_since_tag(tag: str) -> list[dict]:
-        """Get commits since the specified tag."""
-        result = subprocess.run(
-            ["git", "log", f"v{tag}..HEAD", "--pretty=format:%s|%h|%an"],
-            capture_output=True,
-            text=True,
-            cwd=project_root,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return []
-        commits = []
-        for line in result.stdout.strip().split("\n"):
-            parts = line.split("|")
-            if len(parts) >= 2:
-                commits.append({"message": parts[0], "hash": parts[1]})
-        return commits
-
-    def categorize_commits(commits: list[dict]) -> dict[str, list[str]]:
-        """Categorize commits by type."""
-        categories = {
-            "feat": [],
-            "fix": [],
-            "perf": [],
-            "refactor": [],
-            "docs": [],
-            "other": [],
-        }
-        for commit in commits:
-            msg = commit["message"]
-            if msg.startswith("feat"):
-                categories["feat"].append(msg)
-            elif msg.startswith("fix"):
-                categories["fix"].append(msg)
-            elif msg.startswith("perf"):
-                categories["perf"].append(msg)
-            elif msg.startswith("refactor"):
-                categories["refactor"].append(msg)
-            elif msg.startswith("docs"):
-                categories["docs"].append(msg)
-            else:
-                categories["other"].append(msg)
-        return categories
-
-    def generate_release_notes(version: str, prev_tag: str | None) -> str:
-        """Generate release notes markdown."""
-        lines = [f"## v{version}\n"]
-
-        if prev_tag:
-            commits = get_commits_since_tag(prev_tag)
-            categories = categorize_commits(commits)
-
-            if categories["feat"]:
-                lines.append("## ✨ New Features\n")
-                for msg in categories["feat"]:
-                    clean = re.sub(r"^feat[:\s]*", "", msg)
-                    lines.append(f"- {clean}")
-                lines.append("")
-
-            if categories["fix"]:
-                lines.append("## 🐛 Bug Fixes\n")
-                for msg in categories["fix"]:
-                    clean = re.sub(r"^fix[:\s]*", "", msg)
-                    lines.append(f"- {clean}")
-                lines.append("")
-
-            if categories["perf"]:
-                lines.append("## ⚡ Performance\n")
-                for msg in categories["perf"]:
-                    clean = re.sub(r"^perf[:\s]*", "", msg)
-                    lines.append(f"- {clean}")
-                lines.append("")
-
-            if categories["refactor"]:
-                lines.append("## 🔧 Internal Changes\n")
-                for msg in categories["refactor"]:
-                    clean = re.sub(r"^refactor[:\s]*", "", msg)
-                    lines.append(f"- {clean}")
-                lines.append("")
-
-        return "\n".join(lines)
-
     # Determine version
-    latest_tag = get_latest_tag()
-    if args.version:
-        version = args.version.lstrip("v")
+    latest_tag = get_latest_tag(project_root)
+    version_arg: str | None = args.version
+    if version_arg:
+        version = version_arg.lstrip("v")
     elif latest_tag:
-        bump = args.bump if hasattr(args, "bump") and args.bump else "patch"
+        bump: str = args.bump if hasattr(args, "bump") and args.bump else "patch"
         version = increment_version(latest_tag, bump)
         print(f"\n  Latest tag: v{latest_tag}")
         print(f"  Next version: v{version} ({bump} bump)")
@@ -295,7 +195,8 @@ def cmd_release(args):
     print(f"{'#' * 60}")
 
     # Step 1: Run checks (unless skipped)
-    if not args.skip_checks:
+    skip_checks: bool = args.skip_checks
+    if not skip_checks:
         print("\n[1/5] Running checks...")
         if not lint.lint_all(fix=False):
             print("\nERROR: Lint failed. Use --skip-checks to bypass.")
@@ -334,7 +235,7 @@ def cmd_release(args):
 
     # Step 4: Generate release notes
     print("\n[4/5] Generating release notes...")
-    release_notes = generate_release_notes(version, latest_tag)
+    release_notes = generate_release_notes(version, latest_tag, project_root)
     notes_path = project_root / f"RELEASE_NOTES_v{version}.md"
     with open(notes_path, "w", encoding="utf-8") as f:
         f.write(release_notes)
@@ -373,7 +274,8 @@ def cmd_release(args):
     print(f"\n{'=' * 60}")
     print("  RELEASE COMMANDS")
     print(f"{'=' * 60}")
-    draft_flag = "--draft " if args.draft else ""
+    draft: bool = args.draft
+    draft_flag = "--draft " if draft else ""
     print(f"""
   # 1. Create and push tag
   git tag -a v{version} -m "Release v{version}"
@@ -386,9 +288,9 @@ def cmd_release(args):
     return True
 
 
-def cmd_check(args):
+def cmd_check(args: argparse.Namespace) -> bool:
     """Handle check command - comprehensive project check."""
-    build_type = args.type
+    build_type: str = args.type
 
     print(f"\n{'=' * 60}")
     print(f"  Comprehensive Project Check ({build_type})")
@@ -422,18 +324,18 @@ def cmd_check(args):
     return errors == 0
 
 
-def cmd_clean(args):
+def cmd_clean(args: argparse.Namespace) -> bool:
     """Handle clean command - remove logs, cache, etc."""
     import shutil
 
     project_root = utils.get_project_root()
-    target = args.target
+    target: str = args.target
 
     print(f"\n{'#' * 60}")
     print(f"#  Cleaning: {target}")
     print(f"{'#' * 60}\n")
 
-    cleaned_items = []
+    cleaned_items: list[str] = []
 
     if target in ("logs", "all"):
         # Clean log directory
@@ -472,7 +374,10 @@ def cmd_clean(args):
     return True
 
 
-def main():
+type CommandHandler = Callable[[argparse.Namespace], bool]
+
+
+def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         prog="pdg",
@@ -543,11 +448,22 @@ def main():
     subparsers.add_parser("package", aliases=["p"], help="Create distribution package")
 
     # Release command
-    release_parser = subparsers.add_parser("release", aliases=["r"], help="Create versioned release")
-    release_parser.add_argument("version", nargs="?", help="Version (e.g., 1.2.1). Auto-detect from git tags if omitted")
-    release_parser.add_argument("--bump", choices=["patch", "minor", "major"], default="patch", help="Version bump type (default: patch)")
+    release_parser = subparsers.add_parser(
+        "release", aliases=["r"], help="Create versioned release"
+    )
+    release_parser.add_argument(
+        "version", nargs="?", help="Version (e.g., 1.2.1). Auto-detect from git tags if omitted"
+    )
+    release_parser.add_argument(
+        "--bump",
+        choices=["patch", "minor", "major"],
+        default="patch",
+        help="Version bump type (default: patch)",
+    )
     release_parser.add_argument("--draft", action="store_true", help="Mark as draft release")
-    release_parser.add_argument("--skip-checks", action="store_true", help="Skip lint and test checks")
+    release_parser.add_argument(
+        "--skip-checks", action="store_true", help="Skip lint and test checks"
+    )
 
     # Check command
     check_parser = subparsers.add_parser("check", aliases=["c"], help="Run all checks")
@@ -576,7 +492,7 @@ def main():
         sys.exit(1)
 
     # Route to appropriate command handler
-    command_map = {
+    command_map: dict[str, CommandHandler] = {
         "build": cmd_build,
         "b": cmd_build,
         "debug": cmd_debug,
