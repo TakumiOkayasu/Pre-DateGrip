@@ -5,6 +5,7 @@ import styles from './TableNode.module.css';
 
 interface TableNodeData {
   tableName: string;
+  logicalName?: string;
   columns: ERColumn[];
 }
 
@@ -41,7 +42,7 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
   return (
     <div
       className={`${styles.column} ${isPK ? styles.primaryKey : ''}`}
-      title={col.comment || undefined}
+      title={showLogical ? col.name : col.comment || undefined}
     >
       {isPK && <span className={styles.keyIcon}>{icons.key}</span>}
       <span className={styles.columnName}>
@@ -54,13 +55,12 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
           {col.type.toLowerCase()}
         </span>
       )}
-      {col.defaultValue && <span className={styles.defaultValue}>={col.defaultValue}</span>}
     </div>
   );
 }
 
 export const TableNode = memo(function TableNode({ data, selected }: TableNodeProps) {
-  const { tableName, columns } = data;
+  const { tableName, logicalName, columns } = data;
 
   const primaryKeys = columns.filter((c) => c.isPrimaryKey);
   const regularColumns = columns.filter((c) => !c.isPrimaryKey);
@@ -71,7 +71,7 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
         <Handle key={h.id} type={h.type} position={h.position} id={h.id} style={HIDDEN_HANDLE} />
       ))}
 
-      <div className={styles.header}>
+      <div className={styles.header} title={logicalName || undefined}>
         <span className={styles.icon}>{icons.table}</span>
         <span className={styles.tableName}>{tableName}</span>
       </div>
