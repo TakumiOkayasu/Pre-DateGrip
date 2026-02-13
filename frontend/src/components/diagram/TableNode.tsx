@@ -35,7 +35,8 @@ const HANDLE_DEFS: HandleDef[] = [
 ];
 
 function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
-  const isInt = INT_RE.test(col.type);
+  const isInt = col.type ? INT_RE.test(col.type) : false;
+  const showLogical = col.logicalName && col.logicalName !== col.name;
 
   return (
     <div
@@ -45,12 +46,14 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
       {isPK && <span className={styles.keyIcon}>{icons.key}</span>}
       <span className={styles.columnName}>
         {!isPK && !col.nullable ? '*' : ''}
-        {col.logicalName || col.name}
-        {col.logicalName && <span className={styles.logicalName}>({col.name})</span>}
+        {showLogical ? col.logicalName : col.name}
+        {showLogical && <span className={styles.logicalName}>({col.name})</span>}
       </span>
-      <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>
-        {col.type.toLowerCase()}
-      </span>
+      {col.type && (
+        <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>
+          {col.type.toLowerCase()}
+        </span>
+      )}
       {col.defaultValue && <span className={styles.defaultValue}>={col.defaultValue}</span>}
     </div>
   );

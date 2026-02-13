@@ -192,7 +192,7 @@ export const useERDiagramStore = create<ERDiagramState>((set, get) => ({
           page: table.page || DEFAULT_PAGE,
           columns: table.columns.map((c) => ({
             name: c.name,
-            type: c.type,
+            type: c.type || undefined,
             size: 0,
             nullable: c.nullable,
             isPrimaryKey: c.isPrimaryKey,
