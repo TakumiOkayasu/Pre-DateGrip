@@ -101,7 +101,8 @@ export interface Column {
 }
 
 /** ER図表示用の拡張カラム型（Column + ER固有属性） */
-export interface ERColumn extends Column {
+export interface ERColumn extends Omit<Column, 'type'> {
+  type?: string;
   logicalName?: string;
   defaultValue?: string;
 }

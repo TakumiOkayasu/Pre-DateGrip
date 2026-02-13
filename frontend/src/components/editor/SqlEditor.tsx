@@ -1,5 +1,7 @@
+import loader from '@monaco-editor/loader';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useRef } from 'react';
 import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
@@ -9,6 +11,9 @@ import { log } from '../../utils/logger';
 import { getStatementAtCursor } from '../../utils/sqlParser';
 import { createCompletionProvider } from './completionProvider';
 import styles from './SqlEditor.module.css';
+
+// Use local bundle instead of CDN (WebView2 Tracking Prevention blocks cdn.jsdelivr.net)
+loader.config({ monaco });
 
 export function SqlEditor() {
   const {
