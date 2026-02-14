@@ -1,28 +1,18 @@
+import { formatSQL } from '../../../utils/sqlFormat';
 import type { Formattable } from '../interfaces/Formattable';
-import type { SqlBridgeable } from '../interfaces/SqlBridgeable';
 import type { GetState, SetState } from '../types';
 
-interface FormatSliceDeps {
-  bridge: SqlBridgeable;
-}
-
-export function createFormatSlice(
-  set: SetState,
-  get: GetState,
-  deps: FormatSliceDeps
-): Formattable {
-  const { bridge } = deps;
-
+export function createFormatSlice(set: SetState, get: GetState): Formattable {
   return {
     formatQuery: async (id) => {
       const query = get().queries.find((q) => q.id === id);
       if (!query || !query.content.trim() || query.isDataView) return;
 
       try {
-        const result = await bridge.formatSQL(query.content);
+        const formatted = formatSQL(query.content);
         set((state) => ({
           queries: state.queries.map((q) =>
-            q.id === id ? { ...q, content: result.sql, isDirty: true } : q
+            q.id === id ? { ...q, content: formatted, isDirty: true } : q
           ),
         }));
       } catch (error) {

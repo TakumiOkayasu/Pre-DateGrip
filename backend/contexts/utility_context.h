@@ -28,7 +28,6 @@ public:
     UtilityContext& operator=(UtilityContext&&) noexcept;
 
     // IUtilityContext implementation (IPC handle methods)
-    [[nodiscard]] std::string handleFormatSQL(std::string_view params) override;
     [[nodiscard]] std::string handleUppercaseKeywords(std::string_view params) override;
     [[nodiscard]] std::string handleParseA5ER(std::string_view params) override;
     [[nodiscard]] std::string handleParseA5ERContent(std::string_view params) override;

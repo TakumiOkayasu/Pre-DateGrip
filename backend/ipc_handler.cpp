@@ -70,7 +70,6 @@ void IPCHandler::registerRoutes() {
     m_routes["exportExcel"] = [this](auto p) { return m_ctx.export_ctx().handleExportExcel(m_ctx.database(), p); };
 
     // Utility
-    m_routes["formatSQL"] = [this](auto p) { return m_ctx.utility().handleFormatSQL(p); };
     m_routes["uppercaseKeywords"] = [this](auto p) { return m_ctx.utility().handleUppercaseKeywords(p); };
     m_routes["parseA5ER"] = [this](auto p) { return m_ctx.utility().handleParseA5ER(p); };
     m_routes["parseA5ERContent"] = [this](auto p) { return m_ctx.utility().handleParseA5ERContent(p); };

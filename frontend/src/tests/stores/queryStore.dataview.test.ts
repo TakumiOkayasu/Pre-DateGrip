@@ -9,7 +9,6 @@ vi.mock('../../api/bridge', () => ({
     removeAsyncQuery: vi.fn().mockResolvedValue({ removed: true }),
     cancelQuery: vi.fn(),
     getColumns: vi.fn(),
-    formatSQL: vi.fn(),
     saveQueryToFile: vi.fn(),
     loadQueryFromFile: vi.fn(),
   },

@@ -12,7 +12,6 @@ vi.mock('../../api/bridge', () => ({
     executeQuery: vi.fn(),
     getColumns: vi.fn(),
     cancelQuery: vi.fn(),
-    formatSQL: vi.fn(),
   },
 }));
 
