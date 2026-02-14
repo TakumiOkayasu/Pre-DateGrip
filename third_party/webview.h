@@ -87,6 +87,9 @@ public:
 
     ~webview() {
         stopWorkerPool();
+        if (m_webviewWindow) {
+            m_webviewWindow->remove_NewWindowRequested(m_newWindowRequestedToken);
+        }
         if (m_webviewController) {
             m_webviewController->Close();
         }
@@ -267,6 +270,13 @@ private:
                     GetClientRect(m_hwnd, &bounds);
                     m_webviewController->put_Bounds(bounds);
 
+                    // Disable browser accelerator keys (Ctrl+N, Ctrl+T, etc.)
+                    // Let JavaScript handle all keyboard shortcuts instead
+                    disableBrowserAcceleratorKeys();
+
+                    // Block new window requests (e.g. Ctrl+N default behavior)
+                    blockNewWindowRequests();
+
                     // Setup virtual host mapping for local files (fixes CORS)
                     setupVirtualHostMapping();
 
@@ -331,6 +341,35 @@ private:
                 nullptr
             );
         }
+    }
+
+    void disableBrowserAcceleratorKeys() {
+        if (!m_webviewWindow) return;
+
+        ComPtr<ICoreWebView2Settings> settings;
+        m_webviewWindow->get_Settings(&settings);
+        if (!settings) return;
+
+        ComPtr<ICoreWebView2Settings3> settings3;
+        if (SUCCEEDED(settings->QueryInterface(IID_PPV_ARGS(&settings3))) && settings3) {
+            settings3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+        } else {
+            fprintf(stderr, "[WebView2] WARNING: ICoreWebView2Settings3 not available, browser accelerator keys remain enabled\n");
+        }
+    }
+
+    void blockNewWindowRequests() {
+        if (!m_webviewWindow) return;
+
+        m_webviewWindow->add_NewWindowRequested(
+            Callback<ICoreWebView2NewWindowRequestedEventHandler>(
+                [](ICoreWebView2* /*sender*/, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
+                    args->put_Handled(TRUE);
+                    return S_OK;
+                }
+            ).Get(),
+            &m_newWindowRequestedToken
+        );
     }
 
     void setupVirtualHostMapping() {
@@ -542,6 +581,7 @@ private:
 
     ComPtr<ICoreWebView2Controller> m_webviewController;
     ComPtr<ICoreWebView2> m_webviewWindow;
+    EventRegistrationToken m_newWindowRequestedToken{};
 
 public:
     void set_frontend_path(const std::string& path) {
