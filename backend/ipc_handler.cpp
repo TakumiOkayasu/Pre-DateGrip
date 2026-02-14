@@ -36,6 +36,7 @@ void IPCHandler::registerRoutes() {
     m_routes["getAsyncQueryResult"] = [this](auto p) { return m_ctx.database().handleGetAsyncQueryResult(p); };
     m_routes["cancelAsyncQuery"] = [this](auto p) { return m_ctx.database().handleCancelAsyncQuery(p); };
     m_routes["getActiveQueries"] = [this](auto p) { return m_ctx.database().handleGetActiveQueries(p); };
+    m_routes["removeAsyncQuery"] = [this](auto p) { return m_ctx.database().handleRemoveAsyncQuery(p); };
 
     // Schema
     m_routes["getDatabases"] = [this](auto p) { return m_ctx.database().handleGetDatabases(p); };

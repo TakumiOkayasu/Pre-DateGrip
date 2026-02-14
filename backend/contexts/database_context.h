@@ -51,6 +51,7 @@ public:
     [[nodiscard]] std::string handleGetAsyncQueryResult(std::string_view params) override;
     [[nodiscard]] std::string handleCancelAsyncQuery(std::string_view params) override;
     [[nodiscard]] std::string handleGetActiveQueries(std::string_view params) override;
+    [[nodiscard]] std::string handleRemoveAsyncQuery(std::string_view params) override;
 
     // Schema
     [[nodiscard]] std::string handleGetDatabases(std::string_view params) override;

@@ -27,6 +27,7 @@ export async function executeAsyncWithPolling(
   while (true) {
     if (signal?.aborted) {
       await bridge.cancelAsyncQuery(queryId).catch(() => {});
+      bridge.removeAsyncQuery(queryId).catch(() => {});
       throw new DOMException('Query cancelled', 'AbortError');
     }
 
@@ -36,12 +37,16 @@ export async function executeAsyncWithPolling(
       } catch {
         // Ignore cancel errors
       }
+      bridge.removeAsyncQuery(queryId).catch(() => {});
       throw new Error('Query execution timed out after 5 minutes');
     }
 
     const result = await bridge.getAsyncQueryResult(queryId);
 
     if (result.status === 'completed') {
+      // Fire-and-forget: release backend memory for this query
+      bridge.removeAsyncQuery(queryId).catch(() => {});
+
       if (result.multipleResults && result.results) {
         return {
           multipleResults: true,
@@ -58,8 +63,10 @@ export async function executeAsyncWithPolling(
         executionTimeMs: result.executionTimeMs ?? 0,
       };
     } else if (result.status === 'failed') {
+      bridge.removeAsyncQuery(queryId).catch(() => {});
       throw new Error(result.error || 'Query execution failed');
     } else if (result.status === 'cancelled') {
+      bridge.removeAsyncQuery(queryId).catch(() => {});
       throw new Error('Query was cancelled');
     }
 
