@@ -7,6 +7,7 @@ interface GridStatusBarProps {
   filteredRowCount: number;
   isFiltered: boolean;
   isEditMode: boolean;
+  connectionLabel?: string;
 }
 
 function GridStatusBarInner({
@@ -14,9 +15,16 @@ function GridStatusBarInner({
   filteredRowCount,
   isFiltered,
   isEditMode,
+  connectionLabel,
 }: GridStatusBarProps) {
   return (
     <div className={styles.statusBar}>
+      {connectionLabel && (
+        <>
+          <span>{connectionLabel}</span>
+          <span>|</span>
+        </>
+      )}
       <span>
         {isFiltered
           ? resultSet.truncated
