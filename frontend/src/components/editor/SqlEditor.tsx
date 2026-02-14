@@ -30,14 +30,30 @@ export function SqlEditor() {
   const monacoRef = useRef<typeof Monaco | null>(null);
   const completionDisposableRef = useRef<Monaco.IDisposable | null>(null);
   const isFormattingRef = useRef(false);
+  const lastEditorValueRef = useRef<string>('');
 
   const activeQuery = queries.find((q) => q.id === activeQueryId);
 
   const handleEditorChange = (value: string | undefined) => {
     if (activeQueryId && value !== undefined) {
+      lastEditorValueRef.current = value;
       updateQuery(activeQueryId, value);
     }
   };
+
+  // ストア側でcontentが変更された場合（フォーマット等）、Monacoに直接反映
+  useEffect(() => {
+    if (editorRef.current && activeQuery?.content !== undefined) {
+      const editorValue = editorRef.current.getValue();
+      if (
+        editorValue !== activeQuery.content &&
+        lastEditorValueRef.current !== activeQuery.content
+      ) {
+        editorRef.current.setValue(activeQuery.content);
+      }
+      lastEditorValueRef.current = activeQuery.content;
+    }
+  }, [activeQuery?.content, activeQueryId]);
 
   // Global keyboard event handler - bypasses Monaco Editor's key binding system
   // This prevents potential blocking issues with Monaco's internal event handling
@@ -91,6 +107,7 @@ export function SqlEditor() {
                   requestAnimationFrame(() => {
                     if (editorRef.current) {
                       log.info('[SqlEditor] Format: Setting editor value');
+                      lastEditorValueRef.current = result.sql;
                       editorRef.current.setValue(result.sql);
                       updateQuery(activeQueryId, result.sql);
                       log.info('[SqlEditor] Format: COMPLETE');

@@ -69,6 +69,7 @@ export function EditorTabs() {
   const queries = useQueries();
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
   const { addQuery, removeQuery, setActive } = useQueryActions();
+  const activeConnectionId = useConnectionStore((s) => s.activeConnectionId);
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -174,7 +175,11 @@ export function EditorTabs() {
           )}
         </div>
       )}
-      <button className={styles.addButton} onClick={() => addQuery()} title="新規クエリ (Ctrl+N)">
+      <button
+        className={styles.addButton}
+        onClick={() => addQuery(activeConnectionId)}
+        title="新規クエリ (Ctrl+N)"
+      >
         {PlusIcon}
       </button>
     </div>
