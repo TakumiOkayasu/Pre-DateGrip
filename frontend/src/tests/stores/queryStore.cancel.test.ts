@@ -92,6 +92,47 @@ describe('cancelQuery + AbortRegistrable', () => {
     expect(state.executingQueryIds.has(queryId)).toBe(false);
   });
 
+  it('should abort all executing queries on cancelQuery', async () => {
+    mockedBridge.executeAsyncQuery
+      .mockResolvedValueOnce({ queryId: 'async_1' })
+      .mockResolvedValueOnce({ queryId: 'async_2' });
+    mockedBridge.getAsyncQueryResult.mockResolvedValue({
+      queryId: 'async_1',
+      status: 'pending' as const,
+    });
+    mockedBridge.cancelAsyncQuery.mockResolvedValue({ cancelled: true });
+    mockedBridge.cancelQuery.mockResolvedValue(undefined);
+
+    const { addQuery, updateQuery, executeQuery, cancelQuery } = useQueryStore.getState();
+
+    // Create and start 2 queries in parallel
+    addQuery('conn_1');
+    const q1 = useQueryStore.getState().queries[0].id;
+    updateQuery(q1, 'SELECT 1');
+
+    addQuery('conn_1');
+    const q2 = useQueryStore.getState().queries[1].id;
+    updateQuery(q2, 'SELECT 2');
+
+    const p1 = executeQuery(q1, 'conn_1');
+    const p2 = executeQuery(q2, 'conn_1');
+
+    // Wait for both to be executing
+    await vi.waitFor(() => {
+      const { executingQueryIds } = useQueryStore.getState();
+      expect(executingQueryIds.has(q1)).toBe(true);
+      expect(executingQueryIds.has(q2)).toBe(true);
+    });
+
+    // Cancel all → should abort both polling loops
+    await cancelQuery('conn_1');
+    await Promise.all([p1, p2]);
+
+    const state = useQueryStore.getState();
+    expect(state.executingQueryIds.size).toBe(0);
+    expect(state.isExecuting).toBe(false);
+  });
+
   it('should handle cancelQuery when no active query', async () => {
     mockedBridge.cancelQuery.mockResolvedValue(undefined);
 

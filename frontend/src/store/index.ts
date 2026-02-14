@@ -19,5 +19,5 @@ export {
   useQueryActions,
   useQueryResult,
   useQueryStore,
-} from './queryStore';
+} from './query';
 export { useSessionStore } from './sessionStore';

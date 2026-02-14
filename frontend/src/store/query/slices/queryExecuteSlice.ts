@@ -81,21 +81,24 @@ export function createExecuteSlice(
     },
 
     cancelQuery: async (connectionId) => {
-      // S3修正: activeIdをtry冒頭で一度だけ取得し、catch でも再利用
-      const activeId = get().activeQueryId;
+      const { executingQueryIds, activeQueryId } = get();
       try {
-        // Abort the active query's polling loop — endExecution is handled
-        // by the AbortError catch in executeAndRecord, so no need to call it here.
-        if (activeId) {
-          abort.abort(activeId);
+        // Two-phase cancel (defence-in-depth):
+        // 1) abort.abort — immediately stops each polling loop (UI responsiveness)
+        // 2) bridge.cancelQuery — connection-level backend cancel (catches queries
+        //    not yet in polling or managed outside AbortController)
+        // Both are idempotent; the per-query cancelAsyncQuery fired by AbortError
+        // arrives after bridge.cancelQuery and is a no-op on an already-cancelled query.
+        for (const id of executingQueryIds) {
+          abort.abort(id);
         }
         await bridge.cancelQuery(connectionId);
       } catch (error) {
         set((state) => ({
-          errors: activeId
+          errors: activeQueryId
             ? {
                 ...state.errors,
-                [activeId]: error instanceof Error ? error.message : 'Failed to cancel query',
+                [activeQueryId]: error instanceof Error ? error.message : 'Failed to cancel query',
               }
             : state.errors,
         }));
