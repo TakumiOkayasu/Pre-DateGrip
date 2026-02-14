@@ -67,6 +67,15 @@ export async function executeAsyncWithPolling(
   }
 }
 
+const QUERY_ROW_LIMIT = 10_000;
+
+function truncateRows(rows: string[][]): { rows: string[][]; truncated: boolean } {
+  if (rows.length > QUERY_ROW_LIMIT) {
+    return { rows: rows.slice(0, QUERY_ROW_LIMIT), truncated: true };
+  }
+  return { rows, truncated: false };
+}
+
 export function toQueryResult(result: AsyncPollResult): {
   queryResult: QueryResult;
   totalAffectedRows: number;
@@ -76,27 +85,33 @@ export function toQueryResult(result: AsyncPollResult): {
     return {
       queryResult: {
         multipleResults: true,
-        results: result.results.map((r) => ({
-          statement: r.statement,
-          data: {
-            columns: r.data.columns.map(mapAsyncColumn),
-            rows: r.data.rows,
-            affectedRows: r.data.affectedRows,
-            executionTimeMs: r.data.executionTimeMs,
-          },
-        })),
+        results: result.results.map((r) => {
+          const { rows, truncated } = truncateRows(r.data.rows);
+          return {
+            statement: r.statement,
+            data: {
+              columns: r.data.columns.map(mapAsyncColumn),
+              rows,
+              affectedRows: r.data.affectedRows,
+              executionTimeMs: r.data.executionTimeMs,
+              truncated,
+            },
+          };
+        }),
       },
       totalAffectedRows: result.results.reduce((sum, r) => sum + r.data.affectedRows, 0),
       totalExecutionTimeMs: result.results.reduce((sum, r) => sum + r.data.executionTimeMs, 0),
     };
   }
 
+  const { rows, truncated } = truncateRows(result.rows);
   return {
     queryResult: {
       columns: result.columns.map(mapAsyncColumn),
-      rows: result.rows,
+      rows,
       affectedRows: result.affectedRows,
       executionTimeMs: result.executionTimeMs,
+      truncated,
     },
     totalAffectedRows: result.affectedRows,
     totalExecutionTimeMs: result.executionTimeMs,

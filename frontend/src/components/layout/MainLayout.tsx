@@ -52,16 +52,9 @@ const Icons = {
       <path d="M2 8c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5" />
     </svg>
   ),
-  newFile: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" />
-      <path d="M9 1v4h4" />
-      <path d="M8 8v4M6 10h4" />
-    </svg>
-  ),
   play: (
     <svg viewBox="0 0 16 16" fill="currentColor">
-      <path d="M4 2.5v11l9-5.5-9-5.5z" />
+      <path d="M4 2v12l10-6-10-6z" />
     </svg>
   ),
   stop: (
@@ -448,17 +441,6 @@ export function MainLayout() {
         </div>
 
         <div className={styles.toolbarDivider} />
-
-        {/* Query operations */}
-        <div className={styles.toolbarGroup}>
-          <button
-            className={styles.iconButton}
-            onClick={handleNewQuery}
-            title="新規クエリ (Ctrl+N)"
-          >
-            {Icons.newFile}
-          </button>
-        </div>
 
         <div className={styles.toolbarGroup}>
           <button
