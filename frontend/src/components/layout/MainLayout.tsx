@@ -64,7 +64,7 @@ const Icons = {
   ),
   format: (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2 3h12M2 6h8M2 9h10M2 12h6" />
+      <path d="M2 3h12M2 6h8M2 9h12M2 12h8" />
     </svg>
   ),
   import: (
@@ -431,7 +431,7 @@ export function MainLayout() {
                 {!activeConnectionId && <option value="">選択してください</option>}
                 {connections.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.server}/{c.database}
+                    {c.server} | {c.database}
                     {c.isProduction ? ' (本番)' : ''}
                   </option>
                 ))}
