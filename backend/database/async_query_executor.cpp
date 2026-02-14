@@ -191,9 +191,18 @@ bool AsyncQueryExecutor::isQueryRunning(std::string_view queryId) const {
     return iter->second->status == QueryStatus::Running;
 }
 
-void AsyncQueryExecutor::removeQuery(std::string_view queryId) {
+bool AsyncQueryExecutor::removeQuery(std::string_view queryId) {
     std::lock_guard lock(m_mutex);
-    m_queries.erase(std::string(queryId));
+    auto it = m_queries.find(std::string(queryId));
+    if (it == m_queries.end()) {
+        return false;
+    }
+    auto status = it->second->status.load();
+    if (status == QueryStatus::Pending || status == QueryStatus::Running) {
+        return false;
+    }
+    m_queries.erase(it);
+    return true;
 }
 
 std::vector<std::string> AsyncQueryExecutor::getActiveQueryIds() const {
@@ -209,6 +218,29 @@ std::vector<std::string> AsyncQueryExecutor::getActiveQueryIds() const {
     }
 
     return ids;
+}
+
+size_t AsyncQueryExecutor::evictStaleQueries(std::chrono::seconds maxAge) {
+    std::lock_guard lock(m_mutex);
+    if (m_queries.empty()) {
+        return 0;
+    }
+    auto now = std::chrono::steady_clock::now();
+    if (now - m_lastEvictTime < EVICT_INTERVAL) {
+        return 0;
+    }
+    m_lastEvictTime = now;
+
+    auto sizeBefore = m_queries.size();
+    std::erase_if(m_queries, [&](const auto& pair) {
+        const auto& task = pair.second;
+        auto status = task->status.load();
+        if (status == QueryStatus::Pending || status == QueryStatus::Running) {
+            return false;
+        }
+        return (now - task->endTime) > maxAge;
+    });
+    return sizeBefore - m_queries.size();
 }
 
 }  // namespace velocitydb

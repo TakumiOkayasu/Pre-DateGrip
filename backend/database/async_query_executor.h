@@ -59,11 +59,14 @@ public:
     /// Checks if a query is still running
     [[nodiscard]] bool isQueryRunning(std::string_view queryId) const;
 
-    /// Removes completed query from tracking (cleanup)
-    void removeQuery(std::string_view queryId);
+    /// Removes completed query from tracking (cleanup). Returns true if the query existed.
+    [[nodiscard]] bool removeQuery(std::string_view queryId);
 
     /// Gets all active query IDs
     [[nodiscard]] std::vector<std::string> getActiveQueryIds() const;
+
+    /// Evicts completed/failed/cancelled queries older than maxAge. Returns number evicted.
+    [[nodiscard]] size_t evictStaleQueries(std::chrono::seconds maxAge = std::chrono::seconds{300});
 
 private:
     struct QueryTask {
@@ -78,8 +81,11 @@ private:
         std::chrono::steady_clock::time_point endTime;
     };
 
+    static constexpr auto EVICT_INTERVAL = std::chrono::seconds{60};
+
     mutable std::mutex m_mutex;
     std::unordered_map<std::string, std::shared_ptr<QueryTask>> m_queries;
+    std::chrono::steady_clock::time_point m_lastEvictTime{};  // guarded by m_mutex
     std::atomic<int> m_queryIdCounter{1};
 };
 

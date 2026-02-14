@@ -433,6 +433,10 @@ class Bridge {
     return this.call('cancelAsyncQuery', { queryId });
   }
 
+  async removeAsyncQuery(queryId: string): Promise<{ removed: boolean }> {
+    return this.call('removeAsyncQuery', { queryId });
+  }
+
   async getActiveQueries(): Promise<string[]> {
     return this.call('getActiveQueries', {});
   }

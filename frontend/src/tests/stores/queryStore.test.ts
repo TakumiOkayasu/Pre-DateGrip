@@ -8,6 +8,7 @@ vi.mock('../../api/bridge', () => ({
     executeAsyncQuery: vi.fn(),
     getAsyncQueryResult: vi.fn(),
     cancelAsyncQuery: vi.fn(),
+    removeAsyncQuery: vi.fn().mockResolvedValue({ removed: true }),
     executeQuery: vi.fn(),
     getColumns: vi.fn(),
     cancelQuery: vi.fn(),
@@ -368,6 +369,47 @@ describe('queryStore', () => {
       const { errors } = useQueryStore.getState();
       expect(errors[tab1Id]).toBe('Syntax error');
       expect(errors[tab2Id] ?? null).toBeNull();
+    });
+  });
+
+  describe('removeAsyncQuery cleanup', () => {
+    it('should call removeAsyncQuery on completed query', async () => {
+      const { addQuery, updateQuery, executeQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+      updateQuery(queryId, 'SELECT 1');
+
+      mockedBridge.executeAsyncQuery.mockResolvedValue({ queryId: 'async_1' });
+      mockedBridge.getAsyncQueryResult.mockResolvedValue({
+        queryId: 'async_1',
+        status: 'completed',
+        columns: [{ name: 'result', type: 'int' }],
+        rows: [['1']],
+        affectedRows: 0,
+        executionTimeMs: 5,
+      });
+
+      await executeQuery(queryId, 'conn_1');
+
+      expect(mockedBridge.removeAsyncQuery).toHaveBeenCalledWith('async_1');
+    });
+
+    it('should call removeAsyncQuery on failed query', async () => {
+      const { addQuery, updateQuery, executeQuery } = useQueryStore.getState();
+      addQuery('conn_1');
+      const queryId = useQueryStore.getState().queries[0].id;
+      updateQuery(queryId, 'BAD SQL');
+
+      mockedBridge.executeAsyncQuery.mockResolvedValue({ queryId: 'async_2' });
+      mockedBridge.getAsyncQueryResult.mockResolvedValue({
+        queryId: 'async_2',
+        status: 'failed',
+        error: 'Syntax error',
+      });
+
+      await executeQuery(queryId, 'conn_1');
+
+      expect(mockedBridge.removeAsyncQuery).toHaveBeenCalledWith('async_2');
     });
   });
 });

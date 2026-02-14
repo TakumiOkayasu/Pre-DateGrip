@@ -491,6 +491,10 @@ std::string DatabaseContext::handleGetAsyncQueryResult(std::string_view params) 
             return JsonUtils::errorResponse("Missing required field: queryId");
         }
         auto queryId = std::string(queryIdResult.value());
+
+        // Safety net: evict completed queries older than 5 minutes
+        [[maybe_unused]] auto evicted = m_asyncExecutor->evictStaleQueries();
+
         AsyncQueryResult asyncResult = m_asyncExecutor->getQueryResult(queryId);
 
         std::string statusStr;
@@ -575,6 +579,22 @@ std::string DatabaseContext::handleCancelAsyncQuery(std::string_view params) {
         }
         bool cancelled = m_asyncExecutor->cancelQuery(std::string(queryIdResult.value()));
         return JsonUtils::successResponse(std::format(R"({{"cancelled":{}}})", cancelled ? "true" : "false"));
+    } catch (const std::exception& e) {
+        return JsonUtils::errorResponse(e.what());
+    }
+}
+
+std::string DatabaseContext::handleRemoveAsyncQuery(std::string_view params) {
+    try {
+        simdjson::dom::parser parser;
+        auto doc = parser.parse(params);
+
+        auto queryIdResult = doc["queryId"].get_string();
+        if (queryIdResult.error()) [[unlikely]] {
+            return JsonUtils::errorResponse("Missing required field: queryId");
+        }
+        bool removed = m_asyncExecutor->removeQuery(std::string(queryIdResult.value()));
+        return JsonUtils::successResponse(std::format(R"({{"removed":{}}})", removed ? "true" : "false"));
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
     }
