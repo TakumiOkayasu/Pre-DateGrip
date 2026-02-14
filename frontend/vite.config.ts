@@ -17,10 +17,6 @@ export default defineConfig({
     target: 'es2020', // Modern target for faster builds and smaller output
     chunkSizeWarningLimit: 1000, // Large libraries like AG Grid v33 and Monaco exceed 600KB
     rollupOptions: {
-      treeshake: {
-        preset: 'recommended',
-        moduleSideEffects: false,
-      },
       output: {
         // Optimize chunk naming for better caching
         entryFileNames: 'assets/[name]-[hash].js',

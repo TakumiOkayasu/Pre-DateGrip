@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { MainLayout } from './components/layout/MainLayout';
 import { useIsProductionMode } from './store/connectionStore';
 
@@ -14,7 +15,11 @@ function App() {
     }
   }, [isProduction]);
 
-  return <MainLayout />;
+  return (
+    <ErrorBoundary>
+      <MainLayout />
+    </ErrorBoundary>
+  );
 }
 
 export default App;

@@ -1,6 +1,26 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { logger } from './utils/logger';
 import './styles/global.css';
+
+// Global error handlers - flush logs immediately on crash
+window.addEventListener('error', (event) => {
+  const msg = `[FATAL] Uncaught error: ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+  logger.error(msg);
+  if (event.error?.stack) {
+    logger.error(`[FATAL] Stack: ${event.error.stack}`);
+  }
+  logger.forceFlush();
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason =
+    event.reason instanceof Error
+      ? event.reason.stack || event.reason.message
+      : String(event.reason);
+  logger.error(`[FATAL] Unhandled promise rejection: ${reason}`);
+  logger.forceFlush();
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
