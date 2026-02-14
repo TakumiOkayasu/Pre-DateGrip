@@ -348,10 +348,6 @@ class Bridge {
   }
 
   // SQL methods
-  async formatSQL(sql: string): Promise<{ sql: string }> {
-    return this.call('formatSQL', { sql });
-  }
-
   async uppercaseKeywords(sql: string): Promise<{ sql: string }> {
     return this.call('uppercaseKeywords', { sql });
   }

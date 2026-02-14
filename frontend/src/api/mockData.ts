@@ -74,7 +74,6 @@ export const mockData: Record<string, unknown> = {
       isPrimaryKey: false,
     },
   ],
-  formatSQL: { sql: 'SELECT\n    *\nFROM\n    users\nWHERE\n    id = 1;' },
   getQueryHistory: [],
   parseA5ER: { name: '', databaseType: '', tables: [], relations: [] },
   getExecutionPlan: { plan: 'Mock execution plan text', actual: false },

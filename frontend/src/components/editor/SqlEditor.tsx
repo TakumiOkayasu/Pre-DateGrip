@@ -3,11 +3,11 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useRef } from 'react';
-import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueryStore } from '../../store/queryStore';
 import { useSchemaStore } from '../../store/schemaStore';
 import { log } from '../../utils/logger';
+import { formatSQL } from '../../utils/sqlFormat';
 import { getStatementAtCursor } from '../../utils/sqlParser';
 import { createCompletionProvider } from './completionProvider';
 import styles from './SqlEditor.module.css';
@@ -96,33 +96,23 @@ export function SqlEditor() {
             }
 
             isFormattingRef.current = true;
-            log.info('[SqlEditor] Format: Calling bridge.formatSQL');
+            log.info('[SqlEditor] Format: Calling formatSQL');
 
-            // Direct Promise chain - no function call
-            bridge
-              .formatSQL(currentValue)
-              .then((result) => {
-                log.info('[SqlEditor] Format: bridge.formatSQL SUCCESS');
-                if (result.sql && editorRef.current) {
-                  requestAnimationFrame(() => {
-                    if (editorRef.current) {
-                      log.info('[SqlEditor] Format: Setting editor value');
-                      lastEditorValueRef.current = result.sql;
-                      editorRef.current.setValue(result.sql);
-                      updateQuery(activeQueryId, result.sql);
-                      log.info('[SqlEditor] Format: COMPLETE');
-                    }
-                    isFormattingRef.current = false;
-                  });
-                } else {
-                  isFormattingRef.current = false;
-                }
-              })
-              .catch((error) => {
-                isFormattingRef.current = false;
-                const msg = error instanceof Error ? error.message : String(error);
-                log.error(`[SqlEditor] Format: ERROR - ${msg}`);
-              });
+            try {
+              const formatted = formatSQL(currentValue);
+              log.info('[SqlEditor] Format: formatSQL SUCCESS');
+              if (editorRef.current) {
+                lastEditorValueRef.current = formatted;
+                editorRef.current.setValue(formatted);
+                updateQuery(activeQueryId, formatted);
+                log.info('[SqlEditor] Format: COMPLETE');
+              }
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              log.error(`[SqlEditor] Format: ERROR - ${msg}`);
+            } finally {
+              isFormattingRef.current = false;
+            }
           }, 0);
         });
         return;

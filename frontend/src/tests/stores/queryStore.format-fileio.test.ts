@@ -8,13 +8,18 @@ vi.mock('../../api/bridge', () => ({
     cancelAsyncQuery: vi.fn(),
     cancelQuery: vi.fn(),
     getColumns: vi.fn(),
-    formatSQL: vi.fn(),
     saveQueryToFile: vi.fn(),
     loadQueryFromFile: vi.fn(),
   },
 }));
 
+vi.mock('../../utils/sqlFormat', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/sqlFormat')>();
+  return { ...actual, formatSQL: vi.fn(actual.formatSQL) };
+});
+
 import { bridge } from '../../api/bridge';
+import { formatSQL as mockedFormatSQL } from '../../utils/sqlFormat';
 
 const mockedBridge = vi.mocked(bridge);
 
@@ -35,20 +40,19 @@ describe('formatQuery', () => {
     vi.clearAllMocks();
   });
 
-  it('should format query content via bridge', async () => {
+  it('should format query content via sql-formatter', async () => {
     const { addQuery, updateQuery } = useQueryStore.getState();
     addQuery('conn_1');
     const queryId = useQueryStore.getState().queries[0].id;
-    updateQuery(queryId, 'select * from users');
-
-    mockedBridge.formatSQL.mockResolvedValue({ sql: 'SELECT *\nFROM users' });
+    updateQuery(queryId, 'select * from users where id = 1');
 
     await useQueryStore.getState().formatQuery(queryId);
 
     const state = useQueryStore.getState();
-    expect(state.queries[0].content).toBe('SELECT *\nFROM users');
+    expect(state.queries[0].content).toContain('SELECT');
+    expect(state.queries[0].content).toContain('FROM');
     expect(state.queries[0].isDirty).toBe(true);
-    expect(mockedBridge.formatSQL).toHaveBeenCalledWith('select * from users');
+    expect(mockedFormatSQL).toHaveBeenCalledWith('select * from users where id = 1');
   });
 
   it('should not format empty content', async () => {
@@ -58,7 +62,7 @@ describe('formatQuery', () => {
 
     await useQueryStore.getState().formatQuery(queryId);
 
-    expect(mockedBridge.formatSQL).not.toHaveBeenCalled();
+    expect(mockedFormatSQL).not.toHaveBeenCalled();
   });
 
   it('should not format data view tabs', async () => {
@@ -79,7 +83,7 @@ describe('formatQuery', () => {
 
     await useQueryStore.getState().formatQuery('dv-1');
 
-    expect(mockedBridge.formatSQL).not.toHaveBeenCalled();
+    expect(mockedFormatSQL).not.toHaveBeenCalled();
   });
 
   it('should set error on format failure', async () => {
@@ -88,7 +92,9 @@ describe('formatQuery', () => {
     const queryId = useQueryStore.getState().queries[0].id;
     updateQuery(queryId, 'INVALID');
 
-    mockedBridge.formatSQL.mockRejectedValue(new Error('Parse error'));
+    vi.mocked(mockedFormatSQL).mockImplementationOnce(() => {
+      throw new Error('Parse error');
+    });
 
     await useQueryStore.getState().formatQuery(queryId);
 

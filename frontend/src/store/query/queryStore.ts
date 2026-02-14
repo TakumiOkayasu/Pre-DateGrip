@@ -47,7 +47,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   ...createExecuteSlice(set, get, { bridge, history: historyAdapter, abort: abortAdapter }),
   ...createDataViewSlice(set, get, { bridge, abort: abortAdapter }),
   ...createFileIOSlice(set, get, { bridge }),
-  ...createFormatSlice(set, get, { bridge }),
+  ...createFormatSlice(set, get),
   ...createERDiagramSlice(set, get),
 }));
 

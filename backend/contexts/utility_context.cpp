@@ -88,29 +88,6 @@ std::string serializeA5ERModelToJson(const A5ERModel& model, const std::string& 
 
 }  // namespace
 
-std::string UtilityContext::handleFormatSQL(std::string_view params) {
-    try {
-        simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
-
-        auto sqlResult = doc["sql"].get_string();
-        if (sqlResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing sql field");
-        }
-        std::string sqlQuery = std::string(sqlResult.value());
-
-        constexpr size_t MAX_SQL_SIZE = 100000;
-        if (sqlQuery.size() > MAX_SQL_SIZE) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("SQL too large ({} chars). Maximum size is {} chars.", sqlQuery.size(), MAX_SQL_SIZE));
-        }
-
-        auto finalSQL = m_sqlFormatter->format(sqlQuery);
-        return JsonUtils::successResponse(std::format(R"({{"sql":"{}"}})", JsonUtils::escapeString(finalSQL)));
-    } catch (const std::exception& e) {
-        return JsonUtils::errorResponse(e.what());
-    }
-}
-
 std::string UtilityContext::handleUppercaseKeywords(std::string_view params) {
     try {
         simdjson::dom::parser parser;

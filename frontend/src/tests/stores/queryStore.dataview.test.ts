@@ -8,7 +8,6 @@ vi.mock('../../api/bridge', () => ({
     cancelAsyncQuery: vi.fn(),
     cancelQuery: vi.fn(),
     getColumns: vi.fn(),
-    formatSQL: vi.fn(),
     saveQueryToFile: vi.fn(),
     loadQueryFromFile: vi.fn(),
   },
