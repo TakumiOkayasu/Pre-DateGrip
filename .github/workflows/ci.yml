@@ -16,37 +16,6 @@ permissions:
   contents: read
 
 jobs:
-  # Auto-sync lockfile for PRs (commits bun.lock if out of date)
-  sync-lockfile:
-    name: Sync Lockfile
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Sync lockfile
-        working-directory: frontend
-        run: |
-          bun install
-          if git diff --quiet bun.lock 2>/dev/null; then
-            echo "Lockfile is up to date"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bun.lock
-          git commit -m "chore: sync bun.lock"
-          git push
-
   # C++ lint (parallel with frontend lint)
   lint-cpp:
     name: Lint C++
@@ -76,12 +45,10 @@ jobs:
         run: |
           find backend -name '*.cpp' -o -name '*.h' | xargs -P 4 -I {} clang-format --style=file --dry-run --Werror {}
 
-  # Frontend lint (after lockfile sync)
+  # Frontend lint (parallel with C++ lint)
   lint-frontend:
     name: Lint Frontend
     runs-on: ubuntu-latest
-    needs: sync-lockfile
-    if: always() && (needs.sync-lockfile.result == 'success' || needs.sync-lockfile.result == 'skipped')
     steps:
       - uses: actions/checkout@v6
         with:
@@ -294,13 +261,12 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [sync-lockfile, lint-cpp, lint-frontend, build-frontend]
+    needs: [lint-cpp, lint-frontend, build-frontend]
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          if [[ "${{ needs.sync-lockfile.result }}" != "success" && "${{ needs.sync-lockfile.result }}" != "skipped" ]] || \
-             [[ "${{ needs.lint-cpp.result }}" != "success" ]] || \
+          if [[ "${{ needs.lint-cpp.result }}" != "success" ]] || \
              [[ "${{ needs.lint-frontend.result }}" != "success" ]] || \
              [[ "${{ needs.build-frontend.result }}" != "success" ]]; then
             echo "One or more jobs failed"
