@@ -134,7 +134,7 @@ export function MainLayout() {
     isBlocked?: boolean;
   }>({ isOpen: false, title: '', message: '' });
 
-  const { connections, activeConnectionId, addConnection } = useConnectionStore();
+  const { connections, activeConnectionId, addConnection, setActive } = useConnectionStore();
   const {
     queries,
     activeQueryId,
@@ -417,6 +417,34 @@ export function MainLayout() {
             {Icons.database}
             <span>接続</span>
           </button>
+        </div>
+
+        {/* DB Selector */}
+        <div className={styles.toolbarGroup}>
+          <select
+            className={styles.dbSelector}
+            value={activeConnectionId ?? ''}
+            onChange={(e) => {
+              const id = e.target.value || null;
+              setActive(id);
+            }}
+            disabled={connections.length === 0}
+            title="接続先データベースを切り替え"
+          >
+            {connections.length === 0 ? (
+              <option value="">未接続</option>
+            ) : (
+              <>
+                {!activeConnectionId && <option value="">選択してください</option>}
+                {connections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.server}/{c.database}
+                    {c.isProduction ? ' (本番)' : ''}
+                  </option>
+                ))}
+              </>
+            )}
+          </select>
         </div>
 
         <div className={styles.toolbarDivider} />

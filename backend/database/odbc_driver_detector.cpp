@@ -1,5 +1,7 @@
 #include "odbc_driver_detector.h"
 
+#include "odbc_unicode.h"
+
 #include <Windows.h>
 #include <sql.h>
 #include <sqlext.h>
@@ -22,22 +24,24 @@ bool isDriverAvailable(std::string_view driverName) {
         return false;
     }
 
-    if (SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, reinterpret_cast<SQLPOINTER>(SQL_OV_ODBC3), 0) != SQL_SUCCESS) {
+    if (SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, toSqlPointer(SQL_OV_ODBC3), 0) != SQL_SUCCESS) {
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         return false;
     }
 
-    std::array<SQLCHAR, 256> driverDesc{};
-    std::array<SQLCHAR, 256> driverAttr{};
+    std::array<SQLWCHAR, 256> driverDesc{};
+    std::array<SQLWCHAR, 256> driverAttr{};
     SQLSMALLINT descLen = 0;
     SQLSMALLINT attrLen = 0;
 
     SQLUSMALLINT direction = SQL_FETCH_FIRST;
     bool found = false;
 
-    while (SQLDriversA(env, direction, driverDesc.data(), static_cast<SQLSMALLINT>(driverDesc.size()), &descLen, driverAttr.data(), static_cast<SQLSMALLINT>(driverAttr.size()), &attrLen) ==
+    auto wideDriverName = utf8ToWide(driverName);
+
+    while (SQLDriversW(env, direction, driverDesc.data(), static_cast<SQLSMALLINT>(driverDesc.size()), &descLen, driverAttr.data(), static_cast<SQLSMALLINT>(driverAttr.size()), &attrLen) ==
            SQL_SUCCESS) {
-        if (std::string_view(reinterpret_cast<char*>(driverDesc.data())) == driverName) {
+        if (std::wstring_view(toWchar(driverDesc.data())) == wideDriverName) {
             found = true;
             break;
         }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useConnectionStore } from '../../store/connectionStore';
 import { useQueries, useQueryActions, useQueryStore } from '../../store/queryStore';
 import type { Query } from '../../types';
 import styles from './EditorTabs.module.css';
@@ -54,6 +55,12 @@ function buildTooltip(query: Query): string {
     parts.push(query.logicalName);
   } else if (query.isDataView && query.sourceTable && query.sourceTable !== query.name) {
     parts.push(query.sourceTable);
+  }
+  if (query.connectionId) {
+    const conn = useConnectionStore.getState().connections.find((c) => c.id === query.connectionId);
+    if (conn) {
+      parts.push(`接続先: ${conn.server}/${conn.database}`);
+    }
   }
   return parts.join('\n');
 }

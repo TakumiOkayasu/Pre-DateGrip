@@ -1,6 +1,6 @@
 #include "sqlserver_driver.h"
 
-#include <Windows.h>
+#include "odbc_unicode.h"
 
 #include <algorithm>
 #include <array>
@@ -10,29 +10,13 @@
 
 namespace velocitydb {
 
-// Convert UTF-16 (wchar_t) to UTF-8 (std::string)
-static std::string wcharToUtf8(const wchar_t* wstr, size_t len) {
-    if (len == 0 || wstr == nullptr) {
-        return {};
-    }
-
-    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, wstr, static_cast<int>(len), nullptr, 0, nullptr, nullptr);
-    if (utf8Len == 0) {
-        return {};
-    }
-
-    auto utf8Str = std::string(static_cast<size_t>(utf8Len), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstr, static_cast<int>(len), utf8Str.data(), utf8Len, nullptr, nullptr);
-    return utf8Str;
-}
-
 SQLServerDriver::SQLServerDriver() {
     SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &m_env);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
         throw std::runtime_error("Failed to allocate ODBC environment handle");
     }
 
-    ret = SQLSetEnvAttr(m_env, SQL_ATTR_ODBC_VERSION, reinterpret_cast<SQLPOINTER>(SQL_OV_ODBC3), 0);
+    ret = SQLSetEnvAttr(m_env, SQL_ATTR_ODBC_VERSION, toSqlPointer(SQL_OV_ODBC3), 0);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
         SQLFreeHandle(SQL_HANDLE_ENV, m_env);
         throw std::runtime_error("Failed to set ODBC version");
@@ -60,16 +44,16 @@ bool SQLServerDriver::connect(std::string_view connectionString) {
         disconnect();
     }
 
-    std::array<SQLCHAR, 1024> outConnectionString{};
+    std::array<SQLWCHAR, 1024> outConnectionString{};
     SQLSMALLINT outConnectionStringLen = 0;
 
     // Set connection timeout to prevent indefinite hangs (e.g. dead SSH tunnels)
     constexpr SQLUINTEGER loginTimeout = 30;
-    SQLSetConnectAttr(m_dbc, SQL_ATTR_LOGIN_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(loginTimeout)), 0);
-    SQLSetConnectAttr(m_dbc, SQL_ATTR_CONNECTION_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(loginTimeout)), 0);
+    SQLSetConnectAttr(m_dbc, SQL_ATTR_LOGIN_TIMEOUT, toSqlPointer(loginTimeout), 0);
+    SQLSetConnectAttr(m_dbc, SQL_ATTR_CONNECTION_TIMEOUT, toSqlPointer(loginTimeout), 0);
 
-    auto connStr = std::string(connectionString);
-    SQLRETURN ret = SQLDriverConnectA(m_dbc, nullptr, reinterpret_cast<SQLCHAR*>(connStr.data()), SQL_NTS, outConnectionString.data(), static_cast<SQLSMALLINT>(outConnectionString.size()),
+    auto wideConnStr = utf8ToWide(connectionString);
+    SQLRETURN ret = SQLDriverConnectW(m_dbc, nullptr, toSqlWchar(wideConnStr.data()), SQL_NTS, outConnectionString.data(), static_cast<SQLSMALLINT>(outConnectionString.size()),
                                       &outConnectionStringLen, SQL_DRIVER_NOPROMPT);
 
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) [[unlikely]] {
@@ -155,10 +139,10 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
 
     // Set query timeout to prevent indefinite hangs
     constexpr SQLULEN queryTimeout = 300;  // 5 minutes
-    SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, reinterpret_cast<SQLPOINTER>(static_cast<uintptr_t>(queryTimeout)), 0);
+    SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, toSqlPointer(queryTimeout), 0);
 
-    auto sqlStr = std::string(sql);
-    ret = SQLExecDirectA(stmt, reinterpret_cast<SQLCHAR*>(sqlStr.data()), SQL_NTS);
+    auto wideSql = utf8ToWide(sql);
+    ret = SQLExecDirectW(stmt, toSqlWchar(wideSql.data()), SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO && ret != SQL_NO_DATA) [[unlikely]] {
         storeODBCDiagnosticMessage(ret, SQL_HANDLE_STMT, stmt);
         throw std::runtime_error(m_lastError);
@@ -190,7 +174,7 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
         // Use (std::min) to avoid Windows min macro interference
         colNameLen = (std::min)(colNameLen, static_cast<SQLSMALLINT>(colName.size() - 1));
 
-        auto columnName = wcharToUtf8(reinterpret_cast<wchar_t*>(colName.data()), static_cast<size_t>(colNameLen));
+        auto columnName = sqlWcharToUtf8(colName.data(), static_cast<size_t>(colNameLen));
 
         // If column name is empty, use a default name (e.g., "Column1", "Column2")
         if (columnName.empty()) {
@@ -230,14 +214,14 @@ ResultSet SQLServerDriver::execute(std::string_view sql) {
                 for (size_t j = 0; j < largeBuffer.size() && largeBuffer[j] != 0; ++j) {
                     strLen = j + 1;
                 }
-                row.values.emplace_back(wcharToUtf8(reinterpret_cast<wchar_t*>(largeBuffer.data()), strLen));
+                row.values.emplace_back(sqlWcharToUtf8(largeBuffer.data(), strLen));
             } else if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
                 // Find actual string length
                 size_t strLen = 0;
                 for (size_t j = 0; j < buffer.size() && buffer[j] != 0; ++j) {
                     strLen = j + 1;
                 }
-                row.values.emplace_back(wcharToUtf8(reinterpret_cast<wchar_t*>(buffer.data()), strLen));
+                row.values.emplace_back(sqlWcharToUtf8(buffer.data(), strLen));
             } else {
                 // Error getting data - add empty value and continue
                 row.values.emplace_back();
@@ -286,7 +270,7 @@ void SQLServerDriver::storeODBCDiagnosticMessage(SQLRETURN returnCode, SQLSMALLI
     SQLGetDiagRecW(odbcHandleType, odbcHandle, 1, sqlState.data(), &nativeErrorCode, diagnosticMessage.data(), static_cast<SQLSMALLINT>(diagnosticMessage.size()), &messageLength);
 
     // Convert UTF-16 (SQLWCHAR) to UTF-8 (std::string)
-    m_lastError = wcharToUtf8(reinterpret_cast<wchar_t*>(diagnosticMessage.data()), messageLength);
+    m_lastError = sqlWcharToUtf8(diagnosticMessage.data(), messageLength);
 }
 
 }  // namespace velocitydb

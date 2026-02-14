@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
-import { useConnectionStore } from '../../store/connectionStore';
+import { useActiveConnection, useConnectionStore } from '../../store/connectionStore';
 import {
   useIsActiveDataView,
   useIsQueryExecuting,
@@ -45,6 +45,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
   // --- Store subscriptions ---
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
   const activeConnectionId = useConnectionStore((state) => state.activeConnectionId);
+  const activeConn = useActiveConnection();
   const isActiveDataView = useIsActiveDataView();
   const targetQueryId = excludeDataView && isActiveDataView ? null : (queryId ?? activeQueryId);
   const currentQuery = useQueryById(targetQueryId);
@@ -413,6 +414,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
         filteredRowCount={rows.length}
         isFiltered={columnFilters.length > 0}
         isEditMode={isEditMode}
+        connectionLabel={activeConn ? `${activeConn.server}/${activeConn.database}` : undefined}
       />
 
       <ExportDialog
