@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { bridge, toERDiagramModel } from '../../api/bridge';
 import type { ERDiagramModel } from '../../utils/erDiagramParser';
 import styles from './A5ERImportDialog.module.css';
@@ -15,6 +15,7 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
   const [error, setError] = useState<string | null>(null);
   const [generatedDDL, setGeneratedDDL] = useState<string>('');
   const [showDDL, setShowDDL] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,12 +58,24 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
         </div>
 
         <div className={styles.content}>
-          <div className={styles.fileInput}>
-            <label>
-              .a5erファイルを選択:
-              <input type="file" accept=".a5er,.xml" onChange={handleFileSelect} />
-            </label>
-            {fileName && <span className={styles.fileName}>{fileName}</span>}
+          <div className={styles.fileSection}>
+            <span className={styles.fileLabel}>.a5erファイルを選択</span>
+            <div className={styles.fileRow}>
+              <button
+                className={styles.fileBrowseButton}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                ファイルを選択
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".a5er,.xml"
+                onChange={handleFileSelect}
+                className={styles.fileHidden}
+              />
+              {fileName && <span className={styles.fileName}>{fileName}</span>}
+            </div>
           </div>
 
           {error && <div className={styles.error}>{error}</div>}
@@ -98,7 +111,9 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
         </div>
 
         <div className={styles.footer}>
-          <button onClick={onClose}>キャンセル</button>
+          <button className={styles.cancelButton} onClick={onClose}>
+            キャンセル
+          </button>
           <button
             onClick={handleImport}
             disabled={!parsedModel || parsedModel.tables.length === 0}
