@@ -150,8 +150,9 @@ private:
         wc.lpszClassName = L"VelocityDBWindow";
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         // IDI_APP_ICON (101) defined in backend/resources/resource.h
-        wc.hIcon = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
-        wc.hIconSm = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        // Use system metrics for DPI-aware icon sizes (taskbar: SM_CXICON, titlebar: SM_CXSMICON)
+        wc.hIcon = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0));
+        wc.hIconSm = static_cast<HICON>(LoadImage(wc.hInstance, MAKEINTRESOURCE(101), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
         static HBRUSH darkBrush = CreateSolidBrush(RGB(30, 30, 30));
         wc.hbrBackground = darkBrush;
         RegisterClassExW(&wc);
