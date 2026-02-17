@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.0/schema.json",
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
@@ -56,7 +56,10 @@
       "enabled": true
     },
     "linter": {
-      "enabled": true
+      "enabled": true,
+      "rules": {
+        "noUnknownPseudoElement": "off"
+      }
     }
   },
   "files": {
