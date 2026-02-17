@@ -12,6 +12,7 @@ const SqlIcon = (
     fill="none"
     stroke="currentColor"
     strokeWidth="1.2"
+    aria-hidden="true"
   >
     <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" />
     <path d="M9 1v4h4" />
@@ -26,6 +27,7 @@ const ERDiagramIcon = (
     fill="none"
     stroke="currentColor"
     strokeWidth="1.2"
+    aria-hidden="true"
   >
     <rect x="1" y="1" width="5" height="4" rx="0.5" />
     <rect x="10" y="1" width="5" height="4" rx="0.5" />
@@ -37,14 +39,14 @@ const ERDiagramIcon = (
 
 // Plus icon for add button
 const PlusIcon = (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
     <path d="M8 3v10M3 8h10" />
   </svg>
 );
 
 // Close icon
 const CloseIcon = (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
     <path d="M4 4l8 8M12 4l-8 8" />
   </svg>
 );

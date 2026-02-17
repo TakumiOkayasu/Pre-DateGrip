@@ -61,6 +61,21 @@
   color: var(--text-secondary);
 }
 
+.cancelButton {
+  margin-left: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.cancelButton:hover {
+  background: var(--bg-hover);
+}
+
 .error {
   color: var(--error-color);
 }
