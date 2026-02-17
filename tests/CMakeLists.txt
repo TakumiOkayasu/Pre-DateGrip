@@ -31,6 +31,7 @@ set(TEST_SOURCES
     exporters/test_csv_exporter.cpp
     contexts/test_settings_context.cpp
     contexts/test_utility_context.cpp
+    utils/test_sql_validation.cpp
 )
 
 add_executable(VelocityDBTests ${TEST_SOURCES})
