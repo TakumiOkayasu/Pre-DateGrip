@@ -98,10 +98,19 @@ export const useHistoryStore = create<HistoryState>()(
 
       importHistory: (json: string) => {
         try {
-          const imported = JSON.parse(json) as HistoryItem[];
-          if (!Array.isArray(imported)) {
+          const parsed: unknown = JSON.parse(json);
+          if (!Array.isArray(parsed)) {
             throw new Error('Invalid format');
           }
+          // Validate each item has required fields with correct types
+          const imported = parsed.filter(
+            (h): h is HistoryItem =>
+              typeof h === 'object' &&
+              h !== null &&
+              typeof h.sql === 'string' &&
+              'timestamp' in h &&
+              (typeof h.timestamp === 'string' || typeof h.timestamp === 'number')
+          );
           // Merge with existing, avoiding duplicates by SQL content
           set((state) => {
             const existingSql = new Set(state.history.map((h) => h.sql));

@@ -62,21 +62,20 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         dbType: connection.dbType ?? 'sqlserver',
       };
 
-      set((state) => {
-        // Disconnect existing connection with the same name to prevent duplicates
-        const existing = state.connections.find((c) => c.name === connection.name);
-        if (existing) {
-          bridge.disconnect(existing.id).catch(() => {});
-        }
-        return {
-          connections: [
-            ...state.connections.filter((c) => c.name !== connection.name),
-            newConnection,
-          ],
-          activeConnectionId: result.connectionId,
-          isConnecting: false,
-        };
-      });
+      // Disconnect existing connection before updating state to prevent race condition
+      const existing = get().connections.find((c) => c.name === connection.name);
+      if (existing) {
+        await bridge.disconnect(existing.id).catch(() => {});
+      }
+
+      set((state) => ({
+        connections: [
+          ...state.connections.filter((c) => c.name !== connection.name),
+          newConnection,
+        ],
+        activeConnectionId: result.connectionId,
+        isConnecting: false,
+      }));
     } catch (error) {
       set({
         isConnecting: false,

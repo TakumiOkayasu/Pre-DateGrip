@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
+import { useKeyboardHandler } from '../../hooks/useKeyboardHandler';
 import {
   useConnectionStore,
   useIsProductionMode,
@@ -312,51 +313,36 @@ export function MainLayout() {
     isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isA5ERImportDialogOpen;
 
   // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent F5 page reload
-      if (e.key === 'F5') {
-        e.preventDefault();
-        return;
-      }
+  useKeyboardHandler((e: KeyboardEvent) => {
+    // Prevent F5 page reload
+    if (e.key === 'F5') {
+      e.preventDefault();
+      return;
+    }
 
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        handleNewQuery();
-      } else if (e.ctrlKey && e.key === 'w') {
-        e.preventDefault();
-        handleCloseTab();
-      } else if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleExecute();
-      } else if (e.ctrlKey && e.shiftKey && e.key === 'F') {
-        e.preventDefault();
-        handleFormat();
-      } else if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-        e.preventDefault();
-        handleOpenSearch();
-      } else if (e.ctrlKey && e.key === ',') {
-        e.preventDefault();
-        handleOpenSettings();
-      } else if (e.key === 'Escape' && isExecuting && !hasOpenDialog) {
-        e.preventDefault();
-        handleCancel();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    handleNewQuery,
-    handleCloseTab,
-    handleExecute,
-    handleCancel,
-    handleFormat,
-    handleOpenSearch,
-    handleOpenSettings,
-    isExecuting,
-    hasOpenDialog,
-  ]);
+    if (e.ctrlKey && e.key === 'n') {
+      e.preventDefault();
+      handleNewQuery();
+    } else if (e.ctrlKey && e.key === 'w') {
+      e.preventDefault();
+      handleCloseTab();
+    } else if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      handleExecute();
+    } else if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      handleFormat();
+    } else if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+      e.preventDefault();
+      handleOpenSearch();
+    } else if (e.ctrlKey && e.key === ',') {
+      e.preventDefault();
+      handleOpenSettings();
+    } else if (e.key === 'Escape' && isExecuting && !hasOpenDialog) {
+      e.preventDefault();
+      handleCancel();
+    }
+  });
 
   // Track and save window size/position
   const saveWindowSizeTimeoutRef = useRef<number | null>(null);

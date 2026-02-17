@@ -1,4 +1,4 @@
-import type { IPCRequest, IPCResponse } from '../types';
+import type { AsyncQueryResultResponse, IPCRequest, IPCResponse } from '../types';
 import { DEFAULT_PAGE } from '../utils/erDiagramConstants';
 import type { ERDiagramModel } from '../utils/erDiagramParser';
 import { log } from '../utils/logger';
@@ -85,6 +85,10 @@ export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string)
   };
 }
 
+function isIPCResponse(obj: unknown): obj is IPCResponse {
+  return typeof obj === 'object' && obj !== null && 'success' in obj;
+}
+
 class Bridge {
   private async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const request: IPCRequest = {
@@ -110,9 +114,13 @@ class Bridge {
       // If response is already an object, webview may have parsed it
       let response: IPCResponse<T>;
       if (typeof responseRaw === 'string') {
-        response = JSON.parse(responseRaw);
-      } else if (typeof responseRaw === 'object' && responseRaw !== null) {
-        // webview already parsed the JSON for us
+        const parsed: unknown = JSON.parse(responseRaw);
+        if (!isIPCResponse(parsed)) {
+          log.error(`[Bridge] Invalid response structure for ${method}`);
+          throw new Error(`Invalid response structure for ${method}`);
+        }
+        response = parsed as IPCResponse<T>;
+      } else if (isIPCResponse(responseRaw)) {
         response = responseRaw as IPCResponse<T>;
       } else {
         log.error(`[Bridge] Unexpected response type: ${typeof responseRaw}`);
@@ -401,27 +409,7 @@ class Bridge {
     return this.call('executeAsyncQuery', { connectionId, sql });
   }
 
-  async getAsyncQueryResult(queryId: string): Promise<{
-    queryId: string;
-    status: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
-    error?: string;
-    // Single result
-    columns?: { name: string; type: string; comment?: string }[];
-    rows?: string[][];
-    affectedRows?: number;
-    executionTimeMs?: number;
-    // Multiple results
-    multipleResults?: boolean;
-    results?: Array<{
-      statement: string;
-      data: {
-        columns: { name: string; type: string }[];
-        rows: string[][];
-        affectedRows: number;
-        executionTimeMs: number;
-      };
-    }>;
-  }> {
+  async getAsyncQueryResult(queryId: string): Promise<AsyncQueryResultResponse> {
     return this.call('getAsyncQueryResult', { queryId });
   }
 

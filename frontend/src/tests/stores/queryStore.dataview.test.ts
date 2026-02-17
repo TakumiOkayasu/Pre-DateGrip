@@ -65,7 +65,7 @@ describe('DataView operations', () => {
       expect(state.queries[0].isDataView).toBe(true);
       expect(state.queries[0].sourceTable).toBe('dbo.Users');
       expect(state.queries[0].content).toContain('SELECT TOP');
-      expect(state.queries[0].content).toContain('dbo.Users');
+      expect(state.queries[0].content).toContain('[dbo].[Users]');
       expect(state.activeQueryId).toBe(state.queries[0].id);
     });
 

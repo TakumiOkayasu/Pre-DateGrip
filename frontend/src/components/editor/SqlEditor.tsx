@@ -3,6 +3,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useRef } from 'react';
+import { useKeyboardHandler } from '../../hooks/useKeyboardHandler';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueryStore } from '../../store/queryStore';
 import { useSchemaStore } from '../../store/schemaStore';
@@ -15,16 +16,13 @@ import styles from './SqlEditor.module.css';
 // Use local bundle instead of CDN (WebView2 Tracking Prevention blocks cdn.jsdelivr.net)
 loader.config({ monaco });
 
+// Read latest store state inside deferred callbacks (requestAnimationFrame/setTimeout)
+// to avoid stale closures captured at handler invocation time
+const getQueryState = () => useQueryStore.getState();
+const getConnectionState = () => useConnectionStore.getState();
+
 export function SqlEditor() {
-  const {
-    queries,
-    activeQueryId,
-    updateQuery,
-    executeQuery,
-    executeSelectedText,
-    saveToFile,
-    loadFromFile,
-  } = useQueryStore();
+  const { queries, activeQueryId, updateQuery } = useQueryStore();
   const { activeConnectionId } = useConnectionStore();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -57,163 +55,146 @@ export function SqlEditor() {
 
   // Global keyboard event handler - bypasses Monaco Editor's key binding system
   // This prevents potential blocking issues with Monaco's internal event handling
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ctrl+Shift+K for SQL formatting (changed from F to avoid conflicts)
-      if (event.ctrlKey && event.shiftKey && event.key === 'K') {
-        event.preventDefault();
-        log.info('[SqlEditor] ===== Ctrl+Shift+K DETECTED =====');
+  useKeyboardHandler((event: KeyboardEvent) => {
+    // Ctrl+Shift+K for SQL formatting (changed from F to avoid conflicts)
+    if (event.ctrlKey && event.shiftKey && event.key === 'K') {
+      event.preventDefault();
+      log.info('[SqlEditor] ===== Ctrl+Shift+K DETECTED =====');
 
-        // INLINE EXECUTION - NO ALERTS AT ALL to avoid WebView2 message loop blocking
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            log.info('[SqlEditor] Format: Starting inline format');
+      // INLINE EXECUTION - NO ALERTS AT ALL to avoid WebView2 message loop blocking
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          log.info('[SqlEditor] Format: Starting inline format');
 
-            if (isFormattingRef.current) {
-              log.info('[SqlEditor] Format: Already formatting, aborting');
-              return;
+          if (isFormattingRef.current) {
+            log.info('[SqlEditor] Format: Already formatting, aborting');
+            return;
+          }
+
+          const qId = getQueryState().activeQueryId;
+          if (!qId || !editorRef.current) {
+            log.info('[SqlEditor] Format: No active query or editor');
+            return;
+          }
+
+          log.info('[SqlEditor] Format: Getting SQL value');
+          const currentValue = editorRef.current.getValue();
+          log.info(`[SqlEditor] Format: Got SQL, length=${currentValue.length}`);
+
+          if (!currentValue.trim()) {
+            log.info('[SqlEditor] Format: Empty SQL, aborting');
+            return;
+          }
+
+          if (currentValue.length > 100000) {
+            log.warning(
+              `[SqlEditor] Format: SQL too large (${currentValue.length} chars), aborting`
+            );
+            return;
+          }
+
+          isFormattingRef.current = true;
+          log.info('[SqlEditor] Format: Calling formatSQL');
+
+          try {
+            const formatted = formatSQL(currentValue);
+            log.info('[SqlEditor] Format: formatSQL SUCCESS');
+            if (editorRef.current) {
+              lastEditorValueRef.current = formatted;
+              editorRef.current.setValue(formatted);
+              getQueryState().updateQuery(qId, formatted);
+              log.info('[SqlEditor] Format: COMPLETE');
             }
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            log.error(`[SqlEditor] Format: ERROR - ${msg}`);
+          } finally {
+            isFormattingRef.current = false;
+          }
+        }, 0);
+      });
+      return;
+    }
 
-            if (!activeQueryId || !editorRef.current) {
-              log.info('[SqlEditor] Format: No active query or editor');
-              return;
-            }
+    // F9 for query execution
+    if (event.key === 'F9' && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      log.debug('[SqlEditor] Global F9 detected');
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const qId = getQueryState().activeQueryId;
+          const cId = getConnectionState().activeConnectionId;
+          if (qId && cId) {
+            getQueryState().executeQuery(qId, cId);
+          }
+        }, 0);
+      });
+      return;
+    }
 
-            log.info('[SqlEditor] Format: Getting SQL value');
-            const currentValue = editorRef.current.getValue();
-            log.info(`[SqlEditor] Format: Got SQL, length=${currentValue.length}`);
+    // Ctrl+Enter for executing current statement at cursor position
+    if (event.ctrlKey && event.key === 'Enter' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      log.debug('[SqlEditor] Global Ctrl+Enter detected');
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!editorRef.current) return;
+          const qId = getQueryState().activeQueryId;
+          const cId = getConnectionState().activeConnectionId;
+          if (!qId || !cId) return;
 
-            if (!currentValue.trim()) {
-              log.info('[SqlEditor] Format: Empty SQL, aborting');
-              return;
-            }
+          const model = editorRef.current.getModel();
+          const position = editorRef.current.getPosition();
+          if (!model || !position) {
+            // フォールバック: 全体を実行
+            getQueryState().executeQuery(qId, cId);
+            return;
+          }
 
-            if (currentValue.length > 100000) {
-              log.warning(
-                `[SqlEditor] Format: SQL too large (${currentValue.length} chars), aborting`
-              );
-              return;
-            }
+          const cursorOffset = model.getOffsetAt(position);
+          const fullText = model.getValue();
+          const currentStatement = getStatementAtCursor(fullText, cursorOffset);
 
-            isFormattingRef.current = true;
-            log.info('[SqlEditor] Format: Calling formatSQL');
+          if (currentStatement) {
+            log.debug(
+              `[SqlEditor] Executing statement at cursor: ${currentStatement.slice(0, 50)}...`
+            );
+            getQueryState().executeSelectedText(qId, cId, currentStatement);
+          } else {
+            // フォールバック: 全体を実行
+            getQueryState().executeQuery(qId, cId);
+          }
+        }, 0);
+      });
+      return;
+    }
 
-            try {
-              const formatted = formatSQL(currentValue);
-              log.info('[SqlEditor] Format: formatSQL SUCCESS');
-              if (editorRef.current) {
-                lastEditorValueRef.current = formatted;
-                editorRef.current.setValue(formatted);
-                updateQuery(activeQueryId, formatted);
-                log.info('[SqlEditor] Format: COMPLETE');
-              }
-            } catch (error) {
-              const msg = error instanceof Error ? error.message : String(error);
-              log.error(`[SqlEditor] Format: ERROR - ${msg}`);
-            } finally {
-              isFormattingRef.current = false;
-            }
-          }, 0);
-        });
-        return;
-      }
+    // Ctrl+S for save to file
+    if (event.ctrlKey && event.key === 's' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      log.debug('[SqlEditor] Global Ctrl+S detected');
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const qId = getQueryState().activeQueryId;
+          if (qId) getQueryState().saveToFile(qId);
+        }, 0);
+      });
+      return;
+    }
 
-      // F9 for query execution
-      if (event.key === 'F9' && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        log.debug('[SqlEditor] Global F9 detected');
-        if (activeQueryId && activeConnectionId) {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              executeQuery(activeQueryId, activeConnectionId);
-            }, 0);
-          });
-        }
-        return;
-      }
-
-      // Ctrl+Enter for executing current statement at cursor position
-      if (event.ctrlKey && event.key === 'Enter' && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        log.debug('[SqlEditor] Global Ctrl+Enter detected');
-        if (activeQueryId && activeConnectionId && editorRef.current) {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              if (!editorRef.current) return;
-
-              const model = editorRef.current.getModel();
-              const position = editorRef.current.getPosition();
-              if (!model || !position) {
-                // フォールバック: 全体を実行
-                executeQuery(activeQueryId, activeConnectionId);
-                return;
-              }
-
-              const cursorOffset = model.getOffsetAt(position);
-              const fullText = model.getValue();
-              const currentStatement = getStatementAtCursor(fullText, cursorOffset);
-
-              if (currentStatement) {
-                log.debug(
-                  `[SqlEditor] Executing statement at cursor: ${currentStatement.slice(0, 50)}...`
-                );
-                executeSelectedText(activeQueryId, activeConnectionId, currentStatement);
-              } else {
-                // フォールバック: 全体を実行
-                executeQuery(activeQueryId, activeConnectionId);
-              }
-            }, 0);
-          });
-        }
-        return;
-      }
-
-      // Ctrl+S for save to file
-      if (event.ctrlKey && event.key === 's' && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        log.debug('[SqlEditor] Global Ctrl+S detected');
-        if (activeQueryId) {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              saveToFile(activeQueryId);
-            }, 0);
-          });
-        }
-        return;
-      }
-
-      // Ctrl+O for load from file
-      if (event.ctrlKey && event.key === 'o' && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        log.debug('[SqlEditor] Global Ctrl+O detected');
-        if (activeQueryId) {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              loadFromFile(activeQueryId);
-            }, 0);
-          });
-        }
-        return;
-      }
-    };
-
-    // Add global keyboard listener
-    window.addEventListener('keydown', handleKeyDown);
-    log.debug('[SqlEditor] Global keyboard listener registered');
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      log.debug('[SqlEditor] Global keyboard listener removed');
-    };
-  }, [
-    activeQueryId,
-    activeConnectionId,
-    executeQuery,
-    executeSelectedText,
-    updateQuery,
-    saveToFile,
-    loadFromFile,
-  ]);
+    // Ctrl+O for load from file
+    if (event.ctrlKey && event.key === 'o' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      log.debug('[SqlEditor] Global Ctrl+O detected');
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const qId = getQueryState().activeQueryId;
+          if (qId) getQueryState().loadFromFile(qId);
+        }, 0);
+      });
+      return;
+    }
+  });
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco) => {

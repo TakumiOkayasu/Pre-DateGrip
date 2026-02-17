@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useKeyboardHandler } from '../../../hooks/useKeyboardHandler';
 import type { RowData } from '../../../types/grid';
 
 interface EditingCell {
@@ -130,85 +131,61 @@ export function useGridKeyboard({
   }, []);
 
   // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!tableContainerRef.current?.contains(document.activeElement)) return;
-
-      // If editing a cell, handle Enter/Escape
-      if (editingCell) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleConfirmEdit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          handleCancelEdit();
-        }
-        return;
+  useKeyboardHandler((e: KeyboardEvent) => {
+    // If editing a cell, handle Enter/Escape
+    if (editingCell) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleConfirmEdit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancelEdit();
       }
+      return;
+    }
 
-      // Other shortcuts (when not editing a cell)
-      if (e.ctrlKey && e.key === 'c') {
-        e.preventDefault();
-        handleCopySelection();
-      } else if (e.ctrlKey && e.key === 'v' && isEditMode) {
-        e.preventDefault();
-        handlePaste();
-      } else if (e.key === 'Delete' && isEditMode) {
-        e.preventDefault();
-        onDeleteRow();
-      } else if (e.key === 'F2' && isEditMode && selectedRows.size === 1) {
-        e.preventDefault();
-        const rowIndex = Array.from(selectedRows)[0];
-        const firstEditableColumn = columns.find((col) => col.id !== '__rowIndex');
-        if (firstEditableColumn) {
-          const columnId = String(firstEditableColumn.id);
-          const currentValue = rowData[rowIndex][columnId];
-          handleStartEdit(rowIndex, columnId, currentValue);
-        }
-      } else if (e.ctrlKey && e.key === 'd' && isEditMode) {
-        // Clone row (Ctrl+D) - WebView2環境ではブラウザのブックマーク機能は無効
-        e.preventDefault();
-        onCloneRow();
-      } else if (e.key === 'F4' && selectedRows.size === 1 && selectedColumn) {
-        // Navigate to related row (F4)
-        e.preventDefault();
-        const rowIndex = Array.from(selectedRows)[0];
-        onNavigateRelated?.(rowIndex, selectedColumn);
-      } else if (
-        e.shiftKey &&
-        e.key === 'Enter' &&
-        isEditMode &&
-        selectedRows.size === 1 &&
-        selectedColumn
-      ) {
-        // Open value editor (Shift+Enter)
-        e.preventDefault();
-        const rowIndex = Array.from(selectedRows)[0];
-        const currentValue = rowData[rowIndex][selectedColumn];
-        onOpenValueEditor?.(rowIndex, selectedColumn, currentValue);
+    // Other shortcuts (when not editing a cell)
+    if (e.ctrlKey && e.key === 'c') {
+      e.preventDefault();
+      handleCopySelection();
+    } else if (e.ctrlKey && e.key === 'v' && isEditMode) {
+      e.preventDefault();
+      handlePaste();
+    } else if (e.key === 'Delete' && isEditMode) {
+      e.preventDefault();
+      onDeleteRow();
+    } else if (e.key === 'F2' && isEditMode && selectedRows.size === 1) {
+      e.preventDefault();
+      const rowIndex = Array.from(selectedRows)[0];
+      const firstEditableColumn = columns.find((col) => col.id !== '__rowIndex');
+      if (firstEditableColumn) {
+        const columnId = String(firstEditableColumn.id);
+        const currentValue = rowData[rowIndex][columnId];
+        handleStartEdit(rowIndex, columnId, currentValue);
       }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isEditMode,
-    editingCell,
-    selectedRows,
-    selectedColumn,
-    columns,
-    rowData,
-    tableContainerRef,
-    handleCopySelection,
-    handlePaste,
-    onDeleteRow,
-    onCloneRow,
-    onNavigateRelated,
-    onOpenValueEditor,
-    handleStartEdit,
-    handleConfirmEdit,
-    handleCancelEdit,
-  ]);
+    } else if (e.ctrlKey && e.key === 'd' && isEditMode) {
+      // Clone row (Ctrl+D) - WebView2環境ではブラウザのブックマーク機能は無効
+      e.preventDefault();
+      onCloneRow();
+    } else if (e.key === 'F4' && selectedRows.size === 1 && selectedColumn) {
+      // Navigate to related row (F4)
+      e.preventDefault();
+      const rowIndex = Array.from(selectedRows)[0];
+      onNavigateRelated?.(rowIndex, selectedColumn);
+    } else if (
+      e.shiftKey &&
+      e.key === 'Enter' &&
+      isEditMode &&
+      selectedRows.size === 1 &&
+      selectedColumn
+    ) {
+      // Open value editor (Shift+Enter)
+      e.preventDefault();
+      const rowIndex = Array.from(selectedRows)[0];
+      const currentValue = rowData[rowIndex][selectedColumn];
+      onOpenValueEditor?.(rowIndex, selectedColumn, currentValue);
+    }
+  }, tableContainerRef);
 
   return {
     editingCell,

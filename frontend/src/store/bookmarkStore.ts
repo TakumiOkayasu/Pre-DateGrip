@@ -34,31 +34,41 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   },
 
   addBookmark: async (name, content) => {
-    set({ isLoading: true, error: null });
+    const id = `bookmark-${crypto.randomUUID()}`;
+    const newBookmark: Bookmark = { id, name, content };
+
+    // Optimistic update
+    set((state) => ({ bookmarks: [...state.bookmarks, newBookmark], error: null }));
+
     try {
-      const id = `bookmark-${Date.now()}`;
       await bridge.saveBookmark(id, name, content);
       log.info(`[BookmarkStore] Saved bookmark: ${name}`);
-      // Reload bookmarks
-      await get().loadBookmarks();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save bookmark';
       log.error(`[BookmarkStore] ${message}`);
-      set({ error: message, isLoading: false });
+      set({ error: message });
+      // Resync with server to recover consistent state
+      await get()
+        .loadBookmarks()
+        .catch(() => {});
     }
   },
 
   deleteBookmark: async (id) => {
-    set({ isLoading: true, error: null });
+    // Optimistic update
+    set((state) => ({ bookmarks: state.bookmarks.filter((b) => b.id !== id), error: null }));
+
     try {
       await bridge.deleteBookmark(id);
       log.info(`[BookmarkStore] Deleted bookmark: ${id}`);
-      // Reload bookmarks
-      await get().loadBookmarks();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete bookmark';
       log.error(`[BookmarkStore] ${message}`);
-      set({ error: message, isLoading: false });
+      set({ error: message });
+      // Resync with server to recover consistent state
+      await get()
+        .loadBookmarks()
+        .catch(() => {});
     }
   },
 
