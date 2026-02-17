@@ -123,9 +123,7 @@ struct TableQueryParams {
 };
 
 /// 8ハンドラ共通: JSON→connectionId/table取得→バリデーション→ドライバ取得
-[[nodiscard]] std::expected<TableQueryParams, std::string>
-extractTableQueryParams(const simdjson::dom::element& doc,
-                        ConnectionRegistry& registry) {
+[[nodiscard]] std::expected<TableQueryParams, std::string> extractTableQueryParams(const simdjson::dom::element& doc, ConnectionRegistry& registry) {
     auto connectionIdResult = doc["connectionId"].get_string();
     auto tableNameResult = doc["table"].get_string();
     if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]]
@@ -324,8 +322,7 @@ std::string DatabaseContext::handleExecuteQuery(std::string_view params) {
                 jsonResponse += "]}";
                 return JsonUtils::successResponse(jsonResponse);
             } catch (const std::exception& e) {
-                return JsonUtils::errorResponse(
-                    std::format("Statement {} of {}: {}", stmtIdx + 1, statements.size(), e.what()));
+                return JsonUtils::errorResponse(std::format("Statement {} of {}: {}", stmtIdx + 1, statements.size(), e.what()));
             }
         }
 

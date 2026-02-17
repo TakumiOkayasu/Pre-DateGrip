@@ -53,7 +53,7 @@ export function SqlEditor() {
       }
       lastEditorValueRef.current = activeQuery.content;
     }
-  }, [activeQuery?.content, activeQueryId]);
+  }, [activeQuery?.content]);
 
   // Global keyboard event handler - bypasses Monaco Editor's key binding system
   // This prevents potential blocking issues with Monaco's internal event handling

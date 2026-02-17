@@ -46,53 +46,53 @@ function LoadingFallback() {
 // SVG Icons (JetBrains-style simple icons)
 const Icons = {
   database: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <ellipse cx="8" cy="4" rx="6" ry="2.5" />
       <path d="M2 4v8c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V4" />
       <path d="M2 8c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5" />
     </svg>
   ),
   play: (
-    <svg viewBox="0 0 16 16" fill="currentColor">
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
       <path d="M4 2v12l10-6-10-6z" />
     </svg>
   ),
   stop: (
-    <svg viewBox="0 0 16 16" fill="currentColor">
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
       <rect x="3" y="3" width="10" height="10" rx="1" />
     </svg>
   ),
   format: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <path d="M2 3h12M2 6h8M2 9h12M2 12h8" />
     </svg>
   ),
   import: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <path d="M8 2v8M5 7l3 3 3-3" />
       <path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2" />
     </svg>
   ),
   sidebar: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="2" y="2" width="12" height="12" rx="1" />
       <path d="M6 2v12" />
     </svg>
   ),
   terminal: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="2" y="2" width="12" height="12" rx="1" />
       <path d="M2 10h12" />
     </svg>
   ),
   search: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <circle cx="7" cy="7" r="4" />
       <path d="M10 10l3.5 3.5" />
     </svg>
   ),
   settings: (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <circle cx="8" cy="8" r="2" />
       <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.93 2.93l1.41 1.41M11.66 11.66l1.41 1.41M2.93 13.07l1.41-1.41M11.66 4.34l1.41-1.41" />
     </svg>
@@ -308,7 +308,8 @@ export function MainLayout() {
 
   // Note: isBottomPanelVisible is NOT persisted - it's always hidden on startup
 
-  const hasOpenDialog = isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isA5ERImportDialogOpen;
+  const hasOpenDialog =
+    isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isA5ERImportDialogOpen;
 
   // Keyboard shortcuts
   useEffect(() => {

@@ -336,10 +336,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
         <span className={styles.spinner}>{'\u23F3'}</span>
         <span>クエリ実行中...</span>
         {activeConnectionId && (
-          <button
-            onClick={() => cancelQuery(activeConnectionId)}
-            className={styles.cancelButton}
-          >
+          <button onClick={() => cancelQuery(activeConnectionId)} className={styles.cancelButton}>
             キャンセル
           </button>
         )}
