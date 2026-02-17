@@ -70,23 +70,19 @@ function parseAliases(text: string): AliasInfo[] {
   const aliases: AliasInfo[] = [];
 
   // FROM table AS alias, FROM table alias, JOIN table AS alias, JOIN table alias
-  const patterns = [
-    /(?:FROM|JOIN)\s+\[?(\w+)\]?(?:\.\[?(\w+)\]?)?\s+(?:AS\s+)?(\w+)/gi,
-    /(?:FROM|JOIN)\s+(\w+)(?:\.(\w+))?\s+(?:AS\s+)?(\w+)/gi,
-  ];
+  // Brackets are optional to handle both [schema].[table] and schema.table
+  const pattern = /(?:FROM|JOIN)\s+\[?(\w+)\]?(?:\.\[?(\w+)\]?)?\s+(?:AS\s+)?(\w+)/gi;
 
-  for (const pattern of patterns) {
-    const matches = text.matchAll(pattern);
-    for (const match of matches) {
-      const schema = match[2] ? match[1] : null;
-      const table = match[2] ?? match[1];
-      const alias = match[3];
-      if (alias && table && alias.toLowerCase() !== table.toLowerCase()) {
-        aliases.push({
-          alias: alias.toLowerCase(),
-          tableName: schema ? `${schema}.${table}` : table,
-        });
-      }
+  const matches = text.matchAll(pattern);
+  for (const match of matches) {
+    const schema = match[2] ? match[1] : null;
+    const table = match[2] ?? match[1];
+    const alias = match[3];
+    if (alias && table && alias.toLowerCase() !== table.toLowerCase()) {
+      aliases.push({
+        alias: alias.toLowerCase(),
+        tableName: schema ? `${schema}.${table}` : table,
+      });
     }
   }
 

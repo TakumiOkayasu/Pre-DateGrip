@@ -153,26 +153,34 @@ export type AsyncPollResult =
       }>;
     };
 
-// Async query result response (from backend polling API)
-export interface AsyncQueryResultResponse {
-  queryId: string;
-  status: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
-  error?: string;
-  columns?: AsyncColumn[];
-  rows?: string[][];
-  affectedRows?: number;
-  executionTimeMs?: number;
-  multipleResults?: boolean;
-  results?: Array<{
-    statement: string;
-    data: {
+// Async query result response (from backend polling API) - discriminated union by status
+export type AsyncQueryResultResponse =
+  | { queryId: string; status: 'pending' | 'running' }
+  | {
+      queryId: string;
+      status: 'completed';
+      multipleResults: true;
+      results: Array<{
+        statement: string;
+        data: {
+          columns: AsyncColumn[];
+          rows: string[][];
+          affectedRows: number;
+          executionTimeMs: number;
+        };
+      }>;
+    }
+  | {
+      queryId: string;
+      status: 'completed';
+      multipleResults?: false;
       columns: AsyncColumn[];
       rows: string[][];
       affectedRows: number;
       executionTimeMs: number;
-    };
-  }>;
-}
+    }
+  | { queryId: string; status: 'failed'; error: string }
+  | { queryId: string; status: 'cancelled' };
 
 // History types
 export interface HistoryItem {

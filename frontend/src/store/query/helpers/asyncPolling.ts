@@ -23,54 +23,50 @@ export async function executeAsyncWithPolling(
 ): Promise<AsyncPollResult> {
   const { queryId } = await bridge.executeAsyncQuery(connectionId, sql);
 
-  const startTime = Date.now();
-  while (true) {
-    if (signal?.aborted) {
-      await bridge.cancelAsyncQuery(queryId).catch(() => {});
-      bridge.removeAsyncQuery(queryId).catch(() => {});
-      throw new DOMException('Query cancelled', 'AbortError');
-    }
-
-    if (Date.now() - startTime > DEFAULT_QUERY_TIMEOUT_MS) {
-      try {
-        await bridge.cancelAsyncQuery(queryId);
-      } catch {
-        // Ignore cancel errors
+  try {
+    const startTime = Date.now();
+    while (true) {
+      if (signal?.aborted) {
+        await bridge.cancelAsyncQuery(queryId).catch(() => {});
+        throw new DOMException('Query cancelled', 'AbortError');
       }
-      bridge.removeAsyncQuery(queryId).catch(() => {});
-      throw new Error('Query execution timed out after 5 minutes');
-    }
 
-    const result = await bridge.getAsyncQueryResult(queryId);
+      if (Date.now() - startTime > DEFAULT_QUERY_TIMEOUT_MS) {
+        try {
+          await bridge.cancelAsyncQuery(queryId);
+        } catch {
+          // Ignore cancel errors
+        }
+        throw new Error('Query execution timed out after 5 minutes');
+      }
 
-    if (result.status === 'completed') {
-      // Fire-and-forget: release backend memory for this query
-      bridge.removeAsyncQuery(queryId).catch(() => {});
+      const result = await bridge.getAsyncQueryResult(queryId);
 
-      if (result.multipleResults && result.results) {
+      if (result.status === 'completed') {
+        if (result.multipleResults) {
+          return {
+            multipleResults: true,
+            results: result.results,
+          };
+        }
         return {
-          multipleResults: true,
-          results: result.results,
+          columns: result.columns,
+          rows: result.rows,
+          affectedRows: result.affectedRows,
+          executionTimeMs: result.executionTimeMs,
         };
+      } else if (result.status === 'failed') {
+        throw new Error(result.error);
+      } else if (result.status === 'cancelled') {
+        throw new Error('Query was cancelled');
       }
-      if (!result.columns || !result.rows) {
-        throw new Error('Invalid query result: missing columns or rows');
-      }
-      return {
-        columns: result.columns,
-        rows: result.rows,
-        affectedRows: result.affectedRows ?? 0,
-        executionTimeMs: result.executionTimeMs ?? 0,
-      };
-    } else if (result.status === 'failed') {
-      bridge.removeAsyncQuery(queryId).catch(() => {});
-      throw new Error(result.error || 'Query execution failed');
-    } else if (result.status === 'cancelled') {
-      bridge.removeAsyncQuery(queryId).catch(() => {});
-      throw new Error('Query was cancelled');
-    }
 
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  } finally {
+    // Release backend memory for this query (single cleanup point).
+    // Runs on all exit paths: success, failure, timeout, and abort.
+    bridge.removeAsyncQuery(queryId).catch(() => {});
   }
 }
 
