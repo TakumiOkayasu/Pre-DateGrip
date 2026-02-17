@@ -23,6 +23,38 @@ public:
     /// @param cached Whether the result was from cache
     /// @return JSON string representation
     [[nodiscard]] static std::string serializeResultSet(const ResultSet& result, bool cached);
+
+    /// 任意のコレクションから JSON 配列を構築
+    template <typename Items, typename Formatter>
+    [[nodiscard]] static std::string buildArray(const Items& items, Formatter&& fmt) {
+        std::string json = "[";
+        bool first = true;
+        for (const auto& item : items) {
+            if (!first)
+                json += ',';
+            first = false;
+            fmt(json, item);
+        }
+        json += ']';
+        return json;
+    }
+
+    /// ResultSet の行から JSON 配列を構築 (bounds check + カンマ処理を共通化)
+    template <typename Formatter>
+    [[nodiscard]] static std::string buildRowArray(const std::vector<ResultRow>& rows, size_t minColumns, Formatter&& fmt) {
+        std::string json = "[";
+        bool first = true;
+        for (const auto& row : rows) {
+            if (row.values.size() < minColumns)
+                continue;
+            if (!first)
+                json += ',';
+            first = false;
+            fmt(json, row);
+        }
+        json += ']';
+        return json;
+    }
 };
 
 }  // namespace velocitydb

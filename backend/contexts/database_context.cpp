@@ -28,63 +28,6 @@ namespace velocitydb {
 
 namespace {
 
-/// Sanitize a single SQL Server identifier part (no dots).
-[[nodiscard]] std::string sanitizeIdentifierPart(std::string_view part) {
-    if (part.empty())
-        return {};
-    std::string result;
-    result.reserve(part.size() + 2);
-    result += '[';
-    for (char c : part) {
-        if (c == ']')
-            result += "]]";
-        else
-            result += c;
-    }
-    result += ']';
-    return result;
-}
-
-/// Sanitize SQL Server identifier (table/column name) to prevent SQL injection.
-[[nodiscard]] std::string sanitizeIdentifier(std::string_view identifier) {
-    if (identifier.empty())
-        return {};
-    std::string result;
-    result.reserve(identifier.size() + 4);
-    size_t start = 0;
-    size_t pos = identifier.find('.');
-    while (pos != std::string_view::npos) {
-        auto part = sanitizeIdentifierPart(identifier.substr(start, pos - start));
-        if (!part.empty()) {
-            if (!result.empty())
-                result += '.';
-            result += part;
-        }
-        start = pos + 1;
-        pos = identifier.find('.', start);
-    }
-    auto lastPart = sanitizeIdentifierPart(identifier.substr(start));
-    if (!lastPart.empty()) {
-        if (!result.empty())
-            result += '.';
-        result += lastPart;
-    }
-    return result;
-}
-
-/// Escape a string for use in SQL string literals (doubles single quotes).
-[[nodiscard]] std::string escapeSqlString(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for (char c : value) {
-        if (c == '\'')
-            result += "''";
-        else
-            result += c;
-    }
-    return result;
-}
-
 /// Convert comma-separated string to JSON array of quoted strings.
 [[nodiscard]] std::string splitCsvToJsonArray(std::string_view csv) {
     if (csv.empty())
@@ -412,7 +355,7 @@ std::string DatabaseContext::handleExecuteQueryPaginated(std::string_view params
                 if (!colId.error() && !sort.error()) {
                     if (!sortClauses.empty())
                         sortClauses += ", ";
-                    sortClauses += sanitizeIdentifier(std::string(colId.value())) + " " + (sort.value() == std::string_view("asc") ? "ASC" : "DESC");
+                    sortClauses += quoteBracketIdentifier(std::string(colId.value())) + " " + (sort.value() == std::string_view("asc") ? "ASC" : "DESC");
                 }
             }
             if (!sortClauses.empty())
@@ -629,15 +572,7 @@ std::string DatabaseContext::handleRemoveAsyncQuery(std::string_view params) {
 
 std::string DatabaseContext::handleGetActiveQueries(std::string_view) {
     auto activeIds = m_asyncExecutor->getActiveQueryIds();
-    std::string jsonResponse = "[";
-    bool first = true;
-    for (const auto& id : activeIds) {
-        if (!first)
-            jsonResponse += ',';
-        jsonResponse += std::format(R"("{}")", id);
-        first = false;
-    }
-    jsonResponse += "]";
+    auto jsonResponse = JsonUtils::buildArray(activeIds, [](std::string& out, const std::string& id) { out += std::format(R"("{}")", id); });
     return JsonUtils::successResponse(jsonResponse);
 }
 
@@ -654,15 +589,7 @@ std::string DatabaseContext::handleGetDatabases(std::string_view params) {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", *connectionIdResult));
         }
         auto queryResult = driver->execute("SELECT name FROM sys.databases ORDER BY name");
-        std::string jsonResponse = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (queryResult.rows[i].values.empty())
-                continue;
-            if (i > 0)
-                jsonResponse += ',';
-            jsonResponse += std::format(R"("{}")", JsonUtils::escapeString(queryResult.rows[i].values[0]));
-        }
-        jsonResponse += ']';
+        auto jsonResponse = JsonUtils::buildRowArray(queryResult.rows, 1, [](std::string& out, const ResultRow& row) { out += std::format(R"("{}")", JsonUtils::escapeString(row.values[0])); });
         return JsonUtils::successResponse(jsonResponse);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -696,15 +623,11 @@ std::string DatabaseContext::handleGetTables(std::string_view params) {
             ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME
         )";
         auto queryResult = driver->execute(tableListQuery);
-        std::string jsonResponse = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                jsonResponse += ',';
-            std::string comment = queryResult.rows[i].values.size() >= 4 ? queryResult.rows[i].values[3] : "";
-            jsonResponse += std::format(R"({{"schema":"{}","name":"{}","type":"{}","comment":"{}"}})", JsonUtils::escapeString(queryResult.rows[i].values[0]),
-                                        JsonUtils::escapeString(queryResult.rows[i].values[1]), JsonUtils::escapeString(queryResult.rows[i].values[2]), JsonUtils::escapeString(comment));
-        }
-        jsonResponse += ']';
+        auto jsonResponse = JsonUtils::buildRowArray(queryResult.rows, 3, [](std::string& out, const ResultRow& row) {
+            auto comment = row.values.size() >= 4 ? row.values[3] : std::string{};
+            out += std::format(R"({{"schema":"{}","name":"{}","type":"{}","comment":"{}"}})", JsonUtils::escapeString(row.values[0]), JsonUtils::escapeString(row.values[1]),
+                               JsonUtils::escapeString(row.values[2]), JsonUtils::escapeString(comment));
+        });
         return JsonUtils::successResponse(jsonResponse);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -714,7 +637,7 @@ std::string DatabaseContext::handleGetTables(std::string_view params) {
 std::string DatabaseContext::handleGetColumns(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -722,12 +645,7 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
 
         auto& [tableName, driver] = *extracted;
 
-        auto tbl = unquoteBracketIdentifier(tableName);
-        std::string schema = "dbo";
-        if (auto dotPos = tbl.find('.'); dotPos != std::string::npos) {
-            schema = tbl.substr(0, dotPos);
-            tbl = tbl.substr(dotPos + 1);
-        }
+        auto [schema, tbl] = splitSchemaTable(tableName);
 
         auto columnQuery = std::format(R"(
             SELECT
@@ -758,23 +676,16 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
 
         auto columnResult = driver->execute(columnQuery);
 
-        std::string jsonResponse = "[";
-        for (size_t i = 0; i < columnResult.rows.size(); ++i) {
-            if (i > 0)
-                jsonResponse += ',';
-            const auto& row = columnResult.rows[i];
-            if (row.values.size() >= 5) {
-                std::string_view sizeStr = row.values[2];
-                int colSize = 0;
-                std::from_chars(sizeStr.data(), sizeStr.data() + sizeStr.size(), colSize);
-                auto comment = row.values.size() >= 6 ? row.values[5] : std::string{};
-                auto nullable = row.values[3] == "1" ? "true" : "false";
-                auto isPk = row.values[4] == "1" ? "true" : "false";
-                jsonResponse += std::format(R"({{"name":"{}","type":"{}","size":{},"nullable":{},"isPrimaryKey":{},"comment":"{}"}})", JsonUtils::escapeString(row.values[0]),
-                                            JsonUtils::escapeString(row.values[1]), colSize, nullable, isPk, JsonUtils::escapeString(comment));
-            }
-        }
-        jsonResponse += ']';
+        auto jsonResponse = JsonUtils::buildRowArray(columnResult.rows, 5, [](std::string& out, const ResultRow& row) {
+            std::string_view sizeStr = row.values[2];
+            int colSize = 0;
+            std::from_chars(sizeStr.data(), sizeStr.data() + sizeStr.size(), colSize);
+            auto comment = row.values.size() >= 6 ? row.values[5] : std::string{};
+            auto nullable = row.values[3] == "1" ? "true" : "false";
+            auto isPk = row.values[4] == "1" ? "true" : "false";
+            out += std::format(R"({{"name":"{}","type":"{}","size":{},"nullable":{},"isPrimaryKey":{},"comment":"{}"}})", JsonUtils::escapeString(row.values[0]),
+                               JsonUtils::escapeString(row.values[1]), colSize, nullable, isPk, JsonUtils::escapeString(comment));
+        });
         return JsonUtils::successResponse(jsonResponse);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -784,7 +695,7 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
 std::string DatabaseContext::handleGetIndexes(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -815,21 +726,16 @@ std::string DatabaseContext::handleGetIndexes(std::string_view params) {
 
         auto queryResult = driver->execute(indexQuery);
 
-        std::string json = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                json += ',';
-            const auto& row = queryResult.rows[i];
-            json += "{";
-            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
-            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
-            json += std::format("\"isUnique\":{},", row.values[2] == "1" ? "true" : "false");
-            json += std::format("\"isPrimaryKey\":{},", row.values[3] == "1" ? "true" : "false");
-            json += "\"columns\":";
-            json += splitCsvToJsonArray(row.values[4]);
-            json += "}";
-        }
-        json += "]";
+        auto json = JsonUtils::buildRowArray(queryResult.rows, 5, [](std::string& out, const ResultRow& row) {
+            out += "{";
+            out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            out += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            out += std::format("\"isUnique\":{},", row.values[2] == "1" ? "true" : "false");
+            out += std::format("\"isPrimaryKey\":{},", row.values[3] == "1" ? "true" : "false");
+            out += "\"columns\":";
+            out += splitCsvToJsonArray(row.values[4]);
+            out += "}";
+        });
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -839,7 +745,7 @@ std::string DatabaseContext::handleGetIndexes(std::string_view params) {
 std::string DatabaseContext::handleGetConstraints(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -872,21 +778,16 @@ std::string DatabaseContext::handleGetConstraints(std::string_view params) {
 
         auto queryResult = driver->execute(constraintQuery);
 
-        std::string json = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                json += ',';
-            const auto& row = queryResult.rows[i];
-            json += "{";
-            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
-            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
-            json += "\"columns\":";
-            json += splitCsvToJsonArray(row.values[2]);
-            json += ",";
-            json += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[3]));
-            json += "}";
-        }
-        json += "]";
+        auto json = JsonUtils::buildRowArray(queryResult.rows, 4, [](std::string& out, const ResultRow& row) {
+            out += "{";
+            out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            out += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            out += "\"columns\":";
+            out += splitCsvToJsonArray(row.values[2]);
+            out += ",";
+            out += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[3]));
+            out += "}";
+        });
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -896,7 +797,7 @@ std::string DatabaseContext::handleGetConstraints(std::string_view params) {
 std::string DatabaseContext::handleGetForeignKeys(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -932,25 +833,20 @@ std::string DatabaseContext::handleGetForeignKeys(std::string_view params) {
 
         auto queryResult = driver->execute(fkQuery);
 
-        std::string json = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                json += ',';
-            const auto& row = queryResult.rows[i];
-            json += "{";
-            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
-            json += "\"columns\":";
-            json += splitCsvToJsonArray(row.values[1]);
-            json += ",";
-            json += std::format("\"referencedTable\":\"{}\",", JsonUtils::escapeString(row.values[2]));
-            json += "\"referencedColumns\":";
-            json += splitCsvToJsonArray(row.values[3]);
-            json += ",";
-            json += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
-            json += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
-            json += "}";
-        }
-        json += "]";
+        auto json = JsonUtils::buildRowArray(queryResult.rows, 6, [](std::string& out, const ResultRow& row) {
+            out += "{";
+            out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            out += "\"columns\":";
+            out += splitCsvToJsonArray(row.values[1]);
+            out += ",";
+            out += std::format("\"referencedTable\":\"{}\",", JsonUtils::escapeString(row.values[2]));
+            out += "\"referencedColumns\":";
+            out += splitCsvToJsonArray(row.values[3]);
+            out += ",";
+            out += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
+            out += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
+            out += "}";
+        });
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -960,7 +856,7 @@ std::string DatabaseContext::handleGetForeignKeys(std::string_view params) {
 std::string DatabaseContext::handleGetReferencingForeignKeys(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -996,25 +892,20 @@ std::string DatabaseContext::handleGetReferencingForeignKeys(std::string_view pa
 
         auto queryResult = driver->execute(refFkQuery);
 
-        std::string json = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                json += ',';
-            const auto& row = queryResult.rows[i];
-            json += "{";
-            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
-            json += std::format("\"referencingTable\":\"{}\",", JsonUtils::escapeString(row.values[1]));
-            json += "\"referencingColumns\":";
-            json += splitCsvToJsonArray(row.values[2]);
-            json += ",";
-            json += "\"columns\":";
-            json += splitCsvToJsonArray(row.values[3]);
-            json += ",";
-            json += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
-            json += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
-            json += "}";
-        }
-        json += "]";
+        auto json = JsonUtils::buildRowArray(queryResult.rows, 6, [](std::string& out, const ResultRow& row) {
+            out += "{";
+            out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            out += std::format("\"referencingTable\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            out += "\"referencingColumns\":";
+            out += splitCsvToJsonArray(row.values[2]);
+            out += ",";
+            out += "\"columns\":";
+            out += splitCsvToJsonArray(row.values[3]);
+            out += ",";
+            out += std::format("\"onDelete\":\"{}\",", JsonUtils::escapeString(row.values[4]));
+            out += std::format("\"onUpdate\":\"{}\"", JsonUtils::escapeString(row.values[5]));
+            out += "}";
+        });
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -1024,7 +915,7 @@ std::string DatabaseContext::handleGetReferencingForeignKeys(std::string_view pa
 std::string DatabaseContext::handleGetTriggers(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -1052,22 +943,17 @@ std::string DatabaseContext::handleGetTriggers(std::string_view params) {
 
         auto queryResult = driver->execute(triggerQuery);
 
-        std::string json = "[";
-        for (size_t i = 0; i < queryResult.rows.size(); ++i) {
-            if (i > 0)
-                json += ',';
-            const auto& row = queryResult.rows[i];
-            json += "{";
-            json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
-            json += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
-            json += "\"events\":";
-            json += splitCsvToJsonArray(row.values[2]);
-            json += ",";
-            json += std::format("\"isEnabled\":{},", row.values[3] == "1" ? "true" : "false");
-            json += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[4]));
-            json += "}";
-        }
-        json += "]";
+        auto json = JsonUtils::buildRowArray(queryResult.rows, 5, [](std::string& out, const ResultRow& row) {
+            out += "{";
+            out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[0]));
+            out += std::format("\"type\":\"{}\",", JsonUtils::escapeString(row.values[1]));
+            out += "\"events\":";
+            out += splitCsvToJsonArray(row.values[2]);
+            out += ",";
+            out += std::format("\"isEnabled\":{},", row.values[3] == "1" ? "true" : "false");
+            out += std::format("\"definition\":\"{}\"", JsonUtils::escapeString(row.values[4]));
+            out += "}";
+        });
         return JsonUtils::successResponse(json);
     } catch (const std::exception& e) {
         return JsonUtils::errorResponse(e.what());
@@ -1077,7 +963,7 @@ std::string DatabaseContext::handleGetTriggers(std::string_view params) {
 std::string DatabaseContext::handleGetTableMetadata(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -1109,6 +995,9 @@ std::string DatabaseContext::handleGetTableMetadata(std::string_view params) {
         }
 
         const auto& row = queryResult.rows[0];
+        if (row.values.size() < 8) {
+            return JsonUtils::errorResponse("Unexpected column count in metadata result");
+        }
         std::string json = "{";
         json += std::format("\"schema\":\"{}\",", JsonUtils::escapeString(row.values[0]));
         json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(row.values[1]));
@@ -1128,7 +1017,7 @@ std::string DatabaseContext::handleGetTableMetadata(std::string_view params) {
 std::string DatabaseContext::handleGetTableDDL(std::string_view params) {
     try {
         simdjson::dom::parser parser;
-        auto doc = parser.parse(params);
+        auto doc = parser.parse(params).value();
 
         auto extracted = extractTableQueryParams(doc, *m_registry);
         if (!extracted) [[unlikely]]
@@ -1153,15 +1042,16 @@ std::string DatabaseContext::handleGetTableDDL(std::string_view params) {
 
         auto columnResult = driver->execute(columnQuery);
 
-        auto sanitizedTable = sanitizeIdentifier(tableName);
+        auto sanitizedTable = quoteBracketIdentifier(tableName);
         std::string ddl = "CREATE TABLE " + sanitizedTable + " (\n";
-        for (size_t i = 0; i < columnResult.rows.size(); ++i) {
-            const auto& row = columnResult.rows[i];
+        bool first = true;
+        for (const auto& row : columnResult.rows) {
             if (row.values.size() < 7)
                 continue;
-            if (i > 0)
+            if (!first)
                 ddl += ",\n";
-            ddl += "    " + sanitizeIdentifier(row.values[0]) + " " + row.values[1];
+            first = false;
+            ddl += "    " + quoteBracketIdentifier(row.values[0]) + " " + row.values[1];
             if (!row.values[2].empty() && row.values[2] != "-1") {
                 ddl += "(" + row.values[2] + ")";
             } else if (!row.values[3].empty() && row.values[3] != "0") {
@@ -1191,12 +1081,15 @@ std::string DatabaseContext::handleGetTableDDL(std::string_view params) {
 
         auto pkResult = driver->execute(pkQuery);
         if (!pkResult.rows.empty()) {
-            ddl += ",\n    CONSTRAINT " + sanitizeIdentifier("PK_" + tableName) + " PRIMARY KEY (";
-            for (size_t i = 0; i < pkResult.rows.size(); ++i) {
-                if (i > 0)
+            ddl += ",\n    CONSTRAINT " + quoteBracketIdentifier("PK_" + tableName) + " PRIMARY KEY (";
+            bool pkFirst = true;
+            for (const auto& row : pkResult.rows) {
+                if (row.values.empty())
+                    continue;
+                if (!pkFirst)
                     ddl += ", ";
-                if (!pkResult.rows[i].values.empty())
-                    ddl += sanitizeIdentifier(pkResult.rows[i].values[0]);
+                pkFirst = false;
+                ddl += quoteBracketIdentifier(row.values[0]);
             }
             ddl += ")";
         }
@@ -1354,15 +1247,10 @@ std::string DatabaseContext::handleClearCache(std::string_view) {
 
 std::string DatabaseContext::handleGetQueryHistory(std::string_view) {
     auto historyEntries = m_queryHistory->getAll();
-    std::string jsonResponse = "[";
-    for (size_t i = 0; i < historyEntries.size(); ++i) {
-        if (i > 0)
-            jsonResponse += ',';
-        jsonResponse +=
-            std::format(R"({{"id":"{}","sql":"{}","executionTimeMs":{},"success":{},"affectedRows":{},"isFavorite":{}}})", historyEntries[i].id, JsonUtils::escapeString(historyEntries[i].sql),
-                        historyEntries[i].executionTimeMs, historyEntries[i].success ? "true" : "false", historyEntries[i].affectedRows, historyEntries[i].isFavorite ? "true" : "false");
-    }
-    jsonResponse += ']';
+    auto jsonResponse = JsonUtils::buildArray(historyEntries, [](std::string& out, const HistoryItem& e) {
+        out += std::format(R"({{"id":"{}","sql":"{}","executionTimeMs":{},"success":{},"affectedRows":{},"isFavorite":{}}})", e.id, JsonUtils::escapeString(e.sql), e.executionTimeMs,
+                           e.success ? "true" : "false", e.affectedRows, e.isFavorite ? "true" : "false");
+    });
     return JsonUtils::successResponse(jsonResponse);
 }
 

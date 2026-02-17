@@ -197,5 +197,111 @@ TEST(UnquoteBracketIdentifier, DotInsideBracketsPreserved) {
     EXPECT_EQ(unquoteBracketIdentifier("[dbo.name]"), "dbo.name");
 }
 
+// ─── splitSchemaTable ───────────────────────────────────────────────
+
+TEST(SplitSchemaTable, SimpleTableOnly) {
+    auto [schema, name] = splitSchemaTable("Users");
+    EXPECT_EQ(schema, "dbo");
+    EXPECT_EQ(name, "Users");
+}
+
+TEST(SplitSchemaTable, SchemaAndTable) {
+    auto [schema, name] = splitSchemaTable("sales.Orders");
+    EXPECT_EQ(schema, "sales");
+    EXPECT_EQ(name, "Orders");
+}
+
+TEST(SplitSchemaTable, BracketedSchemaAndTable) {
+    auto [schema, name] = splitSchemaTable("[dbo].[My Table]");
+    EXPECT_EQ(schema, "dbo");
+    EXPECT_EQ(name, "My Table");
+}
+
+TEST(SplitSchemaTable, BracketedTableOnly) {
+    auto [schema, name] = splitSchemaTable("[My Table]");
+    EXPECT_EQ(schema, "dbo");
+    EXPECT_EQ(name, "My Table");
+}
+
+TEST(SplitSchemaTable, EscapedBracketInTable) {
+    auto [schema, name] = splitSchemaTable("[dbo].[col]]name]");
+    EXPECT_EQ(schema, "dbo");
+    EXPECT_EQ(name, "col]name");
+}
+
+TEST(SplitSchemaTable, CustomDefaultSchema) {
+    auto [schema, name] = splitSchemaTable("Orders", "sales");
+    EXPECT_EQ(schema, "sales");
+    EXPECT_EQ(name, "Orders");
+}
+
+// ─── quoteBracketIdentifier ─────────────────────────────────────────
+
+TEST(QuoteBracketIdentifier, SimpleTable) {
+    EXPECT_EQ(quoteBracketIdentifier("Users"), "[Users]");
+}
+
+TEST(QuoteBracketIdentifier, SchemaAndTable) {
+    EXPECT_EQ(quoteBracketIdentifier("dbo.Users"), "[dbo].[Users]");
+}
+
+TEST(QuoteBracketIdentifier, EscapesCloseBracket) {
+    EXPECT_EQ(quoteBracketIdentifier("col]name"), "[col]]name]");
+}
+
+TEST(QuoteBracketIdentifier, EmptyString) {
+    EXPECT_EQ(quoteBracketIdentifier(""), "");
+}
+
+// ─── roundtrip: quote → unquote ─────────────────────────────────────
+
+TEST(RoundTrip, SimpleIdentifier) {
+    EXPECT_EQ(unquoteBracketIdentifier(quoteBracketIdentifier("dbo.Users")), "dbo.Users");
+}
+
+TEST(RoundTrip, IdentifierWithCloseBracket) {
+    EXPECT_EQ(unquoteBracketIdentifier(quoteBracketIdentifier("col]name")), "col]name");
+}
+
+TEST(RoundTrip, MultiPartWithSpecialChars) {
+    EXPECT_EQ(unquoteBracketIdentifier(quoteBracketIdentifier("schema.col]name")), "schema.col]name");
+}
+
+// ─── escapeSqlString ────────────────────────────────────────────────
+
+TEST(EscapeSqlString, NoEscapeNeeded) {
+    EXPECT_EQ(escapeSqlString("hello"), "hello");
+}
+
+TEST(EscapeSqlString, SingleQuoteDoubled) {
+    EXPECT_EQ(escapeSqlString("it's"), "it''s");
+}
+
+TEST(EscapeSqlString, MultipleSingleQuotes) {
+    EXPECT_EQ(escapeSqlString("'a'b'"), "''a''b''");
+}
+
+TEST(EscapeSqlString, EmptyString) {
+    EXPECT_EQ(escapeSqlString(""), "");
+}
+
+TEST(EscapeSqlString, OnlySingleQuote) {
+    EXPECT_EQ(escapeSqlString("'"), "''");
+}
+
+TEST(EscapeSqlString, UnicodeUnchanged) {
+    // 得意先 (UTF-8) — no single quotes, passed through unchanged
+    EXPECT_EQ(escapeSqlString("\xe5\xbe\x97\xe6\x84\x8f\xe5\x85\x88"), "\xe5\xbe\x97\xe6\x84\x8f\xe5\x85\x88");
+}
+
+TEST(EscapeSqlString, UnicodeWithQuote) {
+    // 得意先's (UTF-8 + single quote)
+    EXPECT_EQ(escapeSqlString("\xe5\xbe\x97\xe6\x84\x8f\xe5\x85\x88's"), "\xe5\xbe\x97\xe6\x84\x8f\xe5\x85\x88''s");
+}
+
+TEST(EscapeSqlString, BackslashUnchanged) {
+    EXPECT_EQ(escapeSqlString("path\\to\\file"), "path\\to\\file");
+}
+
 }  // namespace
 }  // namespace velocitydb
