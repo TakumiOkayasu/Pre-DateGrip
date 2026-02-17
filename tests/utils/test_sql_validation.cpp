@@ -303,5 +303,36 @@ TEST(EscapeSqlString, BackslashUnchanged) {
     EXPECT_EQ(escapeSqlString("path\\to\\file"), "path\\to\\file");
 }
 
+// ─── escapeLikePattern ──────────────────────────────────────────────
+
+TEST(EscapeLikePattern, NoEscapeNeeded) {
+    EXPECT_EQ(escapeLikePattern("hello"), "hello");
+}
+
+TEST(EscapeLikePattern, PercentEscaped) {
+    EXPECT_EQ(escapeLikePattern("100%"), "100[%]");
+}
+
+TEST(EscapeLikePattern, UnderscoreEscaped) {
+    EXPECT_EQ(escapeLikePattern("my_table"), "my[_]table");
+}
+
+TEST(EscapeLikePattern, BracketEscaped) {
+    EXPECT_EQ(escapeLikePattern("[dbo]"), "[[]dbo]");
+}
+
+TEST(EscapeLikePattern, AllSpecialChars) {
+    EXPECT_EQ(escapeLikePattern("%_["), "[%][_][[]");
+}
+
+TEST(EscapeLikePattern, EmptyString) {
+    EXPECT_EQ(escapeLikePattern(""), "");
+}
+
+TEST(EscapeLikePattern, CombinedWithEscapeSqlString) {
+    // LIKE パターン + SQL 文字列リテラルの二重エスケープ
+    EXPECT_EQ(escapeSqlString(escapeLikePattern("it's 100%")), "it''s 100[%]");
+}
+
 }  // namespace
 }  // namespace velocitydb

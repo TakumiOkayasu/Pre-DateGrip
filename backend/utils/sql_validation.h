@@ -170,4 +170,20 @@ struct SplitIdentifier {
     return result;
 }
 
+/// SQL LIKE パターン用エスケープ (%, _, [ をブラケットエスケープ)
+/// escapeSqlString と組み合わせて使用: escapeSqlString(escapeLikePattern(input))
+[[nodiscard]] inline std::string escapeLikePattern(std::string_view value) {
+    std::string result;
+    result.reserve(value.size());
+    for (char c : value) {
+        switch (c) {
+        case '%': result += "[%]"; break;
+        case '_': result += "[_]"; break;
+        case '[': result += "[[]"; break;
+        default: result += c; break;
+        }
+    }
+    return result;
+}
+
 }  // namespace velocitydb

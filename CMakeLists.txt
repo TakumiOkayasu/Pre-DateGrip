@@ -31,9 +31,9 @@ if(WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     # Define _DEBUG for Debug builds (MSVC normally does this, but ensure it for Ninja)
     add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
-    # Enable multi-processor compilation for MSVC
+    # Enable multi-processor compilation and UTF-8 source/execution charset for MSVC
     if(MSVC)
-        add_compile_options(/MP)
+        add_compile_options(/MP /utf-8)
     endif()
 endif()
 
