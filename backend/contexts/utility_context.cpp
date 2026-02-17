@@ -28,26 +28,25 @@ std::string serializeA5ERModelToJson(const A5ERModel& model, const std::string& 
     auto tablesJson = JsonUtils::buildArray(model.tables, [](std::string& out, const auto& table) {
         auto columnsJson = JsonUtils::buildArray(table.columns, [](std::string& out, const auto& col) {
             out += std::format(R"({{"name":"{}","logicalName":"{}","type":"{}","size":{},"scale":{},"nullable":{},"isPrimaryKey":{},"defaultValue":"{}","comment":"{}"}})",
-                               JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.logicalName), JsonUtils::escapeString(col.type), col.size, col.scale,
-                               col.nullable ? "true" : "false", col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.defaultValue), JsonUtils::escapeString(col.comment));
+                               JsonUtils::escapeString(col.name), JsonUtils::escapeString(col.logicalName), JsonUtils::escapeString(col.type), col.size, col.scale, col.nullable ? "true" : "false",
+                               col.isPrimaryKey ? "true" : "false", JsonUtils::escapeString(col.defaultValue), JsonUtils::escapeString(col.comment));
         });
         auto indexesJson = JsonUtils::buildArray(table.indexes, [](std::string& out, const auto& idx) {
             auto idxColumnsJson = JsonUtils::buildArray(idx.columns, [](std::string& out, const auto& colName) { out += std::format(R"("{}")", JsonUtils::escapeString(colName)); });
             out += std::format(R"({{"name":"{}","columns":{},"isUnique":{}}})", JsonUtils::escapeString(idx.name), idxColumnsJson, idx.isUnique ? "true" : "false");
         });
         out += std::format(R"({{"name":"{}","logicalName":"{}","comment":"{}","page":"{}","columns":{},"indexes":{},"posX":{},"posY":{}}})", JsonUtils::escapeString(table.name),
-                           JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), JsonUtils::escapeString(table.page), columnsJson, indexesJson, table.posX,
-                           table.posY);
+                           JsonUtils::escapeString(table.logicalName), JsonUtils::escapeString(table.comment), JsonUtils::escapeString(table.page), columnsJson, indexesJson, table.posX, table.posY);
     });
 
     auto relationsJson = JsonUtils::buildArray(model.relations, [](std::string& out, const auto& rel) {
         out += std::format(R"({{"name":"{}","parentTable":"{}","childTable":"{}","parentColumn":"{}","childColumn":"{}","cardinality":"{}"}})", JsonUtils::escapeString(rel.name),
-                           JsonUtils::escapeString(rel.parentTable), JsonUtils::escapeString(rel.childTable), JsonUtils::escapeString(rel.parentColumn),
-                           JsonUtils::escapeString(rel.childColumn), JsonUtils::escapeString(rel.cardinality));
+                           JsonUtils::escapeString(rel.parentTable), JsonUtils::escapeString(rel.childTable), JsonUtils::escapeString(rel.parentColumn), JsonUtils::escapeString(rel.childColumn),
+                           JsonUtils::escapeString(rel.cardinality));
     });
 
-    return std::format(R"({{"name":"{}","databaseType":"{}","tables":{},"relations":{},"ddl":"{}"}})", JsonUtils::escapeString(model.name), JsonUtils::escapeString(model.databaseType),
-                       tablesJson, relationsJson, JsonUtils::escapeString(ddl));
+    return std::format(R"({{"name":"{}","databaseType":"{}","tables":{},"relations":{},"ddl":"{}"}})", JsonUtils::escapeString(model.name), JsonUtils::escapeString(model.databaseType), tablesJson,
+                       relationsJson, JsonUtils::escapeString(ddl));
 }
 
 }  // namespace

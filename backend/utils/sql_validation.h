@@ -177,10 +177,18 @@ struct SplitIdentifier {
     result.reserve(value.size());
     for (char c : value) {
         switch (c) {
-        case '%': result += "[%]"; break;
-        case '_': result += "[_]"; break;
-        case '[': result += "[[]"; break;
-        default: result += c; break;
+            case '%':
+                result += "[%]";
+                break;
+            case '_':
+                result += "[_]";
+                break;
+            case '[':
+                result += "[[]";
+                break;
+            default:
+                result += c;
+                break;
         }
     }
     return result;
