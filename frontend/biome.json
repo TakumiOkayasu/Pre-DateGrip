@@ -56,7 +56,10 @@
       "enabled": true
     },
     "linter": {
-      "enabled": true
+      "enabled": true,
+      "rules": {
+        "noUnknownPseudoElement": "off"
+      }
     }
   },
   "files": {
