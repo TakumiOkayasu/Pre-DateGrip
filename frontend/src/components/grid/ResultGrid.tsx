@@ -54,7 +54,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
   const error = useQueryError(targetQueryId);
   const showLogicalNamesInGrid = useSessionStore((state) => state.showLogicalNamesInGrid);
   const setShowLogicalNamesInGrid = useSessionStore((state) => state.setShowLogicalNamesInGrid);
-  const { applyWhereFilter, refreshDataView, openTableData } = useQueryActions();
+  const { applyWhereFilter, refreshDataView, openTableData, cancelQuery } = useQueryActions();
 
   // --- Local state ---
   const [whereClause, setWhereClause] = useState('');
@@ -335,6 +335,14 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
       <div className={styles.message}>
         <span className={styles.spinner}>{'\u23F3'}</span>
         <span>クエリ実行中...</span>
+        {activeConnectionId && (
+          <button
+            onClick={() => cancelQuery(activeConnectionId)}
+            className={styles.cancelButton}
+          >
+            キャンセル
+          </button>
+        )}
       </div>
     );
   }

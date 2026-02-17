@@ -117,6 +117,32 @@ namespace {
     return std::dynamic_pointer_cast<SQLServerDriver>(*driverResult);
 }
 
+struct TableQueryParams {
+    std::string tableName;
+    std::shared_ptr<SQLServerDriver> driver;
+};
+
+/// 8ハンドラ共通: JSON→connectionId/table取得→バリデーション→ドライバ取得
+[[nodiscard]] std::expected<TableQueryParams, std::string>
+extractTableQueryParams(const simdjson::dom::element& doc,
+                        ConnectionRegistry& registry) {
+    auto connectionIdResult = doc["connectionId"].get_string();
+    auto tableNameResult = doc["table"].get_string();
+    if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]]
+        return std::unexpected("Missing required fields: connectionId or table");
+
+    auto tableName = std::string(tableNameResult.value());
+    if (!isValidIdentifier(tableName)) [[unlikely]]
+        return std::unexpected("Invalid table name");
+
+    auto connectionId = std::string(connectionIdResult.value());
+    auto driver = getMetaDriver(registry, connectionId);
+    if (!driver) [[unlikely]]
+        return std::unexpected(std::format("Connection not found: {}", connectionId));
+
+    return TableQueryParams{std::move(tableName), std::move(driver)};
+}
+
 }  // namespace
 
 DatabaseContext::DatabaseContext()
@@ -263,6 +289,7 @@ std::string DatabaseContext::handleExecuteQuery(std::string_view params) {
             };
             std::vector<StatementResult> allResults;
 
+            size_t stmtIdx = 0;
             try {
                 for (const auto& stmt : statements) {
                     auto stmtStart = std::chrono::high_resolution_clock::now();
@@ -281,6 +308,7 @@ std::string DatabaseContext::handleExecuteQuery(std::string_view params) {
                     auto stmtEnd = std::chrono::high_resolution_clock::now();
                     currentResult.executionTimeMs = std::chrono::duration<double, std::milli>(stmtEnd - stmtStart).count();
                     allResults.push_back({.statement = stmt, .result = std::move(currentResult)});
+                    ++stmtIdx;
                 }
 
                 std::string jsonResponse = R"({"multipleResults":true,"results":[)";
@@ -296,7 +324,8 @@ std::string DatabaseContext::handleExecuteQuery(std::string_view params) {
                 jsonResponse += "]}";
                 return JsonUtils::successResponse(jsonResponse);
             } catch (const std::exception& e) {
-                return JsonUtils::errorResponse(std::format("Failed to execute SQL: {}", e.what()));
+                return JsonUtils::errorResponse(
+                    std::format("Statement {} of {}: {}", stmtIdx + 1, statements.size(), e.what()));
             }
         }
 
@@ -690,22 +719,11 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto tbl = unquoteBracketIdentifier(tableName);
         std::string schema = "dbo";
@@ -771,22 +789,11 @@ std::string DatabaseContext::handleGetIndexes(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto indexQuery = std::format(R"(
             SELECT
@@ -837,22 +844,11 @@ std::string DatabaseContext::handleGetConstraints(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto constraintQuery = std::format(R"(
             SELECT
@@ -905,22 +901,11 @@ std::string DatabaseContext::handleGetForeignKeys(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto fkQuery = std::format(R"(
             SELECT
@@ -980,22 +965,11 @@ std::string DatabaseContext::handleGetReferencingForeignKeys(std::string_view pa
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto refFkQuery = std::format(R"(
             SELECT
@@ -1055,22 +1029,11 @@ std::string DatabaseContext::handleGetTriggers(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto triggerQuery = std::format(R"(
             SELECT
@@ -1119,22 +1082,11 @@ std::string DatabaseContext::handleGetTableMetadata(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto metadataQuery = std::format(R"(
             SELECT
@@ -1181,22 +1133,11 @@ std::string DatabaseContext::handleGetTableDDL(std::string_view params) {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
 
-        auto connectionIdResult = doc["connectionId"].get_string();
-        auto tableNameResult = doc["table"].get_string();
-        if (connectionIdResult.error() || tableNameResult.error()) [[unlikely]] {
-            return JsonUtils::errorResponse("Missing required fields: connectionId or table");
-        }
-        auto connectionId = std::string(connectionIdResult.value());
-        auto tableName = std::string(tableNameResult.value());
+        auto extracted = extractTableQueryParams(doc, *m_registry);
+        if (!extracted) [[unlikely]]
+            return JsonUtils::errorResponse(extracted.error());
 
-        if (!isValidIdentifier(tableName)) [[unlikely]] {
-            return JsonUtils::errorResponse("Invalid table name");
-        }
-
-        auto driver = getMetaDriver(*m_registry, connectionId);
-        if (!driver) [[unlikely]] {
-            return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
-        }
+        auto& [tableName, driver] = *extracted;
 
         auto columnQuery = std::format(R"(
             SELECT

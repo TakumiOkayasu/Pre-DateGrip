@@ -135,6 +135,7 @@ export function MainLayout() {
     addQuery,
     removeQuery,
     executeQuery,
+    cancelQuery,
     formatQuery,
     isExecuting,
     openERDiagram,
@@ -255,6 +256,11 @@ export function MainLayout() {
     pendingExecutionRef.current = null;
   }, []);
 
+  const handleCancel = useCallback(() => {
+    if (!activeConnectionId) return;
+    cancelQuery(activeConnectionId);
+  }, [activeConnectionId, cancelQuery]);
+
   const handleFormat = useCallback(() => {
     if (activeQueryId && !isDataView) {
       formatQuery(activeQueryId);
@@ -302,6 +308,8 @@ export function MainLayout() {
 
   // Note: isBottomPanelVisible is NOT persisted - it's always hidden on startup
 
+  const hasOpenDialog = isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isA5ERImportDialogOpen;
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -329,6 +337,9 @@ export function MainLayout() {
       } else if (e.ctrlKey && e.key === ',') {
         e.preventDefault();
         handleOpenSettings();
+      } else if (e.key === 'Escape' && isExecuting && !hasOpenDialog) {
+        e.preventDefault();
+        handleCancel();
       }
     };
 
@@ -338,9 +349,12 @@ export function MainLayout() {
     handleNewQuery,
     handleCloseTab,
     handleExecute,
+    handleCancel,
     handleFormat,
     handleOpenSearch,
     handleOpenSettings,
+    isExecuting,
+    hasOpenDialog,
   ]);
 
   // Track and save window size/position
@@ -444,9 +458,9 @@ export function MainLayout() {
 
         <div className={styles.toolbarGroup}>
           <button
-            onClick={handleExecute}
-            disabled={!activeQueryId || !activeConnectionId || isExecuting}
-            title="実行 (Ctrl+Enter)"
+            onClick={isExecuting ? handleCancel : handleExecute}
+            disabled={!activeQueryId || !activeConnectionId}
+            title={isExecuting ? '停止 (Escape)' : '実行 (Ctrl+Enter)'}
             className={styles.executeButton}
           >
             {isExecuting ? Icons.stop : Icons.play}
