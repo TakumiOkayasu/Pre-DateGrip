@@ -14,6 +14,7 @@
 #include "../utils/json_utils.h"
 #include "../utils/logger.h"
 #include "../utils/simd_filter.h"
+#include "../utils/sql_validation.h"
 #include "simdjson.h"
 
 #include <charconv>
@@ -697,11 +698,6 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
-        auto isValidIdentifier = [](const std::string& name) -> bool {
-            if (name.empty() || name.length() > 128)
-                return false;
-            return std::ranges::all_of(name, [](unsigned char c) { return std::isalnum(c) || c == '_' || c == '.' || c == '[' || c == ']'; });
-        };
         if (!isValidIdentifier(tableName)) [[unlikely]] {
             return JsonUtils::errorResponse("Invalid table name");
         }
@@ -711,18 +707,12 @@ std::string DatabaseContext::handleGetColumns(std::string_view params) {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
 
-        std::string tbl{tableName};
+        auto tbl = unquoteBracketIdentifier(tableName);
         std::string schema = "dbo";
-        auto removeBrackets = [](std::string& s) {
-            if (!s.empty() && s.front() == '[' && s.back() == ']')
-                s = s.substr(1, s.length() - 2);
-        };
         if (auto dotPos = tbl.find('.'); dotPos != std::string::npos) {
             schema = tbl.substr(0, dotPos);
             tbl = tbl.substr(dotPos + 1);
-            removeBrackets(schema);
         }
-        removeBrackets(tbl);
 
         auto columnQuery = std::format(R"(
             SELECT
@@ -789,6 +779,10 @@ std::string DatabaseContext::handleGetIndexes(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
+
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
@@ -850,6 +844,10 @@ std::string DatabaseContext::handleGetConstraints(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
+
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
 
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
@@ -914,6 +912,10 @@ std::string DatabaseContext::handleGetForeignKeys(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
+
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
 
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
@@ -986,6 +988,10 @@ std::string DatabaseContext::handleGetReferencingForeignKeys(std::string_view pa
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
+
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
@@ -1057,6 +1063,10 @@ std::string DatabaseContext::handleGetTriggers(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
+
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
@@ -1117,6 +1127,10 @@ std::string DatabaseContext::handleGetTableMetadata(std::string_view params) {
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
 
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
+
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
@@ -1174,6 +1188,10 @@ std::string DatabaseContext::handleGetTableDDL(std::string_view params) {
         }
         auto connectionId = std::string(connectionIdResult.value());
         auto tableName = std::string(tableNameResult.value());
+
+        if (!isValidIdentifier(tableName)) [[unlikely]] {
+            return JsonUtils::errorResponse("Invalid table name");
+        }
 
         auto driver = getMetaDriver(*m_registry, connectionId);
         if (!driver) [[unlikely]] {
