@@ -1,4 +1,4 @@
-#include "settings_context.h"
+#include "settings_provider.h"
 
 #include "../utils/json_utils.h"
 #include "../utils/session_manager.h"
@@ -14,28 +14,26 @@ namespace velocitydb {
 
 namespace {
 
-/// Safely narrow int64_t to int with clamping.
 [[nodiscard]] constexpr int narrowToInt(int64_t val) noexcept {
     return static_cast<int>(std::clamp(val, static_cast<int64_t>(INT_MIN), static_cast<int64_t>(INT_MAX)));
 }
 
 }  // namespace
 
-SettingsContext::SettingsContext() : m_settingsManager(std::make_unique<SettingsManager>()), m_sessionManager(std::make_unique<SessionManager>()) {
+SettingsProvider::SettingsProvider() : m_settingsManager(std::make_unique<SettingsManager>()), m_sessionManager(std::make_unique<SessionManager>()) {
     m_settingsManager->load();
     m_sessionManager->load();
 }
 
-SettingsContext::~SettingsContext() = default;
-SettingsContext::SettingsContext(SettingsContext&&) noexcept = default;
-SettingsContext& SettingsContext::operator=(SettingsContext&&) noexcept = default;
+SettingsProvider::~SettingsProvider() = default;
+SettingsProvider::SettingsProvider(SettingsProvider&&) noexcept = default;
+SettingsProvider& SettingsProvider::operator=(SettingsProvider&&) noexcept = default;
 
-std::string SettingsContext::handleGetSettings() {
+std::string SettingsProvider::handleGetSettings() {
     const auto& settings = m_settingsManager->getSettings();
 
     std::string json = "{";
 
-    // General settings
     json += "\"general\":{";
     json += std::format("\"autoConnect\":{},", settings.general.autoConnect ? "true" : "false");
     json += std::format("\"lastConnectionId\":\"{}\",", JsonUtils::escapeString(settings.general.lastConnectionId));
@@ -45,7 +43,6 @@ std::string SettingsContext::handleGetSettings() {
     json += std::format("\"language\":\"{}\"", JsonUtils::escapeString(settings.general.language));
     json += "},";
 
-    // Editor settings
     json += "\"editor\":{";
     json += std::format("\"fontSize\":{},", settings.editor.fontSize);
     json += std::format("\"fontFamily\":\"{}\",", JsonUtils::escapeString(settings.editor.fontFamily));
@@ -57,7 +54,6 @@ std::string SettingsContext::handleGetSettings() {
     json += std::format("\"theme\":\"{}\"", JsonUtils::escapeString(settings.editor.theme));
     json += "},";
 
-    // Grid settings
     json += "\"grid\":{";
     json += std::format("\"defaultPageSize\":{},", settings.grid.defaultPageSize);
     json += std::format("\"showRowNumbers\":{},", settings.grid.showRowNumbers ? "true" : "false");
@@ -71,7 +67,7 @@ std::string SettingsContext::handleGetSettings() {
     return JsonUtils::successResponse(json);
 }
 
-std::string SettingsContext::handleUpdateSettings(std::string_view params) {
+std::string SettingsProvider::handleUpdateSettings(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -133,7 +129,7 @@ std::string SettingsContext::handleUpdateSettings(std::string_view params) {
     }
 }
 
-std::string SettingsContext::handleGetConnectionProfiles() {
+std::string SettingsProvider::handleGetConnectionProfiles() {
     const auto& profiles = m_settingsManager->getConnectionProfiles();
 
     auto profilesJson = JsonUtils::buildArray(profiles, [](std::string& out, const auto& p) {
@@ -165,7 +161,7 @@ std::string SettingsContext::handleGetConnectionProfiles() {
     return JsonUtils::successResponse(json);
 }
 
-std::string SettingsContext::handleSaveConnectionProfile(std::string_view params) {
+std::string SettingsProvider::handleSaveConnectionProfile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -260,7 +256,7 @@ std::string SettingsContext::handleSaveConnectionProfile(std::string_view params
     }
 }
 
-std::string SettingsContext::handleDeleteConnectionProfile(std::string_view params) {
+std::string SettingsProvider::handleDeleteConnectionProfile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -279,7 +275,7 @@ std::string SettingsContext::handleDeleteConnectionProfile(std::string_view para
     }
 }
 
-std::string SettingsContext::handleGetProfilePassword(std::string_view params) {
+std::string SettingsProvider::handleGetProfilePassword(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -301,7 +297,7 @@ std::string SettingsContext::handleGetProfilePassword(std::string_view params) {
     }
 }
 
-std::string SettingsContext::handleGetSshPassword(std::string_view params) {
+std::string SettingsProvider::handleGetSshPassword(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -323,7 +319,7 @@ std::string SettingsContext::handleGetSshPassword(std::string_view params) {
     }
 }
 
-std::string SettingsContext::handleGetSshKeyPassphrase(std::string_view params) {
+std::string SettingsProvider::handleGetSshKeyPassphrase(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -345,7 +341,7 @@ std::string SettingsContext::handleGetSshKeyPassphrase(std::string_view params) 
     }
 }
 
-std::string SettingsContext::handleGetSessionState() {
+std::string SettingsProvider::handleGetSessionState() {
     const auto& state = m_sessionManager->getState();
 
     std::string json = "{";
@@ -383,7 +379,7 @@ std::string SettingsContext::handleGetSessionState() {
     return JsonUtils::successResponse(json);
 }
 
-std::string SettingsContext::handleSaveSessionState(std::string_view params) {
+std::string SettingsProvider::handleSaveSessionState(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);

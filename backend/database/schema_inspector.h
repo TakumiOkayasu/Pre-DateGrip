@@ -45,14 +45,14 @@ struct FunctionInfo {
     std::string definition;
 };
 
-class SchemaInspector : public ISchemaProvider {
+class SchemaInspector : public ISchemaInspector {
 public:
     SchemaInspector() = default;
     ~SchemaInspector() override = default;
 
     void setDriver(std::shared_ptr<SQLServerDriver> driver) { m_driver = std::move(driver); }
 
-    // ISchemaProvider interface
+    // ISchemaInspector interface
     [[nodiscard]] std::vector<std::string> getDatabases() override;
     [[nodiscard]] std::vector<TableInfo> getTables(std::string_view database) override;
     [[nodiscard]] std::vector<ColumnInfo> getColumns(std::string_view table) override;

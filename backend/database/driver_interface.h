@@ -66,13 +66,13 @@ protected:
 };
 
 // Abstract interface for schema inspection
-class ISchemaProvider {
+class ISchemaInspector {
 public:
-    virtual ~ISchemaProvider() = default;
+    virtual ~ISchemaInspector() = default;
 
     // Non-copyable
-    ISchemaProvider(const ISchemaProvider&) = delete;
-    ISchemaProvider& operator=(const ISchemaProvider&) = delete;
+    ISchemaInspector(const ISchemaInspector&) = delete;
+    ISchemaInspector& operator=(const ISchemaInspector&) = delete;
 
     // Schema inspection
     [[nodiscard]] virtual std::vector<std::string> getDatabases() = 0;
@@ -91,17 +91,17 @@ public:
     [[nodiscard]] virtual std::string generateDeleteStatement(std::string_view table) = 0;
 
 protected:
-    ISchemaProvider() = default;
+    ISchemaInspector() = default;
 };
 
-// Factory for creating database drivers and schema providers
+// Factory for creating database drivers and schema inspectors
 class DriverFactory {
 public:
     // Create a database driver for the specified type
     [[nodiscard]] static std::unique_ptr<IDatabaseDriver> createDriver(DriverType type);
 
-    // Create a schema provider for the specified driver
-    [[nodiscard]] static std::unique_ptr<ISchemaProvider> createSchemaProvider(DriverType type, std::shared_ptr<IDatabaseDriver> driver);
+    // Create a schema inspector for the specified driver
+    [[nodiscard]] static std::unique_ptr<ISchemaInspector> createSchemaInspector(DriverType type, std::shared_ptr<IDatabaseDriver> driver);
 };
 
 }  // namespace velocitydb

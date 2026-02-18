@@ -18,7 +18,7 @@ std::unique_ptr<IDatabaseDriver> DriverFactory::createDriver(DriverType type) {
     throw std::runtime_error("Unknown driver type");
 }
 
-std::unique_ptr<ISchemaProvider> DriverFactory::createSchemaProvider(DriverType type, std::shared_ptr<IDatabaseDriver> driver) {
+std::unique_ptr<ISchemaInspector> DriverFactory::createSchemaInspector(DriverType type, std::shared_ptr<IDatabaseDriver> driver) {
     switch (type) {
         case DriverType::SQLServer: {
             auto sqlServerDriver = std::dynamic_pointer_cast<SQLServerDriver>(std::move(driver));

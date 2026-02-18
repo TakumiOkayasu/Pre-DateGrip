@@ -1,11 +1,16 @@
 #include "ipc_handler.h"
 
-#include "interfaces/database_context.h"
-#include "interfaces/export_context.h"
-#include "interfaces/io_context.h"
-#include "interfaces/settings_context.h"
+#include "interfaces/providers/async_query_provider.h"
+#include "interfaces/providers/connection_provider.h"
+#include "interfaces/providers/export_provider.h"
+#include "interfaces/providers/io_provider.h"
+#include "interfaces/providers/query_provider.h"
+#include "interfaces/providers/schema_provider.h"
+#include "interfaces/providers/search_provider.h"
+#include "interfaces/providers/settings_provider.h"
+#include "interfaces/providers/transaction_provider.h"
+#include "interfaces/providers/utility_provider.h"
 #include "interfaces/system_context.h"
-#include "interfaces/utility_context.h"
 #include "simdjson.h"
 #include "utils/json_utils.h"
 
@@ -21,62 +26,65 @@ IPCHandler::~IPCHandler() = default;
 
 void IPCHandler::registerRoutes() {
     // Connection lifecycle
-    m_routes["connect"] = [this](auto p) { return m_ctx.database().handleConnect(p); };
-    m_routes["disconnect"] = [this](auto p) { return m_ctx.database().handleDisconnect(p); };
-    m_routes["testConnection"] = [this](auto p) { return m_ctx.database().handleTestConnection(p); };
+    m_routes["connect"] = [this](auto p) { return m_ctx.connections().handleConnect(p); };
+    m_routes["disconnect"] = [this](auto p) {
+        m_ctx.transactions().cleanupConnection(p);
+        return m_ctx.connections().handleDisconnect(p);
+    };
+    m_routes["testConnection"] = [this](auto p) { return m_ctx.connections().handleTestConnection(p); };
 
     // Query execution
-    m_routes["executeQuery"] = [this](auto p) { return m_ctx.database().handleExecuteQuery(p); };
-    m_routes["executeQueryPaginated"] = [this](auto p) { return m_ctx.database().handleExecuteQueryPaginated(p); };
-    m_routes["getRowCount"] = [this](auto p) { return m_ctx.database().handleGetRowCount(p); };
-    m_routes["cancelQuery"] = [this](auto p) { return m_ctx.database().handleCancelQuery(p); };
+    m_routes["executeQuery"] = [this](auto p) { return m_ctx.queries().handleExecuteQuery(p); };
+    m_routes["executeQueryPaginated"] = [this](auto p) { return m_ctx.queries().handleExecuteQueryPaginated(p); };
+    m_routes["getRowCount"] = [this](auto p) { return m_ctx.queries().handleGetRowCount(p); };
+    m_routes["cancelQuery"] = [this](auto p) { return m_ctx.queries().handleCancelQuery(p); };
 
     // Async queries
-    m_routes["executeAsyncQuery"] = [this](auto p) { return m_ctx.database().handleExecuteAsyncQuery(p); };
-    m_routes["getAsyncQueryResult"] = [this](auto p) { return m_ctx.database().handleGetAsyncQueryResult(p); };
-    m_routes["cancelAsyncQuery"] = [this](auto p) { return m_ctx.database().handleCancelAsyncQuery(p); };
-    m_routes["getActiveQueries"] = [this](auto p) { return m_ctx.database().handleGetActiveQueries(p); };
-    m_routes["removeAsyncQuery"] = [this](auto p) { return m_ctx.database().handleRemoveAsyncQuery(p); };
+    m_routes["executeAsyncQuery"] = [this](auto p) { return m_ctx.async_queries().handleExecuteAsyncQuery(p); };
+    m_routes["getAsyncQueryResult"] = [this](auto p) { return m_ctx.async_queries().handleGetAsyncQueryResult(p); };
+    m_routes["cancelAsyncQuery"] = [this](auto p) { return m_ctx.async_queries().handleCancelAsyncQuery(p); };
+    m_routes["getActiveQueries"] = [this](auto p) { return m_ctx.async_queries().handleGetActiveQueries(p); };
+    m_routes["removeAsyncQuery"] = [this](auto p) { return m_ctx.async_queries().handleRemoveAsyncQuery(p); };
 
     // Schema
-    m_routes["getDatabases"] = [this](auto p) { return m_ctx.database().handleGetDatabases(p); };
-    m_routes["getTables"] = [this](auto p) { return m_ctx.database().handleGetTables(p); };
-    m_routes["getColumns"] = [this](auto p) { return m_ctx.database().handleGetColumns(p); };
-    m_routes["getIndexes"] = [this](auto p) { return m_ctx.database().handleGetIndexes(p); };
-    m_routes["getConstraints"] = [this](auto p) { return m_ctx.database().handleGetConstraints(p); };
-    m_routes["getForeignKeys"] = [this](auto p) { return m_ctx.database().handleGetForeignKeys(p); };
-    m_routes["getReferencingForeignKeys"] = [this](auto p) { return m_ctx.database().handleGetReferencingForeignKeys(p); };
-    m_routes["getTriggers"] = [this](auto p) { return m_ctx.database().handleGetTriggers(p); };
-    m_routes["getTableMetadata"] = [this](auto p) { return m_ctx.database().handleGetTableMetadata(p); };
-    m_routes["getTableDDL"] = [this](auto p) { return m_ctx.database().handleGetTableDDL(p); };
-    m_routes["getExecutionPlan"] = [this](auto p) { return m_ctx.database().handleGetExecutionPlan(p); };
+    m_routes["getDatabases"] = [this](auto p) { return m_ctx.schema().handleGetDatabases(p); };
+    m_routes["getTables"] = [this](auto p) { return m_ctx.schema().handleGetTables(p); };
+    m_routes["getColumns"] = [this](auto p) { return m_ctx.schema().handleGetColumns(p); };
+    m_routes["getIndexes"] = [this](auto p) { return m_ctx.schema().handleGetIndexes(p); };
+    m_routes["getConstraints"] = [this](auto p) { return m_ctx.schema().handleGetConstraints(p); };
+    m_routes["getForeignKeys"] = [this](auto p) { return m_ctx.schema().handleGetForeignKeys(p); };
+    m_routes["getReferencingForeignKeys"] = [this](auto p) { return m_ctx.schema().handleGetReferencingForeignKeys(p); };
+    m_routes["getTriggers"] = [this](auto p) { return m_ctx.schema().handleGetTriggers(p); };
+    m_routes["getTableMetadata"] = [this](auto p) { return m_ctx.schema().handleGetTableMetadata(p); };
+    m_routes["getTableDDL"] = [this](auto p) { return m_ctx.schema().handleGetTableDDL(p); };
+    m_routes["getExecutionPlan"] = [this](auto p) { return m_ctx.schema().handleGetExecutionPlan(p); };
 
     // Transactions
-    m_routes["beginTransaction"] = [this](auto p) { return m_ctx.database().handleBeginTransaction(p); };
-    m_routes["commit"] = [this](auto p) { return m_ctx.database().handleCommitTransaction(p); };
-    m_routes["rollback"] = [this](auto p) { return m_ctx.database().handleRollbackTransaction(p); };
+    m_routes["beginTransaction"] = [this](auto p) { return m_ctx.transactions().handleBeginTransaction(p); };
+    m_routes["commit"] = [this](auto p) { return m_ctx.transactions().handleCommitTransaction(p); };
+    m_routes["rollback"] = [this](auto p) { return m_ctx.transactions().handleRollbackTransaction(p); };
 
     // Cache & History
-    m_routes["getCacheStats"] = [this](auto p) { return m_ctx.database().handleGetCacheStats(p); };
-    m_routes["clearCache"] = [this](auto p) { return m_ctx.database().handleClearCache(p); };
-    m_routes["getQueryHistory"] = [this](auto p) { return m_ctx.database().handleGetQueryHistory(p); };
+    m_routes["getCacheStats"] = [this](auto p) { return m_ctx.queries().handleGetCacheStats(p); };
+    m_routes["clearCache"] = [this](auto p) { return m_ctx.queries().handleClearCache(p); };
+    m_routes["getQueryHistory"] = [this](auto p) { return m_ctx.queries().handleGetQueryHistory(p); };
 
     // Filter
-    m_routes["filterResultSet"] = [this](auto p) { return m_ctx.database().handleFilterResultSet(p); };
+    m_routes["filterResultSet"] = [this](auto p) { return m_ctx.queries().handleFilterResultSet(p); };
 
-    // Export (cross-context: export uses database for driver access)
-    m_routes["exportCSV"] = [this](auto p) { return m_ctx.export_ctx().handleExportCSV(m_ctx.database(), p); };
-    m_routes["exportJSON"] = [this](auto p) { return m_ctx.export_ctx().handleExportJSON(m_ctx.database(), p); };
-    m_routes["exportExcel"] = [this](auto p) { return m_ctx.export_ctx().handleExportExcel(m_ctx.database(), p); };
+    // Export
+    m_routes["exportCSV"] = [this](auto p) { return m_ctx.exports().handleExportCSV(p); };
+    m_routes["exportJSON"] = [this](auto p) { return m_ctx.exports().handleExportJSON(p); };
+    m_routes["exportExcel"] = [this](auto p) { return m_ctx.exports().handleExportExcel(p); };
 
     // Utility
     m_routes["uppercaseKeywords"] = [this](auto p) { return m_ctx.utility().handleUppercaseKeywords(p); };
     m_routes["parseA5ER"] = [this](auto p) { return m_ctx.utility().handleParseA5ER(p); };
     m_routes["parseA5ERContent"] = [this](auto p) { return m_ctx.utility().handleParseA5ERContent(p); };
 
-    // Search (cross-context: utility uses database for driver access)
-    m_routes["searchObjects"] = [this](auto p) { return m_ctx.utility().handleSearchObjects(m_ctx.database(), p); };
-    m_routes["quickSearch"] = [this](auto p) { return m_ctx.utility().handleQuickSearch(m_ctx.database(), p); };
+    // Search
+    m_routes["searchObjects"] = [this](auto p) { return m_ctx.search().handleSearchObjects(p); };
+    m_routes["quickSearch"] = [this](auto p) { return m_ctx.search().handleQuickSearch(p); };
 
     // Settings
     m_routes["getSettings"] = [this](auto) { return m_ctx.settings().handleGetSettings(); };

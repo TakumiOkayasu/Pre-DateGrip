@@ -6,9 +6,9 @@
 namespace velocitydb {
 
 /// Interface for I/O operations (logging, file, bookmarks)
-class IIOContext {
+class IIOProvider {
 public:
-    virtual ~IIOContext() = default;
+    virtual ~IIOProvider() = default;
 
     [[nodiscard]] virtual std::string handleWriteFrontendLog(std::string_view params) = 0;
     [[nodiscard]] virtual std::string handleSaveQueryToFile(std::string_view params) = 0;

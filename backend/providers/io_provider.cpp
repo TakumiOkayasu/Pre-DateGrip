@@ -1,4 +1,4 @@
-#include "io_context.h"
+#include "io_provider.h"
 
 #include "../utils/file_dialog.h"
 #include "../utils/json_utils.h"
@@ -16,14 +16,13 @@ namespace {
 constexpr auto kLogPath = "log/frontend.log";
 constexpr auto kBookmarksPath = "data/bookmarks.json";
 
-/// Format a single bookmark entry as JSON.
 [[nodiscard]] std::string formatBookmarkJson(std::string_view id, std::string_view name, std::string_view content) {
     return std::format("{{\"id\":\"{}\",\"name\":\"{}\",\"content\":\"{}\"}}", JsonUtils::escapeString(id), JsonUtils::escapeString(name), JsonUtils::escapeString(content));
 }
 
 }  // namespace
 
-std::string IOContext::handleWriteFrontendLog(std::string_view params) {
+std::string IOProvider::handleWriteFrontendLog(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -51,7 +50,7 @@ std::string IOContext::handleWriteFrontendLog(std::string_view params) {
     }
 }
 
-std::string IOContext::handleSaveQueryToFile(std::string_view params) {
+std::string IOProvider::handleSaveQueryToFile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -83,7 +82,7 @@ std::string IOContext::handleSaveQueryToFile(std::string_view params) {
     }
 }
 
-std::string IOContext::handleLoadQueryFromFile(std::string_view) {
+std::string IOProvider::handleLoadQueryFromFile(std::string_view) {
     try {
         auto result = FileDialog::showOpenDialog("SQL Files (*.sql)\0*.sql\0All Files (*.*)\0*.*\0");
         if (!result) {
@@ -102,7 +101,7 @@ std::string IOContext::handleLoadQueryFromFile(std::string_view) {
     }
 }
 
-std::string IOContext::handleBrowseFile(std::string_view params) {
+std::string IOProvider::handleBrowseFile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -125,7 +124,7 @@ std::string IOContext::handleBrowseFile(std::string_view params) {
     }
 }
 
-std::string IOContext::handleGetBookmarks(std::string_view) {
+std::string IOProvider::handleGetBookmarks(std::string_view) {
     try {
         std::filesystem::path bookmarksPath(kBookmarksPath);
         if (!std::filesystem::exists(bookmarksPath)) {
@@ -143,7 +142,7 @@ std::string IOContext::handleGetBookmarks(std::string_view) {
     }
 }
 
-std::string IOContext::handleSaveBookmark(std::string_view params) {
+std::string IOProvider::handleSaveBookmark(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -161,7 +160,6 @@ std::string IOContext::handleSaveBookmark(std::string_view params) {
         std::filesystem::path bookmarksPath(kBookmarksPath);
         std::filesystem::create_directories(bookmarksPath.parent_path());
 
-        // Parser and fileContent must outlive the bookmarks array view (simdjson references internal buffer)
         simdjson::dom::parser existingParser;
         std::string fileContent;
         simdjson::dom::array bookmarks;
@@ -222,7 +220,7 @@ std::string IOContext::handleSaveBookmark(std::string_view params) {
     }
 }
 
-std::string IOContext::handleDeleteBookmark(std::string_view params) {
+std::string IOProvider::handleDeleteBookmark(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);

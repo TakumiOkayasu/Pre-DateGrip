@@ -1,10 +1,11 @@
-#include "export_context.h"
+#include "export_provider.h"
 
 #include "../database/sqlserver_driver.h"
 #include "../exporters/csv_exporter.h"
+#include "../exporters/data_exporter.h"
 #include "../exporters/excel_exporter.h"
 #include "../exporters/json_exporter.h"
-#include "../interfaces/database_context.h"
+#include "../interfaces/providers/connection_provider.h"
 #include "../parsers/sql_parser.h"
 #include "../utils/json_utils.h"
 #include "simdjson.h"
@@ -13,16 +14,15 @@
 
 namespace velocitydb {
 
-ExportContext::ExportContext() = default;
-ExportContext::~ExportContext() = default;
-ExportContext::ExportContext(ExportContext&&) noexcept = default;
-ExportContext& ExportContext::operator=(ExportContext&&) noexcept = default;
+ExportProvider::ExportProvider(IConnectionProvider& connections) : m_connections(connections) {}
 
-std::vector<std::string> ExportContext::getSupportedFormats() const {
+ExportProvider::~ExportProvider() = default;
+
+std::vector<std::string> ExportProvider::getSupportedFormats() const {
     return {"csv", "json", "excel"};
 }
 
-std::string ExportContext::exportWithDriver(IDatabaseContext& db, std::string_view params, std::string_view format) {
+std::string ExportProvider::exportWithDriver(std::string_view params, std::string_view format) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -41,7 +41,7 @@ std::string ExportContext::exportWithDriver(IDatabaseContext& db, std::string_vi
             return JsonUtils::errorResponse("Export only supports SELECT queries");
         }
 
-        auto driver = db.getQueryDriver(connectionId);
+        auto driver = m_connections.getQueryDriver(connectionId);
         if (!driver) [[unlikely]] {
             return JsonUtils::errorResponse(std::format("Connection not found: {}", connectionId));
         }
@@ -91,16 +91,16 @@ std::string ExportContext::exportWithDriver(IDatabaseContext& db, std::string_vi
     }
 }
 
-std::string ExportContext::handleExportCSV(IDatabaseContext& db, std::string_view params) {
-    return exportWithDriver(db, params, "csv");
+std::string ExportProvider::handleExportCSV(std::string_view params) {
+    return exportWithDriver(params, "csv");
 }
 
-std::string ExportContext::handleExportJSON(IDatabaseContext& db, std::string_view params) {
-    return exportWithDriver(db, params, "json");
+std::string ExportProvider::handleExportJSON(std::string_view params) {
+    return exportWithDriver(params, "json");
 }
 
-std::string ExportContext::handleExportExcel(IDatabaseContext& db, std::string_view params) {
-    return exportWithDriver(db, params, "excel");
+std::string ExportProvider::handleExportExcel(std::string_view params) {
+    return exportWithDriver(params, "excel");
 }
 
 }  // namespace velocitydb

@@ -1,30 +1,27 @@
 #pragma once
 
-#include "../interfaces/settings_context.h"
+#include "../interfaces/providers/settings_provider.h"
 
-#include <expected>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace velocitydb {
 
 class SettingsManager;
 class SessionManager;
 
-/// Context for application settings and session management
-class SettingsContext : public ISettingsContext {
+/// Provider for application settings and session management
+class SettingsProvider : public ISettingsProvider {
 public:
-    SettingsContext();
-    ~SettingsContext() override;
+    SettingsProvider();
+    ~SettingsProvider() override;
 
-    SettingsContext(const SettingsContext&) = delete;
-    SettingsContext& operator=(const SettingsContext&) = delete;
-    SettingsContext(SettingsContext&&) noexcept;
-    SettingsContext& operator=(SettingsContext&&) noexcept;
+    SettingsProvider(const SettingsProvider&) = delete;
+    SettingsProvider& operator=(const SettingsProvider&) = delete;
+    SettingsProvider(SettingsProvider&&) noexcept;
+    SettingsProvider& operator=(SettingsProvider&&) noexcept;
 
-    // ISettingsContext implementation (IPC handle methods)
     [[nodiscard]] std::string handleGetSettings() override;
     [[nodiscard]] std::string handleUpdateSettings(std::string_view params) override;
     [[nodiscard]] std::string handleGetConnectionProfiles() override;
@@ -36,7 +33,6 @@ public:
     [[nodiscard]] std::string handleGetSessionState() override;
     [[nodiscard]] std::string handleSaveSessionState(std::string_view params) override;
 
-    // Direct access to managers (for legacy/migration use)
     [[nodiscard]] SettingsManager& settingsManager() { return *m_settingsManager; }
     [[nodiscard]] const SettingsManager& settingsManager() const { return *m_settingsManager; }
     [[nodiscard]] SessionManager& sessionManager() { return *m_sessionManager; }

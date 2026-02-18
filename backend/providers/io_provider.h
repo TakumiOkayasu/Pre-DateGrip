@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../interfaces/io_context.h"
+#include "../interfaces/providers/io_provider.h"
 
 #include <atomic>
 #include <mutex>
@@ -9,16 +9,16 @@
 
 namespace velocitydb {
 
-/// Concrete implementation of IIOContext for file/log/bookmark operations
-class IOContext : public IIOContext {
+/// Provider for I/O operations (logging, file, bookmarks)
+class IOProvider : public IIOProvider {
 public:
-    IOContext() = default;
-    ~IOContext() override = default;
+    IOProvider() = default;
+    ~IOProvider() override = default;
 
-    IOContext(const IOContext&) = delete;
-    IOContext& operator=(const IOContext&) = delete;
-    IOContext(IOContext&&) = delete;
-    IOContext& operator=(IOContext&&) = delete;
+    IOProvider(const IOProvider&) = delete;
+    IOProvider& operator=(const IOProvider&) = delete;
+    IOProvider(IOProvider&&) = delete;
+    IOProvider& operator=(IOProvider&&) = delete;
 
     [[nodiscard]] std::string handleWriteFrontendLog(std::string_view params) override;
     [[nodiscard]] std::string handleSaveQueryToFile(std::string_view params) override;

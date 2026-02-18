@@ -24,6 +24,13 @@ public:
     /// @return JSON string representation
     [[nodiscard]] static std::string serializeResultSet(const ResultSet& result, bool cached);
 
+    /// Append column definitions as JSON array field: "columns":[...]
+    static void appendColumns(std::string& json, const std::vector<ColumnInfo>& columns);
+
+    /// Append ResultSet columns/rows/affectedRows/executionTimeMs as JSON fields (no outer braces).
+    /// Use when embedding ResultSet data into a larger JSON object.
+    static void appendResultSetFields(std::string& json, const ResultSet& result);
+
     /// 任意のコレクションから JSON 配列を構築
     template <typename Items, typename Formatter>
     [[nodiscard]] static std::string buildArray(const Items& items, Formatter&& fmt) {

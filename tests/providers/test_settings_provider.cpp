@@ -1,20 +1,20 @@
 #include <gtest/gtest.h>
 
-#include "contexts/settings_context.h"
+#include "providers/settings_provider.h"
 #include "utils/settings_manager.h"
 #include "utils/session_manager.h"
 
 namespace velocitydb {
 namespace {
 
-class SettingsContextTest : public ::testing::Test {
+class SettingsProviderTest : public ::testing::Test {
 protected:
-    SettingsContext ctx;
+    SettingsProvider provider;
 };
 
-TEST_F(SettingsContextTest, AccessSettingsManager) {
+TEST_F(SettingsProviderTest, AccessSettingsManager) {
     // Verify direct access to SettingsManager works
-    auto& manager = ctx.settingsManager();
+    auto& manager = provider.settingsManager();
     const auto& settings = manager.getSettings();
 
     // Default settings should have reasonable values
@@ -22,9 +22,9 @@ TEST_F(SettingsContextTest, AccessSettingsManager) {
     EXPECT_FALSE(settings.editor.fontFamily.empty());
 }
 
-TEST_F(SettingsContextTest, AccessSessionManager) {
+TEST_F(SettingsProviderTest, AccessSessionManager) {
     // Verify direct access to SessionManager works
-    auto& manager = ctx.sessionManager();
+    auto& manager = provider.sessionManager();
     const auto& state = manager.getState();
 
     // Default session state should have reasonable values
@@ -32,23 +32,23 @@ TEST_F(SettingsContextTest, AccessSessionManager) {
     EXPECT_GE(state.windowHeight, 0);
 }
 
-TEST_F(SettingsContextTest, HandleGetProfilePasswordNotFound) {
+TEST_F(SettingsProviderTest, HandleGetProfilePasswordNotFound) {
     // Non-existent profile should return error JSON
-    auto result = ctx.handleGetProfilePassword(R"({"profileId":"non_existent_profile_id"})");
+    auto result = provider.handleGetProfilePassword(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
     EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsContextTest, HandleGetSshPasswordNotFound) {
+TEST_F(SettingsProviderTest, HandleGetSshPasswordNotFound) {
     // Non-existent profile should return error JSON
-    auto result = ctx.handleGetSshPassword(R"({"profileId":"non_existent_profile_id"})");
+    auto result = provider.handleGetSshPassword(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
     EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsContextTest, HandleDeleteNonExistentProfile) {
+TEST_F(SettingsProviderTest, HandleDeleteNonExistentProfile) {
     // Deleting non-existent profile should succeed (idempotent)
-    auto result = ctx.handleDeleteConnectionProfile(R"({"profileId":"non_existent_profile_id"})");
+    auto result = provider.handleDeleteConnectionProfile(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
 }
 
