@@ -1,10 +1,13 @@
 #include "schema_inspector.h"
 
 #include "utils/logger.h"
+#include "utils/sql_validation.h"
 
 #include <format>
 
 using namespace std::literals;
+using velocitydb::escapeSqlString;
+using velocitydb::splitSchemaTable;
 
 namespace velocitydb {
 
@@ -87,37 +90,7 @@ std::vector<ColumnInfo> SchemaInspector::getColumns(std::string_view table) {
         return columns;
     }
 
-    // Parse table name: may be in format [schema].[table] or just [table]
-    std::string tableName{table};
-    std::string schemaName = "dbo";
-
-    // Remove brackets and extract schema/table
-    auto removeBrackets = [](std::string& s) {
-        if (!s.empty() && s.front() == '[' && s.back() == ']') {
-            s = s.substr(1, s.length() - 2);
-        }
-    };
-
-    if (auto dotPos = tableName.find('.'); dotPos != std::string::npos) {
-        schemaName = tableName.substr(0, dotPos);
-        tableName = tableName.substr(dotPos + 1);
-        removeBrackets(schemaName);
-    }
-    removeBrackets(tableName);
-
-    // Escape single quotes to prevent SQL injection
-    auto escapeString = [](const std::string& s) {
-        std::string escaped;
-        escaped.reserve(s.size());
-        for (char c : s) {
-            if (c == '\'') {
-                escaped += "''";
-            } else {
-                escaped += c;
-            }
-        }
-        return escaped;
-    };
+    auto [schemaName, tableName] = splitSchemaTable(table);
 
     auto sql = std::format(R"(
         SELECT
@@ -144,7 +117,7 @@ std::vector<ColumnInfo> SchemaInspector::getColumns(std::string_view table) {
         WHERE o.name = '{}' AND s.name = '{}'
         ORDER BY c.column_id
     )",
-                           escapeString(tableName), escapeString(schemaName));
+                           escapeSqlString(tableName), escapeSqlString(schemaName));
 
     auto result = m_driver->execute(sql);
     columns.reserve(result.rows.size());
@@ -166,6 +139,8 @@ std::vector<IndexInfo> SchemaInspector::getIndexes(std::string_view table) {
         return indexes;
     }
 
+    auto escapedTable = escapeSqlString(splitSchemaTable(table).name);
+
     auto sql = std::format(R"(
         SELECT
             i.name AS index_name,
@@ -180,7 +155,7 @@ std::vector<IndexInfo> SchemaInspector::getIndexes(std::string_view table) {
         WHERE o.name = '{}' AND i.name IS NOT NULL
         ORDER BY i.name, ic.key_ordinal
     )",
-                           table);
+                           escapedTable);
 
     auto result = m_driver->execute(sql);
     std::string currentIndex;
@@ -209,6 +184,8 @@ std::vector<ForeignKeyInfo> SchemaInspector::getForeignKeys(std::string_view tab
         return fks;
     }
 
+    auto escapedTable = escapeSqlString(splitSchemaTable(table).name);
+
     auto sql = std::format(R"(
         SELECT
             fk.name AS fk_name,
@@ -223,7 +200,7 @@ std::vector<ForeignKeyInfo> SchemaInspector::getForeignKeys(std::string_view tab
         INNER JOIN sys.objects o ON fk.parent_object_id = o.object_id
         WHERE o.name = '{}'
     )",
-                           table);
+                           escapedTable);
 
     auto result = m_driver->execute(sql);
     fks.reserve(result.rows.size());

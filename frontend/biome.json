@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.0/schema.json",
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
@@ -9,7 +9,8 @@
         "useExhaustiveDependencies": "warn",
         "useHookAtTopLevel": "error",
         "noUnusedImports": "error",
-        "noUnusedVariables": "error"
+        "noUnusedVariables": "error",
+        "noUnknownPseudoElement": "off"
       },
       "suspicious": {
         "noExplicitAny": "warn",

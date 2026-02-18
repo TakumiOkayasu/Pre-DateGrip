@@ -1,5 +1,7 @@
 #include "global_search.h"
 
+#include "sql_validation.h"
+
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -18,9 +20,10 @@ std::vector<SearchResult> GlobalSearch::searchObjects(SQLServerDriver* driver, c
     auto queryResult = driver->execute(query);
 
     for (const auto& row : queryResult.rows) {
-        if (results.size() >= static_cast<size_t>(options.maxResults)) {
+        if (results.size() >= static_cast<size_t>(options.maxResults))
             break;
-        }
+        if (row.values.size() < 3)
+            continue;
 
         SearchResult result;
         result.objectType = row.values[0];
@@ -58,7 +61,8 @@ std::vector<std::string> GlobalSearch::quickSearch(SQLServerDriver* driver, cons
     }
 
     // Quick search for table and column names
-    std::string query = std::format(R"(
+    auto escaped = escapeSqlString(escapeLikePattern(prefix));
+    auto query = std::format(R"(
         SELECT TOP {} name FROM (
             SELECT TABLE_NAME as name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '{}%'
             UNION
@@ -66,20 +70,21 @@ std::vector<std::string> GlobalSearch::quickSearch(SQLServerDriver* driver, cons
         ) AS combined
         ORDER BY name
     )",
-                                    limit, prefix, prefix);
+                             std::clamp(limit, 1, 100), escaped, escaped);
 
     auto queryResult = driver->execute(query);
 
     results.reserve(queryResult.rows.size());
     for (const auto& row : queryResult.rows) {
-        results.push_back(row.values[0]);
+        if (!row.values.empty())
+            results.push_back(row.values[0]);
     }
 
     return results;
 }
 
 std::string GlobalSearch::buildSearchQuery(const std::string& pattern, const SearchOptions& options) const {
-    std::string likePattern = "%" + pattern + "%";
+    auto likePattern = "%" + escapeSqlString(escapeLikePattern(pattern)) + "%";
     std::vector<std::string> unions;
 
     if (options.searchTables) {

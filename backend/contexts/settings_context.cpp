@@ -136,36 +136,31 @@ std::string SettingsContext::handleUpdateSettings(std::string_view params) {
 std::string SettingsContext::handleGetConnectionProfiles() {
     const auto& profiles = m_settingsManager->getConnectionProfiles();
 
-    std::string json = R"({"profiles":[)";
-    for (size_t i = 0; i < profiles.size(); ++i) {
-        if (i > 0)
-            json += ',';
-        const auto& p = profiles[i];
-        json += "{";
-        json += std::format("\"id\":\"{}\",", JsonUtils::escapeString(p.id));
-        json += std::format("\"name\":\"{}\",", JsonUtils::escapeString(p.name));
-        json += std::format("\"server\":\"{}\",", JsonUtils::escapeString(p.server));
-        json += std::format("\"port\":{},", p.port);
-        json += std::format("\"database\":\"{}\",", JsonUtils::escapeString(p.database));
-        json += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.username));
-        json += std::format("\"useWindowsAuth\":{},", p.useWindowsAuth ? "true" : "false");
-        json += std::format("\"savePassword\":{},", p.savePassword ? "true" : "false");
-        json += std::format("\"isProduction\":{},", p.isProduction ? "true" : "false");
-        json += std::format("\"isReadOnly\":{},", p.isReadOnly ? "true" : "false");
-        json += std::format("\"environment\":\"{}\",", JsonUtils::escapeString(p.environment));
-        json += std::format("\"dbType\":\"{}\",", JsonUtils::escapeString(p.dbType));
-        json += "\"ssh\":{";
-        json += std::format("\"enabled\":{},", p.ssh.enabled ? "true" : "false");
-        json += std::format("\"host\":\"{}\",", JsonUtils::escapeString(p.ssh.host));
-        json += std::format("\"port\":{},", p.ssh.port);
-        json += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.ssh.username));
-        json += std::format("\"authType\":\"{}\",", p.ssh.authType == SshAuthType::Password ? "password" : "privateKey");
-        json += std::format("\"privateKeyPath\":\"{}\",", JsonUtils::escapeString(p.ssh.privateKeyPath));
-        json += std::format("\"savePassword\":{}", !p.ssh.encryptedPassword.empty() || !p.ssh.encryptedKeyPassphrase.empty() ? "true" : "false");
-        json += "}";
-        json += "}";
-    }
-    json += "]}";
+    auto profilesJson = JsonUtils::buildArray(profiles, [](std::string& out, const auto& p) {
+        out += "{";
+        out += std::format("\"id\":\"{}\",", JsonUtils::escapeString(p.id));
+        out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(p.name));
+        out += std::format("\"server\":\"{}\",", JsonUtils::escapeString(p.server));
+        out += std::format("\"port\":{},", p.port);
+        out += std::format("\"database\":\"{}\",", JsonUtils::escapeString(p.database));
+        out += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.username));
+        out += std::format("\"useWindowsAuth\":{},", p.useWindowsAuth ? "true" : "false");
+        out += std::format("\"savePassword\":{},", p.savePassword ? "true" : "false");
+        out += std::format("\"isProduction\":{},", p.isProduction ? "true" : "false");
+        out += std::format("\"isReadOnly\":{},", p.isReadOnly ? "true" : "false");
+        out += std::format("\"environment\":\"{}\",", JsonUtils::escapeString(p.environment));
+        out += std::format("\"dbType\":\"{}\",", JsonUtils::escapeString(p.dbType));
+        out += "\"ssh\":{";
+        out += std::format("\"enabled\":{},", p.ssh.enabled ? "true" : "false");
+        out += std::format("\"host\":\"{}\",", JsonUtils::escapeString(p.ssh.host));
+        out += std::format("\"port\":{},", p.ssh.port);
+        out += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.ssh.username));
+        out += std::format("\"authType\":\"{}\",", p.ssh.authType == SshAuthType::Password ? "password" : "privateKey");
+        out += std::format("\"privateKeyPath\":\"{}\",", JsonUtils::escapeString(p.ssh.privateKeyPath));
+        out += std::format("\"savePassword\":{}", !p.ssh.encryptedPassword.empty() || !p.ssh.encryptedKeyPassphrase.empty() ? "true" : "false");
+        out += "}}";
+    });
+    std::string json = std::format(R"({{"profiles":{}}})", profilesJson);
 
     return JsonUtils::successResponse(json);
 }
@@ -364,30 +359,24 @@ std::string SettingsContext::handleGetSessionState() {
     json += std::format("\"leftPanelWidth\":{},", state.leftPanelWidth);
     json += std::format("\"bottomPanelHeight\":{},", state.bottomPanelHeight);
 
-    json += "\"openTabs\":[";
-    for (size_t i = 0; i < state.openTabs.size(); ++i) {
-        if (i > 0)
-            json += ',';
-        const auto& tab = state.openTabs[i];
-        json += "{";
-        json += std::format("\"id\":\"{}\",", JsonUtils::escapeString(tab.id));
-        json += std::format("\"title\":\"{}\",", JsonUtils::escapeString(tab.title));
-        json += std::format("\"content\":\"{}\",", JsonUtils::escapeString(tab.content));
-        json += std::format("\"filePath\":\"{}\",", JsonUtils::escapeString(tab.filePath));
-        json += std::format("\"isDirty\":{},", tab.isDirty ? "true" : "false");
-        json += std::format("\"cursorLine\":{},", tab.cursorLine);
-        json += std::format("\"cursorColumn\":{}", tab.cursorColumn);
-        json += "}";
-    }
-    json += "],";
+    auto openTabsJson = JsonUtils::buildArray(state.openTabs, [](std::string& out, const auto& tab) {
+        out += "{";
+        out += std::format("\"id\":\"{}\",", JsonUtils::escapeString(tab.id));
+        out += std::format("\"title\":\"{}\",", JsonUtils::escapeString(tab.title));
+        out += std::format("\"content\":\"{}\",", JsonUtils::escapeString(tab.content));
+        out += std::format("\"filePath\":\"{}\",", JsonUtils::escapeString(tab.filePath));
+        out += std::format("\"isDirty\":{},", tab.isDirty ? "true" : "false");
+        out += std::format("\"cursorLine\":{},", tab.cursorLine);
+        out += std::format("\"cursorColumn\":{}", tab.cursorColumn);
+        out += "}";
+    });
+    json += "\"openTabs\":";
+    json += openTabsJson;
+    json += ",";
 
-    json += "\"expandedTreeNodes\":[";
-    for (size_t i = 0; i < state.expandedTreeNodes.size(); ++i) {
-        if (i > 0)
-            json += ',';
-        json += std::format("\"{}\"", JsonUtils::escapeString(state.expandedTreeNodes[i]));
-    }
-    json += "]";
+    auto expandedNodesJson = JsonUtils::buildArray(state.expandedTreeNodes, [](std::string& out, const auto& node) { out += std::format(R"("{}")", JsonUtils::escapeString(node)); });
+    json += "\"expandedTreeNodes\":";
+    json += expandedNodesJson;
 
     json += "}";
 
