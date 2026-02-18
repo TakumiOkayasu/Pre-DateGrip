@@ -5,18 +5,14 @@
 
 namespace velocitydb {
 
-class IDatabaseContext;
-
-/// Interface for utility operations (formatting, search, parsing, filtering)
-class IUtilityContext {
+/// Interface for utility operations (formatting, parsing)
+class IUtilityProvider {
 public:
-    virtual ~IUtilityContext() = default;
+    virtual ~IUtilityProvider() = default;
 
     [[nodiscard]] virtual std::string handleUppercaseKeywords(std::string_view params) = 0;
     [[nodiscard]] virtual std::string handleParseA5ER(std::string_view params) = 0;
     [[nodiscard]] virtual std::string handleParseA5ERContent(std::string_view params) = 0;
-    [[nodiscard]] virtual std::string handleSearchObjects(IDatabaseContext& db, std::string_view params) = 0;
-    [[nodiscard]] virtual std::string handleQuickSearch(IDatabaseContext& db, std::string_view params) = 0;
 };
 
 }  // namespace velocitydb

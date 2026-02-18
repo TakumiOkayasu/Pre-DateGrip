@@ -62,36 +62,23 @@ std::string JsonUtils::escapeString(std::string_view str) {
     return result;
 }
 
-std::string JsonUtils::serializeResultSet(const ResultSet& result, bool cached) {
-    // Improved buffer size estimation to minimize reallocations
-    // Base structure: ~150 bytes
-    // Per column: name (avg 20) + type (avg 15) + JSON overhead (30) = ~65 bytes
-    // Per row: overhead (~10 bytes) + per cell (value + escape overhead + quotes/comma ~1.5x value size)
-    size_t estimatedSize = 150 + result.columns.size() * 65;
-    for (const auto& row : result.rows) {
-        estimatedSize += 10;  // Row overhead (brackets, commas)
-        for (const auto& val : row.values) {
-            // Account for escape characters (worst case: ~2x size) + quotes and commas
-            estimatedSize += val.size() * 2 + 5;
-        }
-    }
-
-    std::string json;
-    json.reserve(estimatedSize);
-
-    json += R"({"columns":[)";
-
-    // Columns array - avoid std::format in tight loop for better performance
-    for (size_t i = 0; i < result.columns.size(); ++i) {
+void JsonUtils::appendColumns(std::string& json, const std::vector<ColumnInfo>& columns) {
+    json += R"("columns":[)";
+    for (size_t i = 0; i < columns.size(); ++i) {
         if (i > 0)
             json += ',';
         json += R"({"name":")";
-        json += escapeString(result.columns[i].name);
+        json += escapeString(columns[i].name);
         json += R"(","type":")";
-        json += result.columns[i].type;  // Type names don't need escaping (SQL types are safe)
+        json += columns[i].type;  // Type names don't need escaping (SQL types are safe)
         json += R"("})";
     }
-    json += R"(],"rows":[)";
+    json += ']';
+}
+
+void JsonUtils::appendResultSetFields(std::string& json, const ResultSet& result) {
+    appendColumns(json, result.columns);
+    json += R"(,"rows":[)";
 
     // Rows array - minimize allocations and function calls
     for (size_t rowIndex = 0; rowIndex < result.rows.size(); ++rowIndex) {
@@ -109,11 +96,27 @@ std::string JsonUtils::serializeResultSet(const ResultSet& result, bool cached) 
         json += ']';
     }
 
-    // Metadata - build directly instead of using std::format
     json += R"(],"affectedRows":)";
     json += std::to_string(result.affectedRows);
     json += R"(,"executionTimeMs":)";
     json += std::to_string(result.executionTimeMs);
+}
+
+std::string JsonUtils::serializeResultSet(const ResultSet& result, bool cached) {
+    // Buffer size estimation: base (~150) + columns (~65 each) + rows (per-cell ~2x + overhead)
+    size_t estimatedSize = 150 + result.columns.size() * 65;
+    for (const auto& row : result.rows) {
+        estimatedSize += 10;
+        for (const auto& val : row.values) {
+            estimatedSize += val.size() * 2 + 5;
+        }
+    }
+
+    std::string json;
+    json.reserve(estimatedSize);
+
+    json += '{';
+    appendResultSetFields(json, result);
     json += R"(,"cached":)";
     json += cached ? "true" : "false";
     json += '}';

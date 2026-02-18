@@ -1,18 +1,12 @@
 #pragma once
 
-#include "../interfaces/database_context.h"
-#include "../interfaces/export_context.h"
-#include "../interfaces/io_context.h"
-#include "../interfaces/settings_context.h"
 #include "../interfaces/system_context.h"
-#include "../interfaces/utility_context.h"
 
 #include <memory>
 
 namespace velocitydb {
 
-/// Concrete implementation of ISystemContext, owning all context instances.
-/// Contexts are injected as they are migrated to implement their interfaces.
+/// Concrete implementation of ISystemContext, owning all provider instances.
 class SystemContext : public ISystemContext {
 public:
     SystemContext();
@@ -23,18 +17,28 @@ public:
     SystemContext(SystemContext&&) = delete;
     SystemContext& operator=(SystemContext&&) = delete;
 
-    [[nodiscard]] IDatabaseContext& database() noexcept override;
-    [[nodiscard]] IExportContext& export_ctx() noexcept override;
-    [[nodiscard]] ISettingsContext& settings() noexcept override;
-    [[nodiscard]] IUtilityContext& utility() noexcept override;
-    [[nodiscard]] IIOContext& io() noexcept override;
+    [[nodiscard]] IConnectionProvider& connections() noexcept override;
+    [[nodiscard]] IQueryProvider& queries() noexcept override;
+    [[nodiscard]] IAsyncQueryProvider& async_queries() noexcept override;
+    [[nodiscard]] ISchemaProvider& schema() noexcept override;
+    [[nodiscard]] ITransactionProvider& transactions() noexcept override;
+    [[nodiscard]] IExportProvider& exports() noexcept override;
+    [[nodiscard]] ISearchProvider& search() noexcept override;
+    [[nodiscard]] IUtilityProvider& utility() noexcept override;
+    [[nodiscard]] ISettingsProvider& settings() noexcept override;
+    [[nodiscard]] IIOProvider& io() noexcept override;
 
 private:
-    std::unique_ptr<IDatabaseContext> m_database;
-    std::unique_ptr<IExportContext> m_export;
-    std::unique_ptr<ISettingsContext> m_settings;
-    std::unique_ptr<IUtilityContext> m_utility;
-    std::unique_ptr<IIOContext> m_io;
+    std::unique_ptr<IConnectionProvider> m_connections;
+    std::unique_ptr<IQueryProvider> m_queries;
+    std::unique_ptr<IAsyncQueryProvider> m_asyncQueries;
+    std::unique_ptr<ISchemaProvider> m_schema;
+    std::unique_ptr<ITransactionProvider> m_transactions;
+    std::unique_ptr<IExportProvider> m_exports;
+    std::unique_ptr<ISearchProvider> m_search;
+    std::unique_ptr<IUtilityProvider> m_utility;
+    std::unique_ptr<ISettingsProvider> m_settings;
+    std::unique_ptr<IIOProvider> m_io;
 };
 
 }  // namespace velocitydb

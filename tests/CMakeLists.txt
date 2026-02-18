@@ -29,8 +29,8 @@ set(TEST_SOURCES
     parsers/test_a5er_parser.cpp
     parsers/test_sql_formatter.cpp
     exporters/test_csv_exporter.cpp
-    contexts/test_settings_context.cpp
-    contexts/test_utility_context.cpp
+    providers/test_settings_provider.cpp
+    providers/test_utility_provider.cpp
     utils/test_sql_validation.cpp
 )
 

@@ -6,9 +6,9 @@
 namespace velocitydb {
 
 /// Interface for application settings and session management
-class ISettingsContext {
+class ISettingsProvider {
 public:
-    virtual ~ISettingsContext() = default;
+    virtual ~ISettingsProvider() = default;
 
     [[nodiscard]] virtual std::string handleGetSettings() = 0;
     [[nodiscard]] virtual std::string handleUpdateSettings(std::string_view params) = 0;

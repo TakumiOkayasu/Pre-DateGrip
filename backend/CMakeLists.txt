@@ -25,12 +25,18 @@ set(LIB_SOURCES
     database/odbc_driver_detector.cpp
     database/connection_utils.cpp
     # Contexts
-    contexts/database_context.cpp
-    contexts/export_context.cpp
-    contexts/settings_context.cpp
-    contexts/utility_context.cpp
-    contexts/io_context.cpp
     contexts/system_context.cpp
+    # Providers
+    providers/connection_provider.cpp
+    providers/query_provider.cpp
+    providers/async_query_provider.cpp
+    providers/schema_provider.cpp
+    providers/transaction_provider.cpp
+    providers/export_provider.cpp
+    providers/search_provider.cpp
+    providers/utility_provider.cpp
+    providers/settings_provider.cpp
+    providers/io_provider.cpp
     # Parsers
     parsers/a5er_parser.cpp
     parsers/a5er_utils.cpp
@@ -60,14 +66,6 @@ endif()
 set(HEADERS
     webview_app.h
     ipc_handler.h
-    # Interfaces
-    interfaces/queryable.h
-    interfaces/connectable.h
-    interfaces/exportable.h
-    interfaces/formattable.h
-    interfaces/searchable.h
-    interfaces/cacheable.h
-    interfaces/storable.h
     # Database
     database/driver_interface.h
     database/sqlserver_driver.h
@@ -80,20 +78,31 @@ set(HEADERS
     database/transaction_manager.h
     database/odbc_driver_detector.h
     database/connection_utils.h
-    # Interfaces (Context)
+    # Interfaces (Provider)
     interfaces/system_context.h
-    interfaces/database_context.h
-    interfaces/export_context.h
-    interfaces/settings_context.h
-    interfaces/utility_context.h
-    interfaces/io_context.h
+    interfaces/providers/connection_provider.h
+    interfaces/providers/query_provider.h
+    interfaces/providers/async_query_provider.h
+    interfaces/providers/schema_provider.h
+    interfaces/providers/transaction_provider.h
+    interfaces/providers/export_provider.h
+    interfaces/providers/search_provider.h
+    interfaces/providers/utility_provider.h
+    interfaces/providers/settings_provider.h
+    interfaces/providers/io_provider.h
     # Contexts
-    contexts/database_context.h
-    contexts/export_context.h
-    contexts/settings_context.h
-    contexts/utility_context.h
-    contexts/io_context.h
     contexts/system_context.h
+    # Providers
+    providers/connection_provider.h
+    providers/query_provider.h
+    providers/async_query_provider.h
+    providers/schema_provider.h
+    providers/transaction_provider.h
+    providers/export_provider.h
+    providers/search_provider.h
+    providers/utility_provider.h
+    providers/settings_provider.h
+    providers/io_provider.h
     # Parsers
     parsers/a5er_parser.h
     parsers/a5er_utils.h
