@@ -120,6 +120,7 @@ set(HEADERS
     utils/file_dialog.h
     utils/settings_manager.h
     utils/session_manager.h
+    utils/glaze_meta.h
     utils/global_search.h
     utils/credential_protector.h
     utils/logger.h
@@ -142,11 +143,17 @@ target_link_libraries(VelocityDBCore PUBLIC
     webview
     simdjson
     pugixml
+    glaze::glaze
     odbc32
     odbccp32
     crypt32
     comdlg32
 )
+
+# Glaze requires /Zc:preprocessor for MSVC (conformant preprocessor)
+if(MSVC)
+    target_compile_options(VelocityDBCore PRIVATE /Zc:preprocessor)
+endif()
 
 # Link libssh2 if available
 if(SSH_TUNNEL_ENABLED)

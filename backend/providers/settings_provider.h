@@ -22,16 +22,16 @@ public:
     SettingsProvider(SettingsProvider&&) noexcept;
     SettingsProvider& operator=(SettingsProvider&&) noexcept;
 
-    [[nodiscard]] std::string handleGetSettings() override;
-    [[nodiscard]] std::string handleUpdateSettings(std::string_view params) override;
-    [[nodiscard]] std::string handleGetConnectionProfiles() override;
-    [[nodiscard]] std::string handleSaveConnectionProfile(std::string_view params) override;
-    [[nodiscard]] std::string handleDeleteConnectionProfile(std::string_view params) override;
-    [[nodiscard]] std::string handleGetProfilePassword(std::string_view params) override;
-    [[nodiscard]] std::string handleGetSshPassword(std::string_view params) override;
-    [[nodiscard]] std::string handleGetSshKeyPassphrase(std::string_view params) override;
-    [[nodiscard]] std::string handleGetSessionState() override;
-    [[nodiscard]] std::string handleSaveSessionState(std::string_view params) override;
+    [[nodiscard]] std::string getSettings() override;
+    [[nodiscard]] std::string updateSettings(std::string_view params) override;
+    [[nodiscard]] std::string getConnectionProfiles() override;
+    [[nodiscard]] std::string saveConnectionProfile(std::string_view params) override;
+    [[nodiscard]] std::string deleteConnectionProfile(std::string_view params) override;
+    [[nodiscard]] std::string getProfilePassword(std::string_view params) override;
+    [[nodiscard]] std::string getSshPassword(std::string_view params) override;
+    [[nodiscard]] std::string getSshKeyPassphrase(std::string_view params) override;
+    [[nodiscard]] std::string getSessionState() override;
+    [[nodiscard]] std::string saveSessionState(std::string_view params) override;
 
     [[nodiscard]] SettingsManager& settingsManager() { return *m_settingsManager; }
     [[nodiscard]] const SettingsManager& settingsManager() const { return *m_settingsManager; }

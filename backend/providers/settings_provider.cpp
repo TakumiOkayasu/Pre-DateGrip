@@ -1,5 +1,6 @@
 #include "settings_provider.h"
 
+#include "../utils/glaze_meta.h"
 #include "../utils/json_utils.h"
 #include "../utils/session_manager.h"
 #include "../utils/settings_manager.h"
@@ -9,6 +10,135 @@
 #include <chrono>
 #include <climits>
 #include <format>
+#include <ranges>
+
+// --- Response DTOs (exclude sensitive fields from API responses) ---
+// Lifetime: string_view/pointer members reference source objects.
+//           Callers must serialize within the same scope as the source.
+// Design:   SettingsResponse copies sub-structs (small, infrequent reads).
+//           ConnectionProfile/SessionState DTOs use views (larger, avoids heap allocs).
+
+namespace velocitydb::dto {
+
+struct SettingsResponse {
+    GeneralSettings general;
+    EditorSettings editor;
+    GridSettings grid;
+};
+
+struct SshConfigResponse {
+    bool enabled = false;
+    std::string_view host;
+    int port = 22;
+    std::string_view username;
+    SshAuthType authType = SshAuthType::Password;
+    std::string_view privateKeyPath;
+    bool savePassword = false;
+};
+
+struct ConnectionProfileResponse {
+    std::string_view id;
+    std::string_view name;
+    std::string_view server;
+    int port = 1433;
+    std::string_view database;
+    std::string_view username;
+    bool useWindowsAuth = true;
+    bool savePassword = false;
+    bool isProduction = false;
+    bool isReadOnly = false;
+    std::string_view environment;
+    std::string_view dbType;
+    SshConfigResponse ssh;
+};
+
+struct SessionStateResponse {
+    std::string_view activeConnectionId;
+    std::string_view activeTabId;
+    const std::vector<EditorTab>* openTabs = nullptr;
+    const std::vector<std::string>* expandedTreeNodes = nullptr;
+    int windowWidth = 1280;
+    int windowHeight = 720;
+    int windowX = 100;
+    int windowY = 100;
+    bool isMaximized = false;
+    int leftPanelWidth = 250;
+    int bottomPanelHeight = 200;
+};
+
+[[nodiscard]] ConnectionProfileResponse toProfileResponse(const ConnectionProfile& p) {
+    return {
+        .id = p.id,
+        .name = p.name,
+        .server = p.server,
+        .port = p.port,
+        .database = p.database,
+        .username = p.username,
+        .useWindowsAuth = p.useWindowsAuth,
+        .savePassword = p.savePassword,
+        .isProduction = p.isProduction,
+        .isReadOnly = p.isReadOnly,
+        .environment = p.environment,
+        .dbType = p.dbType,
+        .ssh =
+            {
+                .enabled = p.ssh.enabled,
+                .host = p.ssh.host,
+                .port = p.ssh.port,
+                .username = p.ssh.username,
+                .authType = p.ssh.authType,
+                .privateKeyPath = p.ssh.privateKeyPath,
+                .savePassword = !p.ssh.encryptedPassword.empty() || !p.ssh.encryptedKeyPassphrase.empty(),
+            },
+    };
+}
+
+[[nodiscard]] SessionStateResponse toSessionResponse(const SessionState& s) {
+    return {
+        .activeConnectionId = s.activeConnectionId,
+        .activeTabId = s.activeTabId,
+        .openTabs = &s.openTabs,
+        .expandedTreeNodes = &s.expandedTreeNodes,
+        .windowWidth = s.windowWidth,
+        .windowHeight = s.windowHeight,
+        .windowX = s.windowX,
+        .windowY = s.windowY,
+        .isMaximized = s.isMaximized,
+        .leftPanelWidth = s.leftPanelWidth,
+        .bottomPanelHeight = s.bottomPanelHeight,
+    };
+}
+
+}  // namespace velocitydb::dto
+
+template <>
+struct glz::meta<velocitydb::dto::SettingsResponse> {
+    using T = velocitydb::dto::SettingsResponse;
+    static constexpr auto value = glz::object("general", &T::general, "editor", &T::editor, "grid", &T::grid);
+};
+
+template <>
+struct glz::meta<velocitydb::dto::SshConfigResponse> {
+    using T = velocitydb::dto::SshConfigResponse;
+    static constexpr auto value = glz::object("enabled", &T::enabled, "host", &T::host, "port", &T::port, "username", &T::username, "authType", &T::authType, "privateKeyPath", &T::privateKeyPath,
+                                              "savePassword", &T::savePassword);
+};
+
+template <>
+struct glz::meta<velocitydb::dto::ConnectionProfileResponse> {
+    using T = velocitydb::dto::ConnectionProfileResponse;
+    static constexpr auto value =
+        glz::object("id", &T::id, "name", &T::name, "server", &T::server, "port", &T::port, "database", &T::database, "username", &T::username, "useWindowsAuth", &T::useWindowsAuth, "savePassword",
+                    &T::savePassword, "isProduction", &T::isProduction, "isReadOnly", &T::isReadOnly, "environment", &T::environment, "dbType", &T::dbType, "ssh", &T::ssh);
+};
+
+template <>
+struct glz::meta<velocitydb::dto::SessionStateResponse> {
+    using T = velocitydb::dto::SessionStateResponse;
+    static constexpr auto value = glz::object("activeConnectionId", &T::activeConnectionId, "activeTabId", &T::activeTabId, "openTabs", &T::openTabs, "expandedTreeNodes", &T::expandedTreeNodes,
+                                              "windowWidth", &T::windowWidth, "windowHeight", &T::windowHeight, "windowX", &T::windowX, "windowY", &T::windowY, "isMaximized", &T::isMaximized,
+                                              "leftPanelWidth", &T::leftPanelWidth, "bottomPanelHeight", &T::bottomPanelHeight);
+};
 
 namespace velocitydb {
 
@@ -29,45 +159,17 @@ SettingsProvider::~SettingsProvider() = default;
 SettingsProvider::SettingsProvider(SettingsProvider&&) noexcept = default;
 SettingsProvider& SettingsProvider::operator=(SettingsProvider&&) noexcept = default;
 
-std::string SettingsProvider::handleGetSettings() {
-    const auto& settings = m_settingsManager->getSettings();
-
-    std::string json = "{";
-
-    json += "\"general\":{";
-    json += std::format("\"autoConnect\":{},", settings.general.autoConnect ? "true" : "false");
-    json += std::format("\"lastConnectionId\":\"{}\",", JsonUtils::escapeString(settings.general.lastConnectionId));
-    json += std::format("\"confirmOnExit\":{},", settings.general.confirmOnExit ? "true" : "false");
-    json += std::format("\"maxQueryHistory\":{},", settings.general.maxQueryHistory);
-    json += std::format("\"maxRecentConnections\":{},", settings.general.maxRecentConnections);
-    json += std::format("\"language\":\"{}\"", JsonUtils::escapeString(settings.general.language));
-    json += "},";
-
-    json += "\"editor\":{";
-    json += std::format("\"fontSize\":{},", settings.editor.fontSize);
-    json += std::format("\"fontFamily\":\"{}\",", JsonUtils::escapeString(settings.editor.fontFamily));
-    json += std::format("\"wordWrap\":{},", settings.editor.wordWrap ? "true" : "false");
-    json += std::format("\"tabSize\":{},", settings.editor.tabSize);
-    json += std::format("\"insertSpaces\":{},", settings.editor.insertSpaces ? "true" : "false");
-    json += std::format("\"showLineNumbers\":{},", settings.editor.showLineNumbers ? "true" : "false");
-    json += std::format("\"showMinimap\":{},", settings.editor.showMinimap ? "true" : "false");
-    json += std::format("\"theme\":\"{}\"", JsonUtils::escapeString(settings.editor.theme));
-    json += "},";
-
-    json += "\"grid\":{";
-    json += std::format("\"defaultPageSize\":{},", settings.grid.defaultPageSize);
-    json += std::format("\"showRowNumbers\":{},", settings.grid.showRowNumbers ? "true" : "false");
-    json += std::format("\"enableCellEditing\":{},", settings.grid.enableCellEditing ? "true" : "false");
-    json += std::format("\"dateFormat\":\"{}\",", JsonUtils::escapeString(settings.grid.dateFormat));
-    json += std::format("\"nullDisplay\":\"{}\"", JsonUtils::escapeString(settings.grid.nullDisplay));
-    json += "}";
-
-    json += "}";
-
+std::string SettingsProvider::getSettings() {
+    const auto& s = m_settingsManager->getSettings();
+    dto::SettingsResponse resp{s.general, s.editor, s.grid};
+    std::string json;
+    if (auto ec = glz::write_json(resp, json); bool(ec)) {
+        return JsonUtils::errorResponse("Failed to serialize settings");
+    }
     return JsonUtils::successResponse(json);
 }
 
-std::string SettingsProvider::handleUpdateSettings(std::string_view params) {
+std::string SettingsProvider::updateSettings(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -129,39 +231,17 @@ std::string SettingsProvider::handleUpdateSettings(std::string_view params) {
     }
 }
 
-std::string SettingsProvider::handleGetConnectionProfiles() {
+std::string SettingsProvider::getConnectionProfiles() {
     const auto& profiles = m_settingsManager->getConnectionProfiles();
-
-    auto profilesJson = JsonUtils::buildArray(profiles, [](std::string& out, const auto& p) {
-        out += "{";
-        out += std::format("\"id\":\"{}\",", JsonUtils::escapeString(p.id));
-        out += std::format("\"name\":\"{}\",", JsonUtils::escapeString(p.name));
-        out += std::format("\"server\":\"{}\",", JsonUtils::escapeString(p.server));
-        out += std::format("\"port\":{},", p.port);
-        out += std::format("\"database\":\"{}\",", JsonUtils::escapeString(p.database));
-        out += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.username));
-        out += std::format("\"useWindowsAuth\":{},", p.useWindowsAuth ? "true" : "false");
-        out += std::format("\"savePassword\":{},", p.savePassword ? "true" : "false");
-        out += std::format("\"isProduction\":{},", p.isProduction ? "true" : "false");
-        out += std::format("\"isReadOnly\":{},", p.isReadOnly ? "true" : "false");
-        out += std::format("\"environment\":\"{}\",", JsonUtils::escapeString(p.environment));
-        out += std::format("\"dbType\":\"{}\",", JsonUtils::escapeString(p.dbType));
-        out += "\"ssh\":{";
-        out += std::format("\"enabled\":{},", p.ssh.enabled ? "true" : "false");
-        out += std::format("\"host\":\"{}\",", JsonUtils::escapeString(p.ssh.host));
-        out += std::format("\"port\":{},", p.ssh.port);
-        out += std::format("\"username\":\"{}\",", JsonUtils::escapeString(p.ssh.username));
-        out += std::format("\"authType\":\"{}\",", p.ssh.authType == SshAuthType::Password ? "password" : "privateKey");
-        out += std::format("\"privateKeyPath\":\"{}\",", JsonUtils::escapeString(p.ssh.privateKeyPath));
-        out += std::format("\"savePassword\":{}", !p.ssh.encryptedPassword.empty() || !p.ssh.encryptedKeyPassphrase.empty() ? "true" : "false");
-        out += "}}";
-    });
-    std::string json = std::format(R"({{"profiles":{}}})", profilesJson);
-
-    return JsonUtils::successResponse(json);
+    auto responses = profiles | std::views::transform(dto::toProfileResponse) | std::ranges::to<std::vector>();
+    std::string profilesJson;
+    if (auto ec = glz::write_json(responses, profilesJson); bool(ec)) {
+        return JsonUtils::errorResponse("Failed to serialize connection profiles");
+    }
+    return JsonUtils::successResponse(std::format(R"({{"profiles":{}}})", profilesJson));
 }
 
-std::string SettingsProvider::handleSaveConnectionProfile(std::string_view params) {
+std::string SettingsProvider::saveConnectionProfile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -256,7 +336,7 @@ std::string SettingsProvider::handleSaveConnectionProfile(std::string_view param
     }
 }
 
-std::string SettingsProvider::handleDeleteConnectionProfile(std::string_view params) {
+std::string SettingsProvider::deleteConnectionProfile(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -275,7 +355,7 @@ std::string SettingsProvider::handleDeleteConnectionProfile(std::string_view par
     }
 }
 
-std::string SettingsProvider::handleGetProfilePassword(std::string_view params) {
+std::string SettingsProvider::getProfilePassword(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -297,7 +377,7 @@ std::string SettingsProvider::handleGetProfilePassword(std::string_view params) 
     }
 }
 
-std::string SettingsProvider::handleGetSshPassword(std::string_view params) {
+std::string SettingsProvider::getSshPassword(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -319,7 +399,7 @@ std::string SettingsProvider::handleGetSshPassword(std::string_view params) {
     }
 }
 
-std::string SettingsProvider::handleGetSshKeyPassphrase(std::string_view params) {
+std::string SettingsProvider::getSshKeyPassphrase(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
@@ -341,45 +421,17 @@ std::string SettingsProvider::handleGetSshKeyPassphrase(std::string_view params)
     }
 }
 
-std::string SettingsProvider::handleGetSessionState() {
+std::string SettingsProvider::getSessionState() {
     const auto& state = m_sessionManager->getState();
-
-    std::string json = "{";
-    json += std::format("\"activeConnectionId\":\"{}\",", JsonUtils::escapeString(state.activeConnectionId));
-    json += std::format("\"activeTabId\":\"{}\",", JsonUtils::escapeString(state.activeTabId));
-    json += std::format("\"windowX\":{},", state.windowX);
-    json += std::format("\"windowY\":{},", state.windowY);
-    json += std::format("\"windowWidth\":{},", state.windowWidth);
-    json += std::format("\"windowHeight\":{},", state.windowHeight);
-    json += std::format("\"isMaximized\":{},", state.isMaximized ? "true" : "false");
-    json += std::format("\"leftPanelWidth\":{},", state.leftPanelWidth);
-    json += std::format("\"bottomPanelHeight\":{},", state.bottomPanelHeight);
-
-    auto openTabsJson = JsonUtils::buildArray(state.openTabs, [](std::string& out, const auto& tab) {
-        out += "{";
-        out += std::format("\"id\":\"{}\",", JsonUtils::escapeString(tab.id));
-        out += std::format("\"title\":\"{}\",", JsonUtils::escapeString(tab.title));
-        out += std::format("\"content\":\"{}\",", JsonUtils::escapeString(tab.content));
-        out += std::format("\"filePath\":\"{}\",", JsonUtils::escapeString(tab.filePath));
-        out += std::format("\"isDirty\":{},", tab.isDirty ? "true" : "false");
-        out += std::format("\"cursorLine\":{},", tab.cursorLine);
-        out += std::format("\"cursorColumn\":{}", tab.cursorColumn);
-        out += "}";
-    });
-    json += "\"openTabs\":";
-    json += openTabsJson;
-    json += ",";
-
-    auto expandedNodesJson = JsonUtils::buildArray(state.expandedTreeNodes, [](std::string& out, const auto& node) { out += std::format(R"("{}")", JsonUtils::escapeString(node)); });
-    json += "\"expandedTreeNodes\":";
-    json += expandedNodesJson;
-
-    json += "}";
-
+    auto resp = dto::toSessionResponse(state);
+    std::string json;
+    if (auto ec = glz::write_json(resp, json); bool(ec)) {
+        return JsonUtils::errorResponse("Failed to serialize session state");
+    }
     return JsonUtils::successResponse(json);
 }
 
-std::string SettingsProvider::handleSaveSessionState(std::string_view params) {
+std::string SettingsProvider::saveSessionState(std::string_view params) {
     try {
         simdjson::dom::parser parser;
         auto doc = parser.parse(params);
