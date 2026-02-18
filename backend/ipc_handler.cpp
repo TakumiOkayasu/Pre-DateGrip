@@ -87,16 +87,16 @@ void IPCHandler::registerRoutes() {
     m_routes["quickSearch"] = [this](auto p) { return m_ctx.search().handleQuickSearch(p); };
 
     // Settings
-    m_routes["getSettings"] = [this](auto) { return m_ctx.settings().handleGetSettings(); };
-    m_routes["updateSettings"] = [this](auto p) { return m_ctx.settings().handleUpdateSettings(p); };
-    m_routes["getConnectionProfiles"] = [this](auto) { return m_ctx.settings().handleGetConnectionProfiles(); };
-    m_routes["saveConnectionProfile"] = [this](auto p) { return m_ctx.settings().handleSaveConnectionProfile(p); };
-    m_routes["deleteConnectionProfile"] = [this](auto p) { return m_ctx.settings().handleDeleteConnectionProfile(p); };
-    m_routes["getProfilePassword"] = [this](auto p) { return m_ctx.settings().handleGetProfilePassword(p); };
-    m_routes["getSshPassword"] = [this](auto p) { return m_ctx.settings().handleGetSshPassword(p); };
-    m_routes["getSshKeyPassphrase"] = [this](auto p) { return m_ctx.settings().handleGetSshKeyPassphrase(p); };
-    m_routes["getSessionState"] = [this](auto) { return m_ctx.settings().handleGetSessionState(); };
-    m_routes["saveSessionState"] = [this](auto p) { return m_ctx.settings().handleSaveSessionState(p); };
+    m_routes["getSettings"] = [this](auto) { return m_ctx.settings().getSettings(); };
+    m_routes["updateSettings"] = [this](auto p) { return m_ctx.settings().updateSettings(p); };
+    m_routes["getConnectionProfiles"] = [this](auto) { return m_ctx.settings().getConnectionProfiles(); };
+    m_routes["saveConnectionProfile"] = [this](auto p) { return m_ctx.settings().saveConnectionProfile(p); };
+    m_routes["deleteConnectionProfile"] = [this](auto p) { return m_ctx.settings().deleteConnectionProfile(p); };
+    m_routes["getProfilePassword"] = [this](auto p) { return m_ctx.settings().getProfilePassword(p); };
+    m_routes["getSshPassword"] = [this](auto p) { return m_ctx.settings().getSshPassword(p); };
+    m_routes["getSshKeyPassphrase"] = [this](auto p) { return m_ctx.settings().getSshKeyPassphrase(p); };
+    m_routes["getSessionState"] = [this](auto) { return m_ctx.settings().getSessionState(); };
+    m_routes["saveSessionState"] = [this](auto p) { return m_ctx.settings().saveSessionState(p); };
 
     // IO
     m_routes["writeFrontendLog"] = [this](auto p) { return m_ctx.io().handleWriteFrontendLog(p); };

@@ -1,7 +1,7 @@
 #include "session_manager.h"
 
-#include "json_utils.h"
-#include "simdjson.h"
+#include "glaze_meta.h"
+#include "logger.h"
 
 #include <Windows.h>
 
@@ -50,12 +50,17 @@ bool SessionManager::save() {
 
     m_state.lastSaved = std::chrono::system_clock::now();
 
+    auto json = serializeSession();
+    if (json.empty()) {
+        return false;  // Serialization failed — preserve existing file
+    }
+
     std::ofstream file(m_sessionPath);
     if (!file.is_open()) {
         return false;
     }
 
-    file << serializeSession();
+    file << json;
     return file.good();
 }
 
@@ -125,123 +130,21 @@ std::filesystem::path SessionManager::getSessionPath() const {
 }
 
 std::string SessionManager::serializeSession() const {
-    std::string json = "{\n";
-
-    // Basic state
-    json += std::format("  \"activeConnectionId\": \"{}\",\n", JsonUtils::escapeString(m_state.activeConnectionId));
-    json += std::format("  \"activeTabId\": \"{}\",\n", JsonUtils::escapeString(m_state.activeTabId));
-
-    // Window state
-    json += std::format("  \"windowX\": {},\n", m_state.windowX);
-    json += std::format("  \"windowY\": {},\n", m_state.windowY);
-    json += std::format("  \"windowWidth\": {},\n", m_state.windowWidth);
-    json += std::format("  \"windowHeight\": {},\n", m_state.windowHeight);
-    json += std::format("  \"isMaximized\": {},\n", m_state.isMaximized ? "true" : "false");
-    json += std::format("  \"leftPanelWidth\": {},\n", m_state.leftPanelWidth);
-    json += std::format("  \"bottomPanelHeight\": {},\n", m_state.bottomPanelHeight);
-
-    // Last saved timestamp
-    auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(m_state.lastSaved.time_since_epoch()).count();
-    json += std::format("  \"lastSaved\": {},\n", timestamp);
-
-    // Open tabs
-    json += "  \"openTabs\": [\n";
-    for (size_t i = 0; i < m_state.openTabs.size(); ++i) {
-        const auto& tab = m_state.openTabs[i];
-        json += "    {\n";
-        json += std::format("      \"id\": \"{}\",\n", JsonUtils::escapeString(tab.id));
-        json += std::format("      \"title\": \"{}\",\n", JsonUtils::escapeString(tab.title));
-        json += std::format("      \"content\": \"{}\",\n", JsonUtils::escapeString(tab.content));
-        json += std::format("      \"filePath\": \"{}\",\n", JsonUtils::escapeString(tab.filePath));
-        json += std::format("      \"isDirty\": {},\n", tab.isDirty ? "true" : "false");
-        json += std::format("      \"cursorLine\": {},\n", tab.cursorLine);
-        json += std::format("      \"cursorColumn\": {}\n", tab.cursorColumn);
-        json += i < m_state.openTabs.size() - 1 ? "    },\n" : "    }\n";
+    std::string buffer;
+    if (auto ec = glz::write<glz::opts{.prettify = true}>(m_state, buffer); bool(ec)) {
+        log<LogLevel::WARNING>("Failed to serialize session state");
+        return {};
     }
-    json += "  ],\n";
-
-    // Expanded tree nodes
-    json += "  \"expandedTreeNodes\": [";
-    for (size_t i = 0; i < m_state.expandedTreeNodes.size(); ++i) {
-        if (i > 0)
-            json += ", ";
-        json += std::format("\"{}\"", JsonUtils::escapeString(m_state.expandedTreeNodes[i]));
-    }
-    json += "]\n";
-
-    json += "}\n";
-    return json;
+    return buffer;
 }
 
-bool SessionManager::deserializeSession(std::string_view jsonStr) {
-    try {
-        simdjson::dom::parser parser;
-        auto doc = parser.parse(jsonStr);
-
-        // Basic state
-        if (auto val = doc["activeConnectionId"].get_string(); !val.error())
-            m_state.activeConnectionId = std::string(val.value());
-        if (auto val = doc["activeTabId"].get_string(); !val.error())
-            m_state.activeTabId = std::string(val.value());
-
-        // Window state
-        if (auto val = doc["windowX"].get_int64(); !val.error())
-            m_state.windowX = static_cast<int>(val.value());
-        if (auto val = doc["windowY"].get_int64(); !val.error())
-            m_state.windowY = static_cast<int>(val.value());
-        if (auto val = doc["windowWidth"].get_int64(); !val.error())
-            m_state.windowWidth = static_cast<int>(val.value());
-        if (auto val = doc["windowHeight"].get_int64(); !val.error())
-            m_state.windowHeight = static_cast<int>(val.value());
-        if (auto val = doc["isMaximized"].get_bool(); !val.error())
-            m_state.isMaximized = val.value();
-        if (auto val = doc["leftPanelWidth"].get_int64(); !val.error())
-            m_state.leftPanelWidth = static_cast<int>(val.value());
-        if (auto val = doc["bottomPanelHeight"].get_int64(); !val.error())
-            m_state.bottomPanelHeight = static_cast<int>(val.value());
-
-        // Last saved timestamp
-        if (auto val = doc["lastSaved"].get_int64(); !val.error()) {
-            m_state.lastSaved = std::chrono::system_clock::time_point(std::chrono::seconds(val.value()));
-        }
-
-        // Open tabs
-        m_state.openTabs.clear();
-        if (auto tabs = doc["openTabs"].get_array(); !tabs.error()) {
-            for (auto tabEl : tabs.value()) {
-                EditorTab tab;
-                if (auto val = tabEl["id"].get_string(); !val.error())
-                    tab.id = std::string(val.value());
-                if (auto val = tabEl["title"].get_string(); !val.error())
-                    tab.title = std::string(val.value());
-                if (auto val = tabEl["content"].get_string(); !val.error())
-                    tab.content = std::string(val.value());
-                if (auto val = tabEl["filePath"].get_string(); !val.error())
-                    tab.filePath = std::string(val.value());
-                if (auto val = tabEl["isDirty"].get_bool(); !val.error())
-                    tab.isDirty = val.value();
-                if (auto val = tabEl["cursorLine"].get_int64(); !val.error())
-                    tab.cursorLine = static_cast<int>(val.value());
-                if (auto val = tabEl["cursorColumn"].get_int64(); !val.error())
-                    tab.cursorColumn = static_cast<int>(val.value());
-                m_state.openTabs.push_back(tab);
-            }
-        }
-
-        // Expanded tree nodes
-        m_state.expandedTreeNodes.clear();
-        if (auto nodes = doc["expandedTreeNodes"].get_array(); !nodes.error()) {
-            for (auto nodeEl : nodes.value()) {
-                if (auto val = nodeEl.get_string(); !val.error()) {
-                    m_state.expandedTreeNodes.push_back(std::string(val.value()));
-                }
-            }
-        }
-
-        return true;
-    } catch (...) {
+bool SessionManager::deserializeSession(std::string_view json) {
+    auto ec = glz::read_json(m_state, json);
+    if (bool(ec)) {
+        log<LogLevel::WARNING>(std::format("Failed to parse session.json: {}", glz::format_error(ec, json)));
         return false;
     }
+    return true;
 }
 
 }  // namespace velocitydb

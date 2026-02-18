@@ -31,6 +31,10 @@ struct SessionState {
     int leftPanelWidth = 250;
     int bottomPanelHeight = 200;
     std::chrono::system_clock::time_point lastSaved;
+
+    // Glaze custom serialization (lastSaved as Unix epoch seconds)
+    void readLastSavedEpoch(int64_t epoch) { lastSaved = std::chrono::system_clock::time_point(std::chrono::seconds(epoch)); }
+    [[nodiscard]] int64_t writeLastSavedEpoch() const { return std::chrono::duration_cast<std::chrono::seconds>(lastSaved.time_since_epoch()).count(); }
 };
 
 class SessionManager {

@@ -49,5 +49,16 @@ else()
     target_compile_definitions(pugixml INTERFACE PUGIXML_HEADER_ONLY)
 endif()
 
+# Glaze - C++23 JSON reflection library
+# https://github.com/stephenberry/glaze
+include(FetchContent)
+FetchContent_Declare(
+    glaze
+    URL https://github.com/stephenberry/glaze/archive/refs/tags/v5.0.0.tar.gz
+    URL_HASH SHA256=37e4ab809f18c5497a35481f347c1ed63761324644e358d92a7a11fe647fd44a
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(glaze)
+
 # Note: xlsxwriter requires separate build
 # For now, it's disabled until properly integrated

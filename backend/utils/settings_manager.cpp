@@ -1,8 +1,8 @@
 #include "settings_manager.h"
 
 #include "credential_protector.h"
-#include "json_utils.h"
-#include "simdjson.h"
+#include "glaze_meta.h"
+#include "logger.h"
 
 #include <Windows.h>
 
@@ -57,12 +57,17 @@ bool SettingsManager::load() {
 bool SettingsManager::save() {
     std::lock_guard lock(m_mutex);
 
+    auto json = serializeSettings();
+    if (json.empty()) {
+        return false;  // Serialization failed — preserve existing file
+    }
+
     std::ofstream file(m_settingsPath);
     if (!file.is_open()) {
         return false;
     }
 
-    file << serializeSettings();
+    file << json;
     return file.good();
 }
 
@@ -215,212 +220,21 @@ std::expected<std::string, std::string> SettingsManager::getSshKeyPassphrase(con
 }
 
 std::string SettingsManager::serializeSettings() const {
-    std::string json = "{\n";
-
-    // General settings
-    json += "  \"general\": {\n";
-    json += std::format("    \"autoConnect\": {},\n", m_settings.general.autoConnect ? "true" : "false");
-    json += std::format("    \"lastConnectionId\": \"{}\",\n", JsonUtils::escapeString(m_settings.general.lastConnectionId));
-    json += std::format("    \"confirmOnExit\": {},\n", m_settings.general.confirmOnExit ? "true" : "false");
-    json += std::format("    \"maxQueryHistory\": {},\n", m_settings.general.maxQueryHistory);
-    json += std::format("    \"maxRecentConnections\": {},\n", m_settings.general.maxRecentConnections);
-    json += std::format("    \"language\": \"{}\"\n", JsonUtils::escapeString(m_settings.general.language));
-    json += "  },\n";
-
-    // Editor settings
-    json += "  \"editor\": {\n";
-    json += std::format("    \"fontSize\": {},\n", m_settings.editor.fontSize);
-    json += std::format("    \"fontFamily\": \"{}\",\n", JsonUtils::escapeString(m_settings.editor.fontFamily));
-    json += std::format("    \"wordWrap\": {},\n", m_settings.editor.wordWrap ? "true" : "false");
-    json += std::format("    \"tabSize\": {},\n", m_settings.editor.tabSize);
-    json += std::format("    \"insertSpaces\": {},\n", m_settings.editor.insertSpaces ? "true" : "false");
-    json += std::format("    \"showLineNumbers\": {},\n", m_settings.editor.showLineNumbers ? "true" : "false");
-    json += std::format("    \"showMinimap\": {},\n", m_settings.editor.showMinimap ? "true" : "false");
-    json += std::format("    \"theme\": \"{}\"\n", JsonUtils::escapeString(m_settings.editor.theme));
-    json += "  },\n";
-
-    // Grid settings
-    json += "  \"grid\": {\n";
-    json += std::format("    \"defaultPageSize\": {},\n", m_settings.grid.defaultPageSize);
-    json += std::format("    \"showRowNumbers\": {},\n", m_settings.grid.showRowNumbers ? "true" : "false");
-    json += std::format("    \"enableCellEditing\": {},\n", m_settings.grid.enableCellEditing ? "true" : "false");
-    json += std::format("    \"dateFormat\": \"{}\",\n", JsonUtils::escapeString(m_settings.grid.dateFormat));
-    json += std::format("    \"nullDisplay\": \"{}\"\n", JsonUtils::escapeString(m_settings.grid.nullDisplay));
-    json += "  },\n";
-
-    // Window settings
-    json += "  \"window\": {\n";
-    json += std::format("    \"width\": {},\n", m_settings.window.width);
-    json += std::format("    \"height\": {},\n", m_settings.window.height);
-    json += std::format("    \"x\": {},\n", m_settings.window.x);
-    json += std::format("    \"y\": {},\n", m_settings.window.y);
-    json += std::format("    \"isMaximized\": {}\n", m_settings.window.isMaximized ? "true" : "false");
-    json += "  },\n";
-
-    // Connection profiles
-    json += "  \"connectionProfiles\": [\n";
-    for (size_t i = 0; i < m_settings.connectionProfiles.size(); ++i) {
-        const auto& profile = m_settings.connectionProfiles[i];
-        json += "    {\n";
-        json += std::format("      \"id\": \"{}\",\n", JsonUtils::escapeString(profile.id));
-        json += std::format("      \"name\": \"{}\",\n", JsonUtils::escapeString(profile.name));
-        json += std::format("      \"server\": \"{}\",\n", JsonUtils::escapeString(profile.server));
-        json += std::format("      \"port\": {},\n", profile.port);
-        json += std::format("      \"database\": \"{}\",\n", JsonUtils::escapeString(profile.database));
-        json += std::format("      \"username\": \"{}\",\n", JsonUtils::escapeString(profile.username));
-        json += std::format("      \"useWindowsAuth\": {},\n", profile.useWindowsAuth ? "true" : "false");
-        json += std::format("      \"savePassword\": {},\n", profile.savePassword ? "true" : "false");
-        json += std::format("      \"encryptedPassword\": \"{}\",\n", JsonUtils::escapeString(profile.encryptedPassword));
-        json += std::format("      \"isProduction\": {},\n", profile.isProduction ? "true" : "false");
-        json += std::format("      \"isReadOnly\": {},\n", profile.isReadOnly ? "true" : "false");
-        json += std::format("      \"environment\": \"{}\",\n", JsonUtils::escapeString(profile.environment));
-        json += std::format("      \"dbType\": \"{}\",\n", JsonUtils::escapeString(profile.dbType));
-        // SSH configuration
-        json += "      \"ssh\": {\n";
-        json += std::format("        \"enabled\": {},\n", profile.ssh.enabled ? "true" : "false");
-        json += std::format("        \"host\": \"{}\",\n", JsonUtils::escapeString(profile.ssh.host));
-        json += std::format("        \"port\": {},\n", profile.ssh.port);
-        json += std::format("        \"username\": \"{}\",\n", JsonUtils::escapeString(profile.ssh.username));
-        json += std::format("        \"authType\": \"{}\",\n", profile.ssh.authType == SshAuthType::Password ? "password" : "privateKey");
-        json += std::format("        \"encryptedPassword\": \"{}\",\n", JsonUtils::escapeString(profile.ssh.encryptedPassword));
-        json += std::format("        \"privateKeyPath\": \"{}\",\n", JsonUtils::escapeString(profile.ssh.privateKeyPath));
-        json += std::format("        \"encryptedKeyPassphrase\": \"{}\"\n", JsonUtils::escapeString(profile.ssh.encryptedKeyPassphrase));
-        json += "      }\n";
-        json += i < m_settings.connectionProfiles.size() - 1 ? "    },\n" : "    }\n";
+    std::string buffer;
+    if (auto ec = glz::write<glz::opts{.prettify = true}>(m_settings, buffer); bool(ec)) {
+        log<LogLevel::WARNING>("Failed to serialize settings");
+        return {};
     }
-    json += "  ]\n";
-
-    json += "}\n";
-    return json;
+    return buffer;
 }
 
-bool SettingsManager::deserializeSettings(std::string_view jsonStr) {
-    try {
-        simdjson::dom::parser parser;
-        auto doc = parser.parse(jsonStr);
-
-        // General settings
-        if (auto general = doc["general"]; !general.error()) {
-            if (auto val = general["autoConnect"].get_bool(); !val.error())
-                m_settings.general.autoConnect = val.value();
-            if (auto val = general["lastConnectionId"].get_string(); !val.error())
-                m_settings.general.lastConnectionId = std::string(val.value());
-            if (auto val = general["confirmOnExit"].get_bool(); !val.error())
-                m_settings.general.confirmOnExit = val.value();
-            if (auto val = general["maxQueryHistory"].get_int64(); !val.error())
-                m_settings.general.maxQueryHistory = static_cast<int>(val.value());
-            if (auto val = general["maxRecentConnections"].get_int64(); !val.error())
-                m_settings.general.maxRecentConnections = static_cast<int>(val.value());
-            if (auto val = general["language"].get_string(); !val.error())
-                m_settings.general.language = std::string(val.value());
-        }
-
-        // Editor settings
-        if (auto editor = doc["editor"]; !editor.error()) {
-            if (auto val = editor["fontSize"].get_int64(); !val.error())
-                m_settings.editor.fontSize = static_cast<int>(val.value());
-            if (auto val = editor["fontFamily"].get_string(); !val.error())
-                m_settings.editor.fontFamily = std::string(val.value());
-            if (auto val = editor["wordWrap"].get_bool(); !val.error())
-                m_settings.editor.wordWrap = val.value();
-            if (auto val = editor["tabSize"].get_int64(); !val.error())
-                m_settings.editor.tabSize = static_cast<int>(val.value());
-            if (auto val = editor["insertSpaces"].get_bool(); !val.error())
-                m_settings.editor.insertSpaces = val.value();
-            if (auto val = editor["showLineNumbers"].get_bool(); !val.error())
-                m_settings.editor.showLineNumbers = val.value();
-            if (auto val = editor["showMinimap"].get_bool(); !val.error())
-                m_settings.editor.showMinimap = val.value();
-            if (auto val = editor["theme"].get_string(); !val.error())
-                m_settings.editor.theme = std::string(val.value());
-        }
-
-        // Grid settings
-        if (auto grid = doc["grid"]; !grid.error()) {
-            if (auto val = grid["defaultPageSize"].get_int64(); !val.error())
-                m_settings.grid.defaultPageSize = static_cast<int>(val.value());
-            if (auto val = grid["showRowNumbers"].get_bool(); !val.error())
-                m_settings.grid.showRowNumbers = val.value();
-            if (auto val = grid["enableCellEditing"].get_bool(); !val.error())
-                m_settings.grid.enableCellEditing = val.value();
-            if (auto val = grid["dateFormat"].get_string(); !val.error())
-                m_settings.grid.dateFormat = std::string(val.value());
-            if (auto val = grid["nullDisplay"].get_string(); !val.error())
-                m_settings.grid.nullDisplay = std::string(val.value());
-        }
-
-        // Window settings
-        if (auto window = doc["window"]; !window.error()) {
-            if (auto val = window["width"].get_int64(); !val.error())
-                m_settings.window.width = static_cast<int>(val.value());
-            if (auto val = window["height"].get_int64(); !val.error())
-                m_settings.window.height = static_cast<int>(val.value());
-            if (auto val = window["x"].get_int64(); !val.error())
-                m_settings.window.x = static_cast<int>(val.value());
-            if (auto val = window["y"].get_int64(); !val.error())
-                m_settings.window.y = static_cast<int>(val.value());
-            if (auto val = window["isMaximized"].get_bool(); !val.error())
-                m_settings.window.isMaximized = val.value();
-        }
-
-        // Connection profiles
-        m_settings.connectionProfiles.clear();
-        if (auto profiles = doc["connectionProfiles"].get_array(); !profiles.error()) {
-            for (auto profileEl : profiles.value()) {
-                ConnectionProfile profile;
-                if (auto val = profileEl["id"].get_string(); !val.error())
-                    profile.id = std::string(val.value());
-                if (auto val = profileEl["name"].get_string(); !val.error())
-                    profile.name = std::string(val.value());
-                if (auto val = profileEl["server"].get_string(); !val.error())
-                    profile.server = std::string(val.value());
-                if (auto val = profileEl["port"].get_int64(); !val.error())
-                    profile.port = static_cast<int>(val.value());
-                if (auto val = profileEl["database"].get_string(); !val.error())
-                    profile.database = std::string(val.value());
-                if (auto val = profileEl["username"].get_string(); !val.error())
-                    profile.username = std::string(val.value());
-                if (auto val = profileEl["useWindowsAuth"].get_bool(); !val.error())
-                    profile.useWindowsAuth = val.value();
-                if (auto val = profileEl["savePassword"].get_bool(); !val.error())
-                    profile.savePassword = val.value();
-                if (auto val = profileEl["encryptedPassword"].get_string(); !val.error())
-                    profile.encryptedPassword = std::string(val.value());
-                if (auto val = profileEl["isProduction"].get_bool(); !val.error())
-                    profile.isProduction = val.value();
-                if (auto val = profileEl["isReadOnly"].get_bool(); !val.error())
-                    profile.isReadOnly = val.value();
-                if (auto val = profileEl["environment"].get_string(); !val.error())
-                    profile.environment = std::string(val.value());
-                if (auto val = profileEl["dbType"].get_string(); !val.error())
-                    profile.dbType = std::string(val.value());
-                // SSH configuration
-                if (auto ssh = profileEl["ssh"]; !ssh.error()) {
-                    if (auto val = ssh["enabled"].get_bool(); !val.error())
-                        profile.ssh.enabled = val.value();
-                    if (auto val = ssh["host"].get_string(); !val.error())
-                        profile.ssh.host = std::string(val.value());
-                    if (auto val = ssh["port"].get_int64(); !val.error())
-                        profile.ssh.port = static_cast<int>(val.value());
-                    if (auto val = ssh["username"].get_string(); !val.error())
-                        profile.ssh.username = std::string(val.value());
-                    if (auto val = ssh["authType"].get_string(); !val.error())
-                        profile.ssh.authType = (val.value() == "privateKey") ? SshAuthType::PrivateKey : SshAuthType::Password;
-                    if (auto val = ssh["encryptedPassword"].get_string(); !val.error())
-                        profile.ssh.encryptedPassword = std::string(val.value());
-                    if (auto val = ssh["privateKeyPath"].get_string(); !val.error())
-                        profile.ssh.privateKeyPath = std::string(val.value());
-                    if (auto val = ssh["encryptedKeyPassphrase"].get_string(); !val.error())
-                        profile.ssh.encryptedKeyPassphrase = std::string(val.value());
-                }
-                m_settings.connectionProfiles.push_back(profile);
-            }
-        }
-
-        return true;
-    } catch (...) {
+bool SettingsManager::deserializeSettings(std::string_view json) {
+    auto ec = glz::read_json(m_settings, json);
+    if (bool(ec)) {
+        log<LogLevel::WARNING>(std::format("Failed to parse settings.json: {}", glz::format_error(ec, json)));
         return false;
     }
+    return true;
 }
 
 }  // namespace velocitydb
