@@ -32,23 +32,23 @@ TEST_F(SettingsProviderTest, AccessSessionManager) {
     EXPECT_GE(state.windowHeight, 0);
 }
 
-TEST_F(SettingsProviderTest, HandleGetProfilePasswordNotFound) {
+TEST_F(SettingsProviderTest, GetProfilePasswordNotFound) {
     // Non-existent profile should return error JSON
-    auto result = provider.handleGetProfilePassword(R"({"id":"non_existent_profile_id"})");
+    auto result = provider.getProfilePassword(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
     EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsProviderTest, HandleGetSshPasswordNotFound) {
+TEST_F(SettingsProviderTest, GetSshPasswordNotFound) {
     // Non-existent profile should return error JSON
-    auto result = provider.handleGetSshPassword(R"({"id":"non_existent_profile_id"})");
+    auto result = provider.getSshPassword(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
     EXPECT_NE(result.find("error"), std::string::npos);
 }
 
-TEST_F(SettingsProviderTest, HandleDeleteNonExistentProfile) {
+TEST_F(SettingsProviderTest, DeleteNonExistentProfile) {
     // Deleting non-existent profile should succeed (idempotent)
-    auto result = provider.handleDeleteConnectionProfile(R"({"id":"non_existent_profile_id"})");
+    auto result = provider.deleteConnectionProfile(R"({"id":"non_existent_profile_id"})");
     EXPECT_FALSE(result.empty());
 }
 
