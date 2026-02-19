@@ -7,6 +7,8 @@ interface TableNodeData {
   tableName: string;
   logicalName?: string;
   columns: ERColumn[];
+  color?: string;
+  bkColor?: string;
 }
 
 interface TableNodeProps {
@@ -55,12 +57,13 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
           {col.type.toLowerCase()}
         </span>
       )}
+      {col.color && <span className={styles.colorDot} style={{ backgroundColor: col.color }} />}
     </div>
   );
 }
 
 export const TableNode = memo(function TableNode({ data, selected }: TableNodeProps) {
-  const { tableName, logicalName, columns } = data;
+  const { tableName, logicalName, columns, color, bkColor } = data;
 
   const primaryKeys = columns.filter((c) => c.isPrimaryKey);
   const regularColumns = columns.filter((c) => !c.isPrimaryKey);
@@ -71,9 +74,16 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
         <Handle key={h.id} type={h.type} position={h.position} id={h.id} style={HIDDEN_HANDLE} />
       ))}
 
-      <div className={styles.header} title={logicalName || undefined}>
+      <div
+        className={styles.header}
+        title={logicalName ? tableName : undefined}
+        style={{
+          ...(bkColor && { backgroundColor: bkColor }),
+          ...(color && { color }),
+        }}
+      >
         <span className={styles.icon}>{icons.table}</span>
-        <span className={styles.tableName}>{tableName}</span>
+        <span className={styles.tableName}>{logicalName || tableName}</span>
       </div>
 
       <div className={styles.columns}>

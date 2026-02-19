@@ -40,6 +40,7 @@ set(LIB_SOURCES
     # Parsers
     parsers/a5er_parser.cpp
     parsers/a5er_utils.cpp
+    parsers/er_diagram_parser_factory.cpp
     parsers/sql_formatter.cpp
     parsers/sql_parser.cpp
     # Exporters
@@ -103,9 +104,13 @@ set(HEADERS
     providers/utility_provider.h
     providers/settings_provider.h
     providers/io_provider.h
+    # Interfaces (Parser)
+    interfaces/parsers/er_model.h
+    interfaces/parsers/er_diagram_parser.h
     # Parsers
     parsers/a5er_parser.h
     parsers/a5er_utils.h
+    parsers/er_diagram_parser_factory.h
     parsers/sql_formatter.h
     parsers/sql_parser.h
     # Exporters
@@ -152,7 +157,7 @@ target_link_libraries(VelocityDBCore PUBLIC
 
 # Glaze requires /Zc:preprocessor for MSVC (conformant preprocessor)
 if(MSVC)
-    target_compile_options(VelocityDBCore PRIVATE /Zc:preprocessor)
+    target_compile_options(VelocityDBCore PUBLIC /Zc:preprocessor)
 endif()
 
 # Link libssh2 if available

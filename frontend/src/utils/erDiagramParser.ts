@@ -4,6 +4,7 @@ export interface ERDiagramModel {
   name: string;
   tables: ERDiagramTable[];
   relations: ERDiagramRelation[];
+  shapes?: ERDiagramShape[];
 }
 
 export interface ERDiagramTable {
@@ -15,6 +16,8 @@ export interface ERDiagramTable {
   posY: number;
   columns: ERDiagramColumn[];
   indexes: ERDiagramIndex[];
+  color?: string; // CSS #RRGGBB
+  bkColor?: string; // CSS #RRGGBB
 }
 
 export interface ERDiagramColumn {
@@ -25,6 +28,7 @@ export interface ERDiagramColumn {
   isPrimaryKey: boolean;
   defaultValue: string;
   comment: string;
+  color?: string; // CSS #RRGGBB
 }
 
 export interface ERDiagramIndex {
@@ -40,6 +44,20 @@ export interface ERDiagramRelation {
   sourceColumn: string;
   targetColumn: string;
   cardinality: '1:1' | '1:N' | 'N:M';
+}
+
+export interface ERDiagramShape {
+  shapeType: string;
+  text: string;
+  fillColor?: string;
+  fontColor?: string;
+  fillAlpha: number;
+  fontSize: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  page: string;
 }
 
 // === パーサーインターフェース ===

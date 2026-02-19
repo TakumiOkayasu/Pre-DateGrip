@@ -11,9 +11,10 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import { useERDiagramContext } from '../../hooks/useERDiagramContext';
-import type { ERRelationEdge, ERTableNode } from '../../types';
+import type { ERRelationEdge, ERShapeNode, ERTableNode } from '../../types';
 import { ALL_PAGES, GRID_LAYOUT } from '../../utils/erDiagramConstants';
 import styles from './ERDiagram.module.css';
+import { ShapeNode } from './ShapeNode';
 import { TableNode } from './TableNode';
 
 interface ERDiagramProps {
@@ -25,6 +26,7 @@ type PosMap = Map<string, XY>;
 
 const nodeTypes = {
   table: TableNode,
+  shape: ShapeNode,
 };
 
 const DEFAULT_HANDLES = { sourceHandle: 'source-right', targetHandle: 'target-left' };
@@ -91,22 +93,34 @@ function applyGridLayout(tables: ERTableNode[]): ERTableNode[] {
 function ERDiagramFlow({
   tables,
   relations,
+  shapes,
   onTableClick,
 }: {
   tables: ERTableNode[];
   relations: ERRelationEdge[];
+  shapes: ERShapeNode[];
   onTableClick?: (tableId: string) => void;
 }) {
-  const initialNodes: Node[] = useMemo(
-    () =>
-      tables.map((table) => ({
-        id: table.id,
-        type: 'table',
-        position: table.position,
-        data: table.data,
-      })),
-    [tables]
-  );
+  const initialNodes: Node[] = useMemo(() => {
+    const shapeNodes: Node[] = shapes.map((shape) => ({
+      id: shape.id,
+      type: 'shape',
+      position: shape.position,
+      data: shape.data,
+      zIndex: -1,
+      selectable: false,
+      draggable: false,
+    }));
+
+    const tableNodes: Node[] = tables.map((table) => ({
+      id: table.id,
+      type: 'table',
+      position: table.position,
+      data: table.data,
+    }));
+
+    return [...shapeNodes, ...tableNodes];
+  }, [tables, shapes]);
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
 
@@ -164,6 +178,7 @@ export function ERDiagram({ onTableClick }: ERDiagramProps) {
     pageCounts,
     tables: filteredTables,
     relations: filteredRelations,
+    shapes: filteredShapes,
   } = useERDiagramContext();
 
   // 「すべて」タブ時はグリッド再配置（ページ間で座標が重複するため）
@@ -172,14 +187,20 @@ export function ERDiagram({ onTableClick }: ERDiagramProps) {
     [filteredTables, selectedPage]
   );
 
+  // 「すべて」タブ時はShape非表示（テーブルがグリッド再配置され元座標とずれるため）
+  const layoutShapes = useMemo(
+    () => (selectedPage === ALL_PAGES ? [] : filteredShapes),
+    [filteredShapes, selectedPage]
+  );
+
   const showTabs = pages.length > 1;
 
   // key を変えることで ReactFlow を再マウントし、fitView をリトリガー
   const flowKey = useMemo(() => {
     const first = layoutTables[0]?.id ?? '';
     const last = layoutTables[layoutTables.length - 1]?.id ?? '';
-    return `${selectedPage}-${layoutTables.length}-${first}-${last}`;
-  }, [selectedPage, layoutTables]);
+    return `${selectedPage}-${layoutTables.length}-${layoutShapes.length}-${first}-${last}`;
+  }, [selectedPage, layoutTables, layoutShapes]);
 
   return (
     <div className={styles.container}>
@@ -209,6 +230,7 @@ export function ERDiagram({ onTableClick }: ERDiagramProps) {
           key={flowKey}
           tables={layoutTables}
           relations={filteredRelations}
+          shapes={layoutShapes}
           onTableClick={onTableClick}
         />
       </div>

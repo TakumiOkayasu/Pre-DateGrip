@@ -9,8 +9,8 @@ declare global {
   }
 }
 
-/** A5:ER parse result returned from backend IPC */
-export interface A5ERParseResult {
+/** ER diagram parse result returned from backend IPC (tool-agnostic) */
+export interface ERDiagramParseResult {
   name: string;
   databaseType: string;
   tables: {
@@ -27,6 +27,7 @@ export interface A5ERParseResult {
       isPrimaryKey: boolean;
       defaultValue: string;
       comment: string;
+      color: string;
     }[];
     indexes: {
       name: string;
@@ -36,6 +37,8 @@ export interface A5ERParseResult {
     posX: number;
     posY: number;
     page: string;
+    color: string;
+    bkColor: string;
   }[];
   relations: {
     name: string;
@@ -45,11 +48,27 @@ export interface A5ERParseResult {
     childColumn: string;
     cardinality: string;
   }[];
+  shapes: {
+    shapeType: string;
+    text: string;
+    fillColor: string;
+    fontColor: string;
+    fillAlpha: number;
+    fontSize: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    page: string;
+  }[];
   ddl: string;
 }
 
-/** A5ERParseResult → ERDiagramModel 変換 */
-export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string): ERDiagramModel {
+/** ERDiagramParseResult → ERDiagramModel 変換 */
+export function toERDiagramModel(
+  result: ERDiagramParseResult,
+  fallbackName?: string
+): ERDiagramModel {
   return {
     name: result.name || fallbackName || '',
     tables: result.tables.map((t) => ({
@@ -59,6 +78,8 @@ export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string)
       page: t.page || DEFAULT_PAGE,
       posX: t.posX,
       posY: t.posY,
+      color: t.color || undefined,
+      bkColor: t.bkColor || undefined,
       columns: t.columns.map((c) => ({
         name: c.name,
         logicalName: c.logicalName,
@@ -67,6 +88,7 @@ export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string)
         isPrimaryKey: c.isPrimaryKey,
         defaultValue: c.defaultValue,
         comment: c.comment,
+        color: c.color || undefined,
       })),
       indexes: t.indexes.map((idx) => ({
         name: idx.name,
@@ -81,6 +103,19 @@ export function toERDiagramModel(result: A5ERParseResult, fallbackName?: string)
       sourceColumn: r.parentColumn,
       targetColumn: r.childColumn,
       cardinality: (r.cardinality as '1:1' | '1:N' | 'N:M') || '1:N',
+    })),
+    shapes: result.shapes.map((s) => ({
+      shapeType: s.shapeType,
+      text: s.text,
+      fillColor: s.fillColor || undefined,
+      fontColor: s.fontColor || undefined,
+      fillAlpha: s.fillAlpha,
+      fontSize: s.fontSize,
+      left: s.left,
+      top: s.top,
+      width: s.width,
+      height: s.height,
+      page: s.page || DEFAULT_PAGE,
     })),
   };
 }
@@ -373,13 +408,13 @@ class Bridge {
     return this.call('getQueryHistory', {});
   }
 
-  // A5:ER methods
-  async parseA5ER(filepath: string): Promise<A5ERParseResult> {
-    return this.call('parseA5ER', { filepath });
-  }
-
-  async parseA5ERContent(content: string, filename: string): Promise<A5ERParseResult> {
-    return this.call('parseA5ERContent', { content, filename });
+  // ER diagram methods
+  async parseERDiagram(params: {
+    content?: string;
+    filename?: string;
+    filepath?: string;
+  }): Promise<ERDiagramParseResult> {
+    return this.call('parseERDiagram', params);
   }
 
   // Execution plan methods

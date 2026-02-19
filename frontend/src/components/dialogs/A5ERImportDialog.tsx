@@ -26,7 +26,10 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
 
     try {
       const content = await file.text();
-      const result = await bridge.parseA5ERContent(content, file.name);
+      const result = await bridge.parseERDiagram({
+        content,
+        filename: file.name,
+      });
       setParsedModel(toERDiagramModel(result, file.name));
       setGeneratedDDL(result.ddl);
     } catch (err) {
@@ -42,17 +45,37 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
   }, [parsedModel, onImport, onClose]);
 
   const handleCopyDDL = useCallback(async () => {
-    await navigator.clipboard.writeText(generatedDDL);
+    try {
+      await navigator.clipboard.writeText(generatedDDL);
+    } catch {
+      // Clipboard API may fail in non-secure contexts; silently ignore
+    }
   }, [generatedDDL]);
 
   if (!isOpen) return null;
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
+    <div
+      className={styles.overlay}
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+      role="presentation"
+    >
+      <div
+        className={styles.dialog}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onClose();
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="a5er-import-dialog-title"
+      >
         <div className={styles.header}>
-          <h2>A5:ERファイルをインポート</h2>
-          <button className={styles.closeButton} onClick={onClose}>
+          <h2 id="a5er-import-dialog-title">A5:ERファイルをインポート</h2>
+          <button type="button" className={styles.closeButton} onClick={onClose}>
             {'\u2715'}
           </button>
         </div>
@@ -62,6 +85,7 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
             <span className={styles.fileLabel}>.a5erファイルを選択</span>
             <div className={styles.fileRow}>
               <button
+                type="button"
                 className={styles.fileBrowseButton}
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -103,18 +127,25 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
           <div className={styles.ddlSection}>
             <div className={styles.ddlHeader}>
               <h3>生成されたDDL</h3>
-              <button onClick={() => setShowDDL(!showDDL)}>{showDDL ? '非表示' : '表示'}</button>
-              {generatedDDL && <button onClick={handleCopyDDL}>コピー</button>}
+              <button type="button" onClick={() => setShowDDL(!showDDL)}>
+                {showDDL ? '非表示' : '表示'}
+              </button>
+              {generatedDDL && (
+                <button type="button" onClick={handleCopyDDL}>
+                  コピー
+                </button>
+              )}
             </div>
             {showDDL && generatedDDL && <pre className={styles.ddlContent}>{generatedDDL}</pre>}
           </div>
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.cancelButton} onClick={onClose}>
+          <button type="button" className={styles.cancelButton} onClick={onClose}>
             キャンセル
           </button>
           <button
+            type="button"
             onClick={handleImport}
             disabled={!parsedModel || parsedModel.tables.length === 0}
             className={styles.importButton}
