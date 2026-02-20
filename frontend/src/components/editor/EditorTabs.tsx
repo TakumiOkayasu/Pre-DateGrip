@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueries, useQueryActions, useQueryStore } from '../../store/queryStore';
-import type { Query } from '../../types';
+import type { EnvironmentType, Query } from '../../types';
 import styles from './EditorTabs.module.css';
 
 // SQL file icon
@@ -51,7 +51,21 @@ const CloseIcon = (
   </svg>
 );
 
-function buildTooltip(query: Query): string {
+const ENV_STYLE_MAP: Record<EnvironmentType, string> = {
+  development: styles.envDevelopment,
+  staging: styles.envStaging,
+  production: styles.envProduction,
+};
+
+type ConnectionEnvMap = Record<string, { env?: EnvironmentType; label: string }>;
+
+function getEnvClass(query: Query, envMap: ConnectionEnvMap): string {
+  if (!query.connectionId) return '';
+  const env = envMap[query.connectionId]?.env;
+  return env ? ENV_STYLE_MAP[env] : '';
+}
+
+function buildTooltip(query: Query, envMap: ConnectionEnvMap): string {
   const parts = [query.name];
   if (query.logicalName) {
     parts.push(query.logicalName);
@@ -59,9 +73,9 @@ function buildTooltip(query: Query): string {
     parts.push(query.sourceTable);
   }
   if (query.connectionId) {
-    const conn = useConnectionStore.getState().connections.find((c) => c.id === query.connectionId);
-    if (conn) {
-      parts.push(`接続先: ${conn.server}/${conn.database}`);
+    const entry = envMap[query.connectionId];
+    if (entry) {
+      parts.push(`接続先: ${entry.label}`);
     }
   }
   return parts.join('\n');
@@ -70,13 +84,26 @@ function buildTooltip(query: Query): string {
 export function EditorTabs() {
   const queries = useQueries();
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
-  const { addQuery, removeQuery, setActive } = useQueryActions();
-  const activeConnectionId = useConnectionStore((s) => s.activeConnectionId);
+  const connections = useConnectionStore((s) => s.connections);
+  const connectionEnvMap = useMemo(
+    () =>
+      Object.fromEntries(
+        connections.map((c) => [c.id, { env: c.environment, label: `${c.server}/${c.database}` }])
+      ),
+    [connections]
+  );
+  const { addQuery, removeQuery, setActive, reorderQuery } = useQueryActions();
+  const activeQuery = queries.find((q) => q.id === activeQueryId);
+  const activeQueryConnectionId = activeQuery?.connectionId ?? null;
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // DnD state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
 
   const checkOverflow = useCallback(() => {
     const el = tabsRef.current;
@@ -121,33 +148,97 @@ export function EditorTabs() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [menuOpen]);
 
+  // --- DnD handlers ---
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    if (e.currentTarget instanceof HTMLElement) {
+      e.dataTransfer.setDragImage(e.currentTarget, e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    }
+  }, []);
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragIndex !== null && dragIndex !== index) {
+        setDropTarget(index);
+      }
+    },
+    [dragIndex]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, toIndex: number) => {
+      e.preventDefault();
+      if (dragIndex !== null && dragIndex !== toIndex) {
+        reorderQuery(dragIndex, toIndex);
+      }
+      setDragIndex(null);
+      setDropTarget(null);
+    },
+    [dragIndex, reorderQuery]
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropTarget(null);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDragIndex(null);
+    setDropTarget(null);
+  }, []);
+
   return (
     <div className={styles.container}>
       <div className={styles.tabs} ref={tabsRef}>
-        {queries.map((query) => (
-          <div
-            key={query.id}
-            className={`${styles.tab} ${query.id === activeQueryId ? styles.active : ''}`}
-            onClick={() => setActive(query.id)}
-            title={buildTooltip(query)}
-          >
-            {query.isERDiagram ? ERDiagramIcon : SqlIcon}
-            <span className={styles.tabName}>
-              {query.isDirty && <span className={styles.dirty}>●</span>}
-              {query.name}
-            </span>
-            <button
-              className={styles.closeButton}
-              onClick={(e) => {
-                e.stopPropagation();
-                removeQuery(query.id);
-              }}
-              title="タブを閉じる"
+        {queries.map((query, index) => {
+          const envClass = getEnvClass(query, connectionEnvMap);
+          const isDragging = dragIndex === index;
+          const isDropTarget = dropTarget === index;
+
+          const className = [
+            styles.tab,
+            query.id === activeQueryId && styles.active,
+            envClass,
+            isDragging && styles.dragging,
+            isDropTarget && styles.dropTarget,
+          ]
+            .filter(Boolean)
+            .join(' ');
+
+          return (
+            <div
+              key={query.id}
+              className={className}
+              onClick={() => setActive(query.id)}
+              title={buildTooltip(query, connectionEnvMap)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
             >
-              {CloseIcon}
-            </button>
-          </div>
-        ))}
+              {query.isERDiagram ? ERDiagramIcon : SqlIcon}
+              <span className={styles.tabName}>
+                {query.isDirty && <span className={styles.dirty}>●</span>}
+                {query.name}
+              </span>
+              <button
+                className={styles.closeButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeQuery(query.id);
+                }}
+                title="タブを閉じる"
+              >
+                {CloseIcon}
+              </button>
+            </div>
+          );
+        })}
       </div>
       {isOverflowing && (
         <div className={styles.overflowMenuWrapper} ref={menuRef}>
@@ -179,7 +270,7 @@ export function EditorTabs() {
       )}
       <button
         className={styles.addButton}
-        onClick={() => addQuery(activeConnectionId)}
+        onClick={() => addQuery(activeQueryConnectionId)}
         title="新規クエリ (Ctrl+N)"
       >
         {PlusIcon}

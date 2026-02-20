@@ -202,19 +202,37 @@ export function ConnectionTreeSection({
 
       const lowerFilter = filter.toLowerCase();
 
-      const result: DatabaseObject[] = [];
-      for (const node of nodes) {
-        const matchesFilter = node.name.toLowerCase().includes(lowerFilter);
-        const filteredChildren = node.children ? filterTree(node.children) : [];
+      return nodes
+        .map((node) => {
+          // DB nodes and folder nodes are always shown
+          if (node.type === 'database' || node.type === 'folder') {
+            const filteredChildren = node.children ? filterTree(node.children) : [];
+            // Update folder count in name (e.g. "Tables (5)" → "Tables (2)")
+            let displayName = node.name;
+            if (node.type === 'folder') {
+              const matchCount = filteredChildren.filter(
+                (c) => c.type === 'table' || c.type === 'view'
+              ).length;
+              displayName = /\(\d+\)/.test(node.name)
+                ? node.name.replace(/\(\d+\)/, `(${matchCount})`)
+                : `${node.name} (${matchCount})`;
+            }
+            return { ...node, name: displayName, children: filteredChildren };
+          }
 
-        if (matchesFilter || filteredChildren.length > 0) {
-          result.push({
-            ...node,
-            children: filteredChildren.length > 0 ? filteredChildren : node.children,
-          });
-        }
-      }
-      return result;
+          // Table/view: filter by name match
+          const matchesFilter = node.name.toLowerCase().includes(lowerFilter);
+          if (matchesFilter) return node;
+
+          // Check comment/metadata match
+          if (node.metadata?.comment) {
+            const commentMatch = String(node.metadata.comment).toLowerCase().includes(lowerFilter);
+            if (commentMatch) return node;
+          }
+
+          return null;
+        })
+        .filter((n): n is DatabaseObject => n !== null);
     },
     [filter]
   );

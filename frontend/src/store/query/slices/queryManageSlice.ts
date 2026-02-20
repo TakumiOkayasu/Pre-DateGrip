@@ -65,6 +65,12 @@ export function createManageSlice(set: SetState, get: GetState, deps: ManageSlic
       }));
     },
 
+    updateQueryConnection: (id, connectionId) => {
+      set((state) => ({
+        queries: state.queries.map((q) => (q.id === id ? { ...q, connectionId } : q)),
+      }));
+    },
+
     renameQuery: (id, name) => {
       set((state) => ({
         queries: state.queries.map((q) => (q.id === id ? { ...q, name } : q)),
@@ -73,6 +79,23 @@ export function createManageSlice(set: SetState, get: GetState, deps: ManageSlic
 
     setActive: (id) => {
       set({ activeQueryId: id });
+    },
+
+    reorderQuery: (fromIndex, toIndex) => {
+      set((state) => {
+        if (
+          fromIndex < 0 ||
+          fromIndex >= state.queries.length ||
+          toIndex < 0 ||
+          toIndex >= state.queries.length
+        ) {
+          return state;
+        }
+        const newQueries = [...state.queries];
+        const [moved] = newQueries.splice(fromIndex, 1);
+        newQueries.splice(toIndex, 0, moved);
+        return { queries: newQueries };
+      });
     },
   };
 }

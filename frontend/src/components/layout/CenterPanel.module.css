@@ -6,6 +6,40 @@
   min-height: 0;
 }
 
+.tabBar {
+  display: flex;
+  align-items: stretch;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-height: 35px;
+}
+
+.connectionSelector {
+  flex-shrink: 0;
+  height: 26px;
+  margin: auto 8px;
+  padding: 0 6px;
+  font-size: 12px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  max-width: 220px;
+  min-width: 100px;
+}
+
+.connectionSelector:focus {
+  outline: 1px solid var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.connectionSelector:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .editorContainer {
   flex: 1;
   overflow: hidden;

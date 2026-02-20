@@ -4,7 +4,6 @@ import type * as Monaco from 'monaco-editor';
 import * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useRef } from 'react';
 import { useKeyboardHandler } from '../../hooks/useKeyboardHandler';
-import { useConnectionStore } from '../../store/connectionStore';
 import { useQueryStore } from '../../store/queryStore';
 import { useSchemaStore } from '../../store/schemaStore';
 import { log } from '../../utils/logger';
@@ -19,18 +18,23 @@ loader.config({ monaco });
 // Read latest store state inside deferred callbacks (requestAnimationFrame/setTimeout)
 // to avoid stale closures captured at handler invocation time
 const getQueryState = () => useQueryStore.getState();
-const getConnectionState = () => useConnectionStore.getState();
+
+/** Get the connection ID of the active query tab (not the global activeConnectionId). */
+const getActiveQueryConnectionId = () => {
+  const { queries, activeQueryId } = getQueryState();
+  const found = queries.find((q) => q.id === activeQueryId);
+  return found?.connectionId ?? null;
+};
 
 export function SqlEditor() {
   const { queries, activeQueryId, updateQuery } = useQueryStore();
-  const { activeConnectionId } = useConnectionStore();
+  const activeQuery = queries.find((q) => q.id === activeQueryId);
+  const queryConnectionId = activeQuery?.connectionId ?? null;
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const completionDisposableRef = useRef<Monaco.IDisposable | null>(null);
   const isFormattingRef = useRef(false);
   const lastEditorValueRef = useRef<string>('');
-
-  const activeQuery = queries.find((q) => q.id === activeQueryId);
 
   const handleEditorChange = (value: string | undefined) => {
     if (activeQueryId && value !== undefined) {
@@ -123,7 +127,7 @@ export function SqlEditor() {
       requestAnimationFrame(() => {
         setTimeout(() => {
           const qId = getQueryState().activeQueryId;
-          const cId = getConnectionState().activeConnectionId;
+          const cId = getActiveQueryConnectionId();
           if (qId && cId) {
             getQueryState().executeQuery(qId, cId);
           }
@@ -140,7 +144,7 @@ export function SqlEditor() {
         setTimeout(() => {
           if (!editorRef.current) return;
           const qId = getQueryState().activeQueryId;
-          const cId = getConnectionState().activeConnectionId;
+          const cId = getActiveQueryConnectionId();
           if (!qId || !cId) return;
 
           const model = editorRef.current.getModel();
@@ -211,33 +215,33 @@ export function SqlEditor() {
       }
       completionDisposableRef.current = monaco.languages.registerCompletionItemProvider(
         'sql',
-        createCompletionProvider(activeConnectionId)
+        createCompletionProvider(queryConnectionId)
       );
 
       // Preload schema if connected
-      if (activeConnectionId) {
-        useSchemaStore.getState().loadTables(activeConnectionId);
+      if (queryConnectionId) {
+        useSchemaStore.getState().loadTables(queryConnectionId);
       }
 
       log.debug('[SqlEditor] Editor mounted with completion provider');
     },
-    [activeConnectionId]
+    [queryConnectionId]
   );
 
   // 接続IDが変わったらcompletionProviderを再登録
   useEffect(() => {
-    if (monacoRef.current && activeConnectionId) {
+    if (monacoRef.current && queryConnectionId) {
       if (completionDisposableRef.current) {
         completionDisposableRef.current.dispose();
       }
       completionDisposableRef.current = monacoRef.current.languages.registerCompletionItemProvider(
         'sql',
-        createCompletionProvider(activeConnectionId)
+        createCompletionProvider(queryConnectionId)
       );
-      useSchemaStore.getState().loadTables(activeConnectionId);
-      log.debug(`[SqlEditor] Completion provider updated for connection: ${activeConnectionId}`);
+      useSchemaStore.getState().loadTables(queryConnectionId);
+      log.debug(`[SqlEditor] Completion provider updated for connection: ${queryConnectionId}`);
     }
-  }, [activeConnectionId]);
+  }, [queryConnectionId]);
 
   // クリーンアップ
   useEffect(() => {

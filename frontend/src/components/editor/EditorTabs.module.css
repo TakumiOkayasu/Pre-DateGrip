@@ -2,9 +2,9 @@
   display: flex;
   align-items: stretch;
   background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
+  flex: 1 0 0;
   min-height: 35px;
+  min-width: 0;
 }
 
 .tabs {
@@ -221,4 +221,26 @@
 .overflowMenuItemName {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Drag & Drop */
+.dragging {
+  opacity: 0.4;
+}
+
+.dropTarget {
+  box-shadow: inset 2px 0 0 var(--accent-color);
+}
+
+/* Environment color indicators (top border) */
+.envDevelopment {
+  border-top: 2px solid #4caf50;
+}
+
+.envStaging {
+  border-top: 2px solid #ff9800;
+}
+
+.envProduction {
+  border-top: 2px solid #f44336;
 }
