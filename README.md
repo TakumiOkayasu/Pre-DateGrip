@@ -10,7 +10,8 @@ Windows向け高性能RDBMSマネジメントツール。DataGripライクなUI/
 - **Monaco Editor** - VS Code同等のSQL編集体験、コード補完対応
 - **マルチDB対応** - SQL Server / PostgreSQL / MySQL（ODBC経由）
 - **SSH接続** - SSHトンネル経由でのリモートDB接続
-- **ER図表示** - React Flowによるテーブル関連の可視化、A5:ERファイルインポート対応
+- **ER図表示** - React Flowによるテーブル関連の可視化、論理名表示、A5:ERファイルインポート対応
+- **接続色分け** - server/database単位で自動色分け（タブ、ツリー、接続セレクタ）
 - **エクスポート** - CSV/JSON/Excel形式でのデータ出力
 - **セッション管理** - ウィンドウ状態、開いているタブ、接続プロファイルの永続化
 - **グローバル検索** - テーブル、ビュー、プロシージャ、カラムの横断検索

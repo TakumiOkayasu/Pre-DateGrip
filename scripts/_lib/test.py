@@ -14,10 +14,9 @@ def test_frontend(watch: bool = False) -> bool:
         print("#  Mode: Watch")
     print(f"{'#' * 60}")
 
-    # Find package manager
-    pkg_info = utils.find_package_manager()
+    # Ensure dependencies
+    pkg_info = utils.ensure_frontend_deps()
     if not pkg_info:
-        print("\nERROR: No package manager found")
         return False
 
     pkg_manager, pkg_path = pkg_info

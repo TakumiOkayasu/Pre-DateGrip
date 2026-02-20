@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useMemo } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useActiveQuery, useQueryStore } from '../../store/queryStore';
-import { envStyleClass } from '../../utils/colorContrast';
+import { connectionColor } from '../../utils/colorContrast';
 import { log } from '../../utils/logger';
 import { EditorTabs } from '../editor/EditorTabs';
 import styles from './CenterPanel.module.css';
@@ -34,10 +34,10 @@ export function CenterPanel() {
   const isDataView = activeQuery?.isDataView === true;
   const isERDiagram = activeQuery?.isERDiagram === true;
 
-  const selectorEnvClass = useMemo(() => {
-    if (!activeQuery?.connectionId) return '';
+  const selectorColor = useMemo(() => {
+    if (!activeQuery?.connectionId) return undefined;
     const conn = connections.find((c) => c.id === activeQuery.connectionId);
-    return envStyleClass(conn?.environment, styles);
+    return conn ? connectionColor(conn.server, conn.database) : undefined;
   }, [activeQuery?.connectionId, connections]);
 
   const activeQueryId = activeQuery?.id ?? null;
@@ -58,7 +58,12 @@ export function CenterPanel() {
       <div className={styles.tabBar}>
         <EditorTabs />
         <select
-          className={`${styles.connectionSelector} ${selectorEnvClass}`}
+          className={styles.connectionSelector}
+          style={
+            selectorColor
+              ? ({ '--connection-color': selectorColor } as React.CSSProperties)
+              : undefined
+          }
           value={activeQuery?.connectionId ?? ''}
           onChange={handleConnectionChange}
           disabled={connections.length === 0 || !activeQuery}

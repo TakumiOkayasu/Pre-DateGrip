@@ -67,12 +67,6 @@
   min-width: 0;
 }
 
-.logicalName {
-  color: var(--text-secondary);
-  font-size: 9px;
-  opacity: 0.7;
-}
-
 .columnType {
   color: var(--text-secondary);
   font-size: 10px;

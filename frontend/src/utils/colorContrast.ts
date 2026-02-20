@@ -55,20 +55,23 @@ export function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a})`;
 }
 
-/** Resolve CSS Modules environment class from EnvironmentType */
-export function envStyleClass(env: string | undefined, styleMap: Record<string, string>): string {
-  if (!env) return '';
-  return styleMap[`env${env.charAt(0).toUpperCase()}${env.slice(1)}`] ?? '';
-}
+const CONNECTION_PALETTE = [
+  '#4caf50',
+  '#2196f3',
+  '#ff9800',
+  '#e91e63',
+  '#9c27b0',
+  '#00bcd4',
+  '#fdd835',
+  '#a1887f',
+];
 
-/** Blend foreground color at alpha (0-255) against a solid background */
-export function blendColor(fgHex: string, alpha: number, bgHex: string): string {
-  const fg = parseHex(fgHex);
-  const bg = parseHex(bgHex);
-  if (!fg || !bg) return bgHex;
-  const a = Math.max(0, Math.min(1, alpha / 255));
-  const r = Math.round(fg[0] * a + bg[0] * (1 - a));
-  const g = Math.round(fg[1] * a + bg[1] * (1 - a));
-  const b = Math.round(fg[2] * a + bg[2] * (1 - a));
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+/** Deterministic color for a server+database pair */
+export function connectionColor(server: string, database: string): string {
+  const key = `${server}/${database}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+  }
+  return CONNECTION_PALETTE[Math.abs(hash) % CONNECTION_PALETTE.length];
 }

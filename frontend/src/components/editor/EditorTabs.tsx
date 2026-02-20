@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useQueries, useQueryActions, useQueryStore } from '../../store/queryStore';
-import type { EnvironmentType, Query } from '../../types';
+import type { Query } from '../../types';
+import { connectionColor } from '../../utils/colorContrast';
 import styles from './EditorTabs.module.css';
 
 // SQL file icon
@@ -51,21 +52,9 @@ const CloseIcon = (
   </svg>
 );
 
-const ENV_STYLE_MAP: Record<EnvironmentType, string> = {
-  development: styles.envDevelopment,
-  staging: styles.envStaging,
-  production: styles.envProduction,
-};
+type ConnectionColorMap = Record<string, { color: string; label: string }>;
 
-type ConnectionEnvMap = Record<string, { env?: EnvironmentType; label: string }>;
-
-function getEnvClass(query: Query, envMap: ConnectionEnvMap): string {
-  if (!query.connectionId) return '';
-  const env = envMap[query.connectionId]?.env;
-  return env ? ENV_STYLE_MAP[env] : '';
-}
-
-function buildTooltip(query: Query, envMap: ConnectionEnvMap): string {
+function buildTooltip(query: Query, envMap: ConnectionColorMap): string {
   const parts = [query.name];
   if (query.logicalName) {
     parts.push(query.logicalName);
@@ -85,10 +74,13 @@ export function EditorTabs() {
   const queries = useQueries();
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
   const connections = useConnectionStore((s) => s.connections);
-  const connectionEnvMap = useMemo(
+  const connectionColorMap: ConnectionColorMap = useMemo(
     () =>
       Object.fromEntries(
-        connections.map((c) => [c.id, { env: c.environment, label: `${c.server}/${c.database}` }])
+        connections.map((c) => [
+          c.id,
+          { color: connectionColor(c.server, c.database), label: `${c.server}/${c.database}` },
+        ])
       ),
     [connections]
   );
@@ -194,14 +186,15 @@ export function EditorTabs() {
     <div className={styles.container}>
       <div className={styles.tabs} ref={tabsRef}>
         {queries.map((query, index) => {
-          const envClass = getEnvClass(query, connectionEnvMap);
+          const connColor = query.connectionId
+            ? connectionColorMap[query.connectionId]?.color
+            : undefined;
           const isDragging = dragIndex === index;
           const isDropTarget = dropTarget === index;
 
           const className = [
             styles.tab,
             query.id === activeQueryId && styles.active,
-            envClass,
             isDragging && styles.dragging,
             isDropTarget && styles.dropTarget,
           ]
@@ -212,8 +205,11 @@ export function EditorTabs() {
             <div
               key={query.id}
               className={className}
+              style={
+                connColor ? ({ '--connection-color': connColor } as React.CSSProperties) : undefined
+              }
               onClick={() => setActive(query.id)}
-              title={buildTooltip(query, connectionEnvMap)}
+              title={buildTooltip(query, connectionColorMap)}
               draggable
               onDragStart={(e) => handleDragStart(e, index)}
               onDragOver={(e) => handleDragOver(e, index)}
