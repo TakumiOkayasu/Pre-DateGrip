@@ -1,0 +1,15 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  pointer-events: none;
+}
+
+.text {
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.3;
+}
