@@ -14,19 +14,238 @@
 
 namespace velocitydb {
 
+namespace {
+
+/// Escape `]` → `]]` for SQL Server bracket-delimited identifiers
+std::string bracketEscape(const std::string& name) {
+    std::string result;
+    result.reserve(name.size() + 2);
+    result += '[';
+    for (char c : name) {
+        if (c == ']')
+            result += ']';
+        result += c;
+    }
+    result += ']';
+    return result;
+}
+
+}  // namespace
+
+// === IERDiagramParser interface ===
+
+std::vector<std::string> A5ERParser::extensions() const {
+    return {".a5er"};
+}
+
+bool A5ERParser::canParse(const std::string& content) const {
+    return isTextFormat(content) || content.find("<A5ER") != std::string::npos;
+}
+
+ERModel A5ERParser::parse(const std::string& content) const {
+    return toERModel(parseFromString(content));
+}
+
+std::string A5ERParser::generateDDL(const ERModel& model, TargetDatabase target) const {
+    std::string targetDb = "SQLServer";
+    if (target == TargetDatabase::PostgreSQL)
+        targetDb = "PostgreSQL";
+    else if (target == TargetDatabase::MySQL)
+        targetDb = "MySQL";
+
+    std::ostringstream ddl;
+    ddl << "-- Generated from ER model: " << model.name << "\n";
+    ddl << "-- Target database: " << targetDb << "\n\n";
+
+    for (const auto& table : model.tables) {
+        if (!table.comment.empty())
+            ddl << "-- " << table.comment << "\n";
+
+        ddl << "CREATE TABLE " << bracketEscape(table.name) << " (\n";
+        std::vector<std::string> pkColumns;
+
+        for (size_t i = 0; i < table.columns.size(); ++i) {
+            const auto& col = table.columns[i];
+            ddl << "    " << bracketEscape(col.name) << " ";
+            ddl << mapTypeToSQLServer(col.type, col.size, col.scale);
+            if (!col.nullable)
+                ddl << " NOT NULL";
+            if (!col.defaultValue.empty())
+                ddl << " DEFAULT " << col.defaultValue;
+            if (col.isPrimaryKey)
+                pkColumns.push_back(col.name);
+            if (i + 1 < table.columns.size() || !pkColumns.empty())
+                ddl << ",";
+            if (!col.comment.empty())
+                ddl << " -- " << col.comment;
+            ddl << "\n";
+        }
+
+        if (!pkColumns.empty()) {
+            ddl << "    CONSTRAINT " << bracketEscape("PK_" + table.name) << " PRIMARY KEY (";
+            for (size_t i = 0; i < pkColumns.size(); ++i) {
+                ddl << bracketEscape(pkColumns[i]);
+                if (i + 1 < pkColumns.size())
+                    ddl << ", ";
+            }
+            ddl << ")\n";
+        }
+        ddl << ");\n\n";
+
+        for (const auto& idx : table.indexes) {
+            ddl << "CREATE ";
+            if (idx.isUnique)
+                ddl << "UNIQUE ";
+            ddl << "INDEX " << bracketEscape(idx.name) << " ON " << bracketEscape(table.name) << " (";
+            for (size_t i = 0; i < idx.columns.size(); ++i) {
+                ddl << bracketEscape(idx.columns[i]);
+                if (i + 1 < idx.columns.size())
+                    ddl << ", ";
+            }
+            ddl << ");\n\n";
+        }
+    }
+
+    for (const auto& rel : model.relations) {
+        ddl << "ALTER TABLE " << bracketEscape(rel.childTable) << "\n";
+        ddl << "ADD CONSTRAINT " << bracketEscape("FK_" + rel.childTable + "_" + rel.parentTable) << "\n";
+        ddl << "FOREIGN KEY (" << bracketEscape(rel.childColumn) << ")\n";
+        ddl << "REFERENCES " << bracketEscape(rel.parentTable) << " (" << bracketEscape(rel.parentColumn) << ");\n\n";
+    }
+
+    return ddl.str();
+}
+
+// === Color conversion ===
+
+std::string A5ERParser::convertA5erColor(const std::string& raw) {
+    if (raw.empty() || raw[0] != '$')
+        return "";
+
+    std::string_view hex(raw);
+    hex.remove_prefix(1);  // Remove '$'
+
+    // 8-digit: $AABBGGRR — if AA=FF it's the default color (transparent)
+    if (hex.size() == 8) {
+        auto a0 = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(hex[0])));
+        auto a1 = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(hex[1])));
+        if (a0 == 'f' && a1 == 'f')
+            return "";
+        hex.remove_prefix(2);  // Remove alpha
+    }
+
+    if (hex.size() != 6)
+        return "";
+
+    // Validate hex characters
+    unsigned int val = 0;
+    auto [ptr, ec] = std::from_chars(hex.data(), hex.data() + hex.size(), val, 16);
+    if (ec != std::errc{} || ptr != hex.data() + hex.size())
+        return "";
+
+    // $BBGGRR → #RRGGBB
+    std::string result = "#";
+    result += hex.substr(4, 2);  // RR
+    result += hex.substr(2, 2);  // GG
+    result += hex.substr(0, 2);  // BB
+
+    // Uppercase for consistency
+    std::ranges::transform(result, result.begin(), [](unsigned char c) { return std::toupper(c); });
+    return result;
+}
+
+// === A5ERModel → ERModel conversion ===
+
+ERModel A5ERParser::toERModel(const A5ERModel& a5model) {
+    ERModel model;
+    model.name = a5model.name;
+    model.databaseType = a5model.databaseType;
+
+    for (const auto& t : a5model.tables) {
+        ERModelTable table;
+        table.name = t.name;
+        table.logicalName = t.logicalName;
+        table.comment = t.comment;
+        table.page = t.page;
+        table.posX = t.posX;
+        table.posY = t.posY;
+        table.color = convertA5erColor(t.color);
+        table.bkColor = convertA5erColor(t.bkColor);
+
+        for (const auto& c : t.columns) {
+            ERModelColumn col;
+            col.name = c.name;
+            col.logicalName = c.logicalName;
+            col.type = c.type;
+            col.size = c.size;
+            col.scale = c.scale;
+            col.nullable = c.nullable;
+            col.isPrimaryKey = c.isPrimaryKey;
+            col.defaultValue = c.defaultValue;
+            col.comment = c.comment;
+            col.color = convertA5erColor(c.color);
+            table.columns.push_back(std::move(col));
+        }
+
+        for (const auto& idx : t.indexes) {
+            ERModelIndex erIdx;
+            erIdx.name = idx.name;
+            erIdx.columns = idx.columns;
+            erIdx.isUnique = idx.isUnique;
+            table.indexes.push_back(std::move(erIdx));
+        }
+
+        model.tables.push_back(std::move(table));
+    }
+
+    for (const auto& r : a5model.relations) {
+        ERModelRelation rel;
+        rel.name = r.name;
+        rel.parentTable = r.parentTable;
+        rel.childTable = r.childTable;
+        rel.parentColumn = r.parentColumn;
+        rel.childColumn = r.childColumn;
+        rel.cardinality = r.cardinality;
+        model.relations.push_back(std::move(rel));
+    }
+
+    for (const auto& s : a5model.shapes) {
+        ERModelShape shape;
+        shape.shapeType = s.shapeType;
+        // Normalize shapeType to lowercase
+        std::ranges::transform(shape.shapeType, shape.shapeType.begin(), [](unsigned char c) { return std::tolower(c); });
+        shape.text = s.text;
+        shape.fillColor = convertA5erColor(s.brushColor);
+        shape.fontColor = convertA5erColor(s.fontColor);
+        shape.fillAlpha = s.brushAlpha;
+        shape.fontSize = s.fontSize;
+        shape.left = s.left;
+        shape.top = s.top;
+        shape.width = s.width;
+        shape.height = s.height;
+        shape.page = s.page;
+        model.shapes.push_back(std::move(shape));
+    }
+
+    return model;
+}
+
+// === Legacy API ===
+
 bool A5ERParser::isTextFormat(const std::string& content) const {
     // XML形式は除外
     std::string_view sv(content);
-    auto pos = sv.find_first_not_of(" \t\r\n");
+    auto pos = sv.find_first_not_of(" \t\r\n\xEF\xBB\xBF");
     if (pos != std::string_view::npos) {
         if (sv.substr(pos).starts_with("<?xml") || sv[pos] == '<') {
             return false;
         }
     }
-    return content.starts_with("# A5:ER") || content.find("[Entity]") != std::string::npos;
+    // A5:ERヘッダ必須（[Entity]だけでは他INI形式と誤検知しうる）
+    return content.find("# A5:ER") != std::string::npos;
 }
 
-A5ERModel A5ERParser::parse(const std::string& filepath) {
+A5ERModel A5ERParser::parseFile(const std::string& filepath) const {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: " + filepath);
@@ -35,7 +254,7 @@ A5ERModel A5ERParser::parse(const std::string& filepath) {
     return parseFromString(content);
 }
 
-A5ERModel A5ERParser::parseFromString(const std::string& content) {
+A5ERModel A5ERParser::parseFromString(const std::string& content) const {
     // UTF-8 BOM除去（BOMなし時はコピー回避）
     const bool hasBom = content.size() >= 3 && content[0] == '\xEF' && content[1] == '\xBB' && content[2] == '\xBF';
     const std::string stripped = hasBom ? content.substr(3) : std::string{};
@@ -47,7 +266,7 @@ A5ERModel A5ERParser::parseFromString(const std::string& content) {
     return parseXmlFormat(input);
 }
 
-A5ERModel A5ERParser::parseXmlFormat(const std::string& content) {
+A5ERModel A5ERParser::parseXmlFormat(const std::string& content) const {
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_string(content.c_str());
 
@@ -72,6 +291,8 @@ A5ERModel A5ERParser::parseXmlFormat(const std::string& content) {
         table.page = entityNode.attribute("Page").as_string();
         table.posX = entityNode.attribute("X").as_double();
         table.posY = entityNode.attribute("Y").as_double();
+        table.color = entityNode.attribute("Color").as_string();
+        table.bkColor = entityNode.attribute("BkColor").as_string();
 
         for (auto attrNode : entityNode.children("Attribute")) {
             A5ERColumn col;
@@ -168,22 +389,26 @@ std::vector<std::string> A5ERParser::parseQuotedCSV(const std::string& raw) {
     return result;
 }
 
-std::string A5ERParser::resolveCardinality(int type1, int type2) {
+std::string A5ERParser::resolveCardinality(int type1, int type2, bool& needsSwap) {
     auto isMany = [](int t) { return t == 3 || t == 4; };
     auto isOne = [](int t) { return t == 1 || t == 2; };
+    needsSwap = false;
 
     if (isMany(type1) && isMany(type2))
         return "N:M";
     if (isOne(type1) && isMany(type2))
         return "1:N";
-    if (isMany(type1) && isOne(type2))
+    if (isMany(type1) && isOne(type2)) {
+        // Entity1 is the Many side → swap parent/child to normalize as 1:N
+        needsSwap = true;
         return "1:N";
+    }
     if (isOne(type1) && isOne(type2))
         return "1:1";
     return "1:N";
 }
 
-A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
+A5ERModel A5ERParser::parseTextFormat(const std::string& content) const {
     A5ERModel model;
     std::istringstream stream(content);
     std::string line;
@@ -203,10 +428,10 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
             line.pop_back();
         }
 
-        // セクションヘッダ判定: [Entity], [Relation] 等
+        // セクションヘッダ判定: [Entity], [Relation], [Shape] 等
         if (line.size() >= 3 && line.front() == '[' && line.back() == ']') {
             // 前セクションを保存（新ヘッダが暗黙の区切り）
-            if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation")) {
+            if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation" || currentType == "Shape")) {
                 sections.push_back({currentType, std::move(currentLines)});
             }
             currentType = line.substr(1, line.size() - 2);
@@ -216,7 +441,7 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
 
         // 明示的セクション終端（DEL行）
         if (line == "DEL" && !currentType.empty()) {
-            if (currentType == "Entity" || currentType == "Relation") {
+            if (currentType == "Entity" || currentType == "Relation" || currentType == "Shape") {
                 sections.push_back({currentType, std::move(currentLines)});
             }
             currentType.clear();
@@ -230,7 +455,7 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
     }
 
     // 最終セクション保存（DELなしファイル対応）
-    if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation")) {
+    if (!currentType.empty() && (currentType == "Entity" || currentType == "Relation" || currentType == "Shape")) {
         sections.push_back({currentType, std::move(currentLines)});
     }
 
@@ -284,6 +509,9 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
                         col.defaultValue = a5er::unescape(parts[5]);
                     if (parts.size() > 6)
                         col.comment = a5er::unescape(parts[6]);
+                    // Field[7]: column color ($AABBGGRR format)
+                    if (parts.size() > 7)
+                        col.color = parts[7];
                     col.size = 0;
                     col.scale = 0;
                     table.columns.push_back(std::move(col));
@@ -321,6 +549,8 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
             table.page = getProp(props, "Page");
             table.posX = getPropDouble(props, "Left");
             table.posY = getPropDouble(props, "Top");
+            table.color = getProp(props, "Color");
+            table.bkColor = getProp(props, "BkColor");
 
             model.tables.push_back(std::move(table));
         } else if (section.type == "Relation") {
@@ -341,16 +571,50 @@ A5ERModel A5ERParser::parseTextFormat(const std::string& content) {
 
             int type1 = getPropInt(props, "RelationType1");
             int type2 = getPropInt(props, "RelationType2");
-            rel.cardinality = resolveCardinality(type1, type2);
+            bool needsSwap = false;
+            rel.cardinality = resolveCardinality(type1, type2, needsSwap);
+            if (needsSwap) {
+                std::swap(rel.parentTable, rel.childTable);
+                std::swap(rel.parentColumn, rel.childColumn);
+                rel.name = rel.parentTable + "_" + rel.childTable;
+            }
 
             model.relations.push_back(std::move(rel));
+        } else if (section.type == "Shape") {
+            std::unordered_map<std::string, std::string> props;
+            for (const auto& sline : section.lines) {
+                auto eqPos = sline.find('=');
+                if (eqPos != std::string::npos) {
+                    props[sline.substr(0, eqPos)] = sline.substr(eqPos + 1);
+                }
+            }
+
+            A5ERShape shape{};
+            shape.shapeType = getProp(props, "ShapeType");
+            shape.text = a5er::unescape(getProp(props, "Text"));
+            shape.brushColor = getProp(props, "BrushColor");
+            shape.fontColor = getProp(props, "FontColor");
+            shape.brushAlpha = getPropInt(props, "BrushAlpha");
+            if (shape.brushAlpha == 0 && getProp(props, "BrushAlpha").empty()) {
+                shape.brushAlpha = 255;
+            }
+            shape.fontSize = getPropInt(props, "FontSize");
+            if (shape.fontSize == 0)
+                shape.fontSize = 9;
+            shape.left = getPropDouble(props, "Left");
+            shape.top = getPropDouble(props, "Top");
+            shape.width = getPropDouble(props, "Width");
+            shape.height = getPropDouble(props, "Height");
+            shape.page = getProp(props, "Page");
+
+            model.shapes.push_back(std::move(shape));
         }
     }
 
     return model;
 }
 
-std::string A5ERParser::generateDDL(const A5ERModel& model, const std::string& targetDatabase) {
+std::string A5ERParser::generateA5ERDDL(const A5ERModel& model, const std::string& targetDatabase) const {
     std::ostringstream ddl;
 
     ddl << "-- Generated from A5:ER model: " << model.name << "\n";
@@ -363,30 +627,30 @@ std::string A5ERParser::generateDDL(const A5ERModel& model, const std::string& t
 
     // Generate foreign keys
     for (const auto& rel : model.relations) {
-        ddl << "ALTER TABLE [" << rel.childTable << "]\n";
-        ddl << "ADD CONSTRAINT [FK_" << rel.childTable << "_" << rel.parentTable << "]\n";
-        ddl << "FOREIGN KEY ([" << rel.childColumn << "])\n";
-        ddl << "REFERENCES [" << rel.parentTable << "] ([" << rel.parentColumn << "]);\n\n";
+        ddl << "ALTER TABLE " << bracketEscape(rel.childTable) << "\n";
+        ddl << "ADD CONSTRAINT " << bracketEscape("FK_" + rel.childTable + "_" + rel.parentTable) << "\n";
+        ddl << "FOREIGN KEY (" << bracketEscape(rel.childColumn) << ")\n";
+        ddl << "REFERENCES " << bracketEscape(rel.parentTable) << " (" << bracketEscape(rel.parentColumn) << ");\n\n";
     }
 
     return ddl.str();
 }
 
-std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::string& targetDatabase) {
+std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::string& /*targetDatabase*/) const {
     std::ostringstream ddl;
 
     if (!table.comment.empty()) {
         ddl << "-- " << table.comment << "\n";
     }
 
-    ddl << "CREATE TABLE [" << table.name << "] (\n";
+    ddl << "CREATE TABLE " << bracketEscape(table.name) << " (\n";
 
     std::vector<std::string> pkColumns;
 
     for (size_t i = 0; i < table.columns.size(); ++i) {
         const auto& col = table.columns[i];
 
-        ddl << "    [" << col.name << "] ";
+        ddl << "    " << bracketEscape(col.name) << " ";
         ddl << mapTypeToSQLServer(col.type, col.size, col.scale);
 
         if (!col.nullable) {
@@ -401,7 +665,7 @@ std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::stri
             pkColumns.push_back(col.name);
         }
 
-        if (i < table.columns.size() - 1 || !pkColumns.empty()) {
+        if (i + 1 < table.columns.size() || !pkColumns.empty()) {
             ddl << ",";
         }
 
@@ -414,10 +678,10 @@ std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::stri
 
     // Primary key constraint
     if (!pkColumns.empty()) {
-        ddl << "    CONSTRAINT [PK_" << table.name << "] PRIMARY KEY (";
+        ddl << "    CONSTRAINT " << bracketEscape("PK_" + table.name) << " PRIMARY KEY (";
         for (size_t i = 0; i < pkColumns.size(); ++i) {
-            ddl << "[" << pkColumns[i] << "]";
-            if (i < pkColumns.size() - 1) {
+            ddl << bracketEscape(pkColumns[i]);
+            if (i + 1 < pkColumns.size()) {
                 ddl << ", ";
             }
         }
@@ -432,10 +696,10 @@ std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::stri
         if (idx.isUnique) {
             ddl << "UNIQUE ";
         }
-        ddl << "INDEX [" << idx.name << "] ON [" << table.name << "] (";
+        ddl << "INDEX " << bracketEscape(idx.name) << " ON " << bracketEscape(table.name) << " (";
         for (size_t i = 0; i < idx.columns.size(); ++i) {
-            ddl << "[" << idx.columns[i] << "]";
-            if (i < idx.columns.size() - 1) {
+            ddl << bracketEscape(idx.columns[i]);
+            if (i + 1 < idx.columns.size()) {
                 ddl << ", ";
             }
         }
@@ -446,8 +710,6 @@ std::string A5ERParser::generateTableDDL(const A5ERTable& table, const std::stri
 }
 
 std::string A5ERParser::mapTypeToSQLServer(const std::string& a5erType, int size, int scale) const {
-    // Map common A5:ER types to SQL Server types
-    // Supports both English and Japanese type names from A5:ER
     if (a5erType == "VARCHAR" || a5erType == "string" || a5erType == "NVARCHAR") {
         if (size <= 0 || size > 8000) {
             return "NVARCHAR(MAX)";

@@ -75,7 +75,7 @@ export const mockData: Record<string, unknown> = {
     },
   ],
   getQueryHistory: [],
-  parseA5ER: { name: '', databaseType: '', tables: [], relations: [] },
+  parseERDiagram: { name: '', databaseType: '', tables: [], relations: [], shapes: [], ddl: '' },
   getExecutionPlan: { plan: 'Mock execution plan text', actual: false },
   getSettings: {
     general: {

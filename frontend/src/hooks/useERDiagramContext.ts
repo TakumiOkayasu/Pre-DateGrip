@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useERDiagramStore } from '../store/erDiagramStore';
-import type { ERRelationEdge, ERTableNode } from '../types';
+import type { ERRelationEdge, ERShapeNode, ERTableNode } from '../types';
 import { ALL_PAGES, DEFAULT_PAGE } from '../utils/erDiagramConstants';
 
 export interface ERDiagramContextValue {
@@ -11,6 +11,7 @@ export interface ERDiagramContextValue {
   pageCounts: Map<string, number>;
   tables: ERTableNode[];
   relations: ERRelationEdge[];
+  shapes: ERShapeNode[];
   isLoading: boolean;
   error: string | null;
 }
@@ -20,11 +21,12 @@ export interface ERDiagramContextValue {
  * Store への直接アクセスをカプセル化し、View と Store を分離する。
  */
 export function useERDiagramContext(): ERDiagramContextValue {
-  const { allTables, allRelations, selectedPage, setSelectedPage, isLoading, error } =
+  const { allTables, allRelations, allShapes, selectedPage, setSelectedPage, isLoading, error } =
     useERDiagramStore(
       useShallow((s) => ({
         allTables: s.tables,
         allRelations: s.relations,
+        allShapes: s.shapes,
         selectedPage: s.selectedPage,
         setSelectedPage: s.setSelectedPage,
         isLoading: s.isLoading,
@@ -54,6 +56,11 @@ export function useERDiagramContext(): ERDiagramContextValue {
     return allRelations.filter((r) => tableIds.has(r.source) && tableIds.has(r.target));
   }, [allRelations, tables]);
 
+  const shapes = useMemo(() => {
+    if (selectedPage === ALL_PAGES) return allShapes;
+    return allShapes.filter((s) => (s.data.page || DEFAULT_PAGE) === selectedPage);
+  }, [allShapes, selectedPage]);
+
   return {
     pages,
     selectedPage,
@@ -61,6 +68,7 @@ export function useERDiagramContext(): ERDiagramContextValue {
     pageCounts,
     tables,
     relations,
+    shapes,
     isLoading,
     error,
   };

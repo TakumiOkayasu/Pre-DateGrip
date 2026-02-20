@@ -78,9 +78,8 @@ void IPCHandler::registerRoutes() {
     m_routes["exportExcel"] = [this](auto p) { return m_ctx.exports().handleExportExcel(p); };
 
     // Utility
-    m_routes["uppercaseKeywords"] = [this](auto p) { return m_ctx.utility().handleUppercaseKeywords(p); };
-    m_routes["parseA5ER"] = [this](auto p) { return m_ctx.utility().handleParseA5ER(p); };
-    m_routes["parseA5ERContent"] = [this](auto p) { return m_ctx.utility().handleParseA5ERContent(p); };
+    m_routes["uppercaseKeywords"] = [this](auto p) { return m_ctx.utility().uppercaseKeywords(p); };
+    m_routes["parseERDiagram"] = [this](auto p) { return m_ctx.utility().parseERDiagram(p); };
 
     // Search
     m_routes["searchObjects"] = [this](auto p) { return m_ctx.search().handleSearchObjects(p); };

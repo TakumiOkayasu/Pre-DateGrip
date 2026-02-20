@@ -105,6 +105,7 @@ export interface ERColumn extends Omit<Column, 'type'> {
   type?: string;
   logicalName?: string;
   defaultValue?: string;
+  color?: string; // CSS #RRGGBB
 }
 
 export interface ResultSet {
@@ -275,6 +276,25 @@ export interface ERTableNode {
     tableName: string;
     logicalName?: string;
     columns: ERColumn[];
+    page?: string;
+    color?: string; // CSS #RRGGBB
+    bkColor?: string; // CSS #RRGGBB
+  };
+  position: { x: number; y: number };
+}
+
+export interface ERShapeNode {
+  id: string;
+  type: 'shape';
+  data: {
+    shapeType: string;
+    text: string;
+    fillColor?: string;
+    fontColor?: string;
+    fillAlpha: number;
+    fontSize: number;
+    width: number;
+    height: number;
     page?: string;
   };
   position: { x: number; y: number };

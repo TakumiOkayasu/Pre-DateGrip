@@ -10,9 +10,8 @@ class IUtilityProvider {
 public:
     virtual ~IUtilityProvider() = default;
 
-    [[nodiscard]] virtual std::string handleUppercaseKeywords(std::string_view params) = 0;
-    [[nodiscard]] virtual std::string handleParseA5ER(std::string_view params) = 0;
-    [[nodiscard]] virtual std::string handleParseA5ERContent(std::string_view params) = 0;
+    [[nodiscard]] virtual std::string uppercaseKeywords(std::string_view params) = 0;
+    [[nodiscard]] virtual std::string parseERDiagram(std::string_view params) = 0;
 };
 
 }  // namespace velocitydb
