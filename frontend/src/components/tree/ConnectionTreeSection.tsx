@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bridge } from '../../api/bridge';
 import { useConnectionStore } from '../../store/connectionStore';
 import type { Connection, DatabaseObject } from '../../types';
+import { connectionColor } from '../../utils/colorContrast';
 import { log } from '../../utils/logger';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import styles from './ObjectTree.module.css';
@@ -353,6 +354,11 @@ export function ConnectionTreeSection({
     [connection.id, onTableOpen, loadTables]
   );
 
+  const connColor = useMemo(
+    () => connectionColor(connection.server, connection.database),
+    [connection.server, connection.database]
+  );
+
   if (treeData.length === 0) {
     return <div className={styles.loading}>Loading...</div>;
   }
@@ -367,7 +373,7 @@ export function ConnectionTreeSection({
           expandedNodes={expandedNodes}
           loadingNodes={loadingNodes}
           selectedNodeId={selectedNodeId}
-          environment={connection.environment}
+          connectionColor={connColor}
           onToggle={toggleNode}
           onTableOpen={handleTableOpen}
           onContextMenu={handleContextMenu}

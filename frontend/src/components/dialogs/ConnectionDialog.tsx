@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { bridge } from '../../api/bridge';
 import type { DatabaseType, EnvironmentType, SshAuthType } from '../../types';
-import { envStyleClass } from '../../utils/colorContrast';
+import { connectionColor } from '../../utils/colorContrast';
 import styles from './ConnectionDialog.module.css';
 import { useConnectionProfile } from './hooks/useConnectionProfile';
 import { ConnectionFormSection } from './sections/ConnectionFormSection';
@@ -154,11 +154,12 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
             </div>
             <div className={styles.profileItems}>
               {profiles.map((profile) => {
-                const envClass = envStyleClass(profile.environment, styles);
+                const connColor = connectionColor(profile.server, profile.database);
                 return (
                   <div
                     key={profile.id}
-                    className={`${styles.profileItem} ${mode === 'edit' && editingProfileId === profile.id ? styles.selected : ''} ${envClass}`}
+                    className={`${styles.profileItem} ${mode === 'edit' && editingProfileId === profile.id ? styles.selected : ''}`}
+                    style={{ '--connection-color': connColor } as React.CSSProperties}
                     onClick={() => handleProfileSelect(profile.id)}
                   >
                     <span className={styles.profileIcon}>🗄️</span>

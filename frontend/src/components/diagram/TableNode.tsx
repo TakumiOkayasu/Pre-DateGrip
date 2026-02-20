@@ -23,6 +23,11 @@ const icons = {
 };
 
 const INT_RE = /\b(tiny|small|big)?int\b/i;
+
+function isPlaceholder(name?: string): boolean {
+  if (!name) return true;
+  return name.startsWith('NEW_ENTITY') || name === '未設定';
+}
 const HIDDEN_HANDLE: React.CSSProperties = { opacity: 0, width: 6, height: 6 };
 
 type HandleDef = { type: HandleType; position: Position; id: string };
@@ -39,18 +44,19 @@ const HANDLE_DEFS: HandleDef[] = [
 
 function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
   const isInt = col.type ? INT_RE.test(col.type) : false;
-  const showLogical = col.logicalName && col.logicalName !== col.name;
+  const useLogical = !isPlaceholder(col.logicalName);
+  const displayName = useLogical ? (col.logicalName as string) : col.name;
+  const altName = useLogical ? col.name : undefined;
 
   return (
     <div
       className={`${styles.column} ${isPK ? styles.primaryKey : ''}`}
-      title={showLogical ? col.name : col.comment || undefined}
+      title={altName || col.comment || undefined}
     >
       {isPK && <span className={styles.keyIcon}>{icons.key}</span>}
       <span className={styles.columnName}>
         {!isPK && !col.nullable ? '*' : ''}
-        {showLogical ? col.logicalName : col.name}
-        {showLogical && <span className={styles.logicalName}>({col.name})</span>}
+        {displayName}
       </span>
       {col.type && (
         <span className={`${styles.columnType} ${isInt ? styles.intType : ''}`}>
@@ -65,6 +71,10 @@ function ColumnRow({ col, isPK }: { col: ERColumn; isPK: boolean }) {
 export const TableNode = memo(function TableNode({ data, selected }: TableNodeProps) {
   const { tableName, logicalName, columns, color, bkColor } = data;
 
+  const useLogicalTable = !isPlaceholder(logicalName);
+  const displayTableName = useLogicalTable ? (logicalName as string) : tableName;
+  const altTableName = useLogicalTable ? tableName : undefined;
+
   const primaryKeys = columns.filter((c) => c.isPrimaryKey);
   const regularColumns = columns.filter((c) => !c.isPrimaryKey);
 
@@ -76,13 +86,13 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
 
       <div
         className={styles.header}
-        title={logicalName ? tableName : undefined}
+        title={altTableName || undefined}
         style={
           bkColor ? { backgroundColor: bkColor, color: readableColor(bkColor, color) } : undefined
         }
       >
         <span className={styles.icon}>{icons.table}</span>
-        <span className={styles.tableName}>{logicalName || tableName}</span>
+        <span className={styles.tableName}>{displayTableName}</span>
       </div>
 
       <div className={styles.columns}>

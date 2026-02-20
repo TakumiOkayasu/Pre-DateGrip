@@ -12,6 +12,7 @@
   color: var(--text-primary);
   border-radius: 4px;
   margin: 1px 4px;
+  border-left: 3px solid var(--connection-color, transparent);
   transition: background-color 0.1s ease;
 }
 
@@ -58,7 +59,7 @@
 
 /* Icon colors based on type */
 .iconDatabase {
-  color: #6cb0f6;
+  color: var(--connection-color, #6cb0f6);
 }
 
 .iconFolder {
@@ -110,29 +111,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-/* Environment-specific styles for database nodes */
-.envDevelopment {
-  border-left: 3px solid #4caf50;
-}
-
-.envDevelopment .iconDatabase {
-  color: #81c784;
-}
-
-.envStaging {
-  border-left: 3px solid #ff9800;
-}
-
-.envStaging .iconDatabase {
-  color: #ffb74d;
-}
-
-.envProduction {
-  border-left: 3px solid #f44336;
-}
-
-.envProduction .iconDatabase {
-  color: #e57373;
 }
