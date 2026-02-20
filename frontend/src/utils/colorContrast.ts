@@ -56,10 +56,7 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /** Resolve CSS Modules environment class from EnvironmentType */
-export function envStyleClass(
-  env: string | undefined,
-  styleMap: Record<string, string>,
-): string {
+export function envStyleClass(env: string | undefined, styleMap: Record<string, string>): string {
   if (!env) return '';
   return styleMap[`env${env.charAt(0).toUpperCase()}${env.slice(1)}`] ?? '';
 }
