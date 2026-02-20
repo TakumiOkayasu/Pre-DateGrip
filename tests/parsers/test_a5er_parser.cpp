@@ -668,7 +668,7 @@ TEST_F(ERDiagramParserFactoryTest, ParseXmlByContent) {
 }
 
 TEST_F(ERDiagramParserFactoryTest, ParseThrowsForUnknownFormat) {
-    EXPECT_THROW(factory.parse("unknown format content", "test.xyz"), std::runtime_error);
+    EXPECT_THROW(static_cast<void>(factory.parse("unknown format content", "test.xyz")), std::runtime_error);
 }
 
 TEST_F(ERDiagramParserFactoryTest, GenerateDDL) {
@@ -774,11 +774,11 @@ TEST_F(ERDiagramParserTest, ParseFileNotFound) {
 }
 
 TEST_F(ERDiagramParserTest, XmlFormatInvalidXmlThrows) {
-    EXPECT_THROW(parser.parse("<?xml version=\"1.0\"?><A5ER><broken"), std::runtime_error);
+    EXPECT_THROW(static_cast<void>(parser.parse("<?xml version=\"1.0\"?><A5ER><broken")), std::runtime_error);
 }
 
 TEST_F(ERDiagramParserTest, XmlFormatMissingA5ERRootThrows) {
-    EXPECT_THROW(parser.parse("<?xml version=\"1.0\"?><NotA5ER/>"), std::runtime_error);
+    EXPECT_THROW(static_cast<void>(parser.parse("<?xml version=\"1.0\"?><NotA5ER/>")), std::runtime_error);
 }
 
 TEST_F(ERDiagramParserTest, CardinalitySwapParentChild) {

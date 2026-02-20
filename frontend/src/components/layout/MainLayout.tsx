@@ -1,11 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { bridge } from '../../api/bridge';
 import { useKeyboardHandler } from '../../hooks/useKeyboardHandler';
-import {
-  useConnectionStore,
-  useIsProductionMode,
-  useIsReadOnlyMode,
-} from '../../store/connectionStore';
+import { useConnectionStore } from '../../store/connectionStore';
 import { useERDiagramStore } from '../../store/erDiagramStore';
 import { useQueryStore } from '../../store/queryStore';
 import { useSessionStore } from '../../store/sessionStore';
@@ -128,7 +124,7 @@ export function MainLayout() {
     isBlocked?: boolean;
   }>({ isOpen: false, title: '', message: '' });
 
-  const { connections, activeConnectionId, addConnection, setActive } = useConnectionStore();
+  const { connections, addConnection } = useConnectionStore();
   const {
     queries,
     activeQueryId,
@@ -142,10 +138,11 @@ export function MainLayout() {
     openERDiagram,
   } = useQueryStore();
   const { loadFromParsedModel } = useERDiagramStore();
-  const isProduction = useIsProductionMode();
-  const isReadOnly = useIsReadOnlyMode();
-  const activeConnection = connections.find((c) => c.id === activeConnectionId);
   const activeQuery = queries.find((q) => q.id === activeQueryId);
+  const activeQueryConnectionId = activeQuery?.connectionId ?? null;
+  const activeQueryConnection = connections.find((c) => c.id === activeQueryConnectionId);
+  const isProduction = activeQueryConnection?.isProduction ?? false;
+  const isReadOnly = activeQueryConnection?.isReadOnly ?? false;
   const isDataView = activeQuery?.isDataView === true;
 
   // Hide bottom panel when in data view mode (table display)
@@ -189,21 +186,21 @@ export function MainLayout() {
   };
 
   const handleNewQuery = useCallback(() => {
-    addQuery(activeConnectionId);
-  }, [addQuery, activeConnectionId]);
+    addQuery(activeQueryConnectionId);
+  }, [addQuery, activeQueryConnectionId]);
 
   // Store pending execution for use after confirmation
   const pendingExecutionRef = useRef<{ queryId: string; connectionId: string } | null>(null);
 
   const doExecuteQuery = useCallback(() => {
-    if (activeQueryId && activeConnectionId) {
-      executeQuery(activeQueryId, activeConnectionId);
+    if (activeQueryId && activeQueryConnectionId) {
+      executeQuery(activeQueryId, activeQueryConnectionId);
       setIsBottomPanelVisible(true);
     }
-  }, [activeQueryId, activeConnectionId, executeQuery]);
+  }, [activeQueryId, activeQueryConnectionId, executeQuery]);
 
   const handleExecute = useCallback(() => {
-    if (!activeQueryId || !activeConnectionId || !activeQuery) return;
+    if (!activeQueryId || !activeQueryConnectionId || !activeQuery) return;
 
     const sql = activeQuery.content;
 
@@ -226,7 +223,10 @@ export function MainLayout() {
     if (isProduction && !isReadOnly) {
       const warnings = getQueryWarnings(sql, true);
       if (warnings.length > 0) {
-        pendingExecutionRef.current = { queryId: activeQueryId, connectionId: activeConnectionId };
+        pendingExecutionRef.current = {
+          queryId: activeQueryId,
+          connectionId: activeQueryConnectionId,
+        };
         setQueryConfirmDialog({
           isOpen: true,
           title: 'Production Warning',
@@ -240,7 +240,14 @@ export function MainLayout() {
 
     // Safe to execute
     doExecuteQuery();
-  }, [activeQueryId, activeConnectionId, activeQuery, isProduction, isReadOnly, doExecuteQuery]);
+  }, [
+    activeQueryId,
+    activeQueryConnectionId,
+    activeQuery,
+    isProduction,
+    isReadOnly,
+    doExecuteQuery,
+  ]);
 
   const handleConfirmExecute = useCallback(() => {
     setQueryConfirmDialog({ isOpen: false, title: '', message: '' });
@@ -258,9 +265,9 @@ export function MainLayout() {
   }, []);
 
   const handleCancel = useCallback(() => {
-    if (!activeConnectionId) return;
-    cancelQuery(activeConnectionId);
-  }, [activeConnectionId, cancelQuery]);
+    if (!activeQueryConnectionId) return;
+    cancelQuery(activeQueryConnectionId);
+  }, [activeQueryConnectionId, cancelQuery]);
 
   const handleFormat = useCallback(() => {
     if (activeQueryId && !isDataView) {
@@ -413,40 +420,12 @@ export function MainLayout() {
           </button>
         </div>
 
-        {/* DB Selector */}
-        <div className={styles.toolbarGroup}>
-          <select
-            className={styles.dbSelector}
-            value={activeConnectionId ?? ''}
-            onChange={(e) => {
-              const id = e.target.value || null;
-              setActive(id);
-            }}
-            disabled={connections.length === 0}
-            title="接続先データベースを切り替え"
-          >
-            {connections.length === 0 ? (
-              <option value="">未接続</option>
-            ) : (
-              <>
-                {!activeConnectionId && <option value="">選択してください</option>}
-                {connections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.server} | {c.database}
-                    {c.isProduction ? ' (本番)' : ''}
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
-        </div>
-
         <div className={styles.toolbarDivider} />
 
         <div className={styles.toolbarGroup}>
           <button
             onClick={isExecuting ? handleCancel : handleExecute}
-            disabled={!activeQueryId || !activeConnectionId}
+            disabled={!activeQueryId || !activeQueryConnectionId}
             title={isExecuting ? '停止 (Escape)' : '実行 (Ctrl+Enter)'}
             className={styles.executeButton}
           >
@@ -584,23 +563,23 @@ export function MainLayout() {
             <span className={styles.connectionDot} />
             {isExecuting ? '実行中...' : '準備完了'}
           </span>
-          {activeConnection?.tableOpenTimeMs !== undefined && (
+          {activeQueryConnection?.tableOpenTimeMs !== undefined && (
             <span
               className={styles.statusItem}
               title="テーブルを開くのにかかった時間（クリックから表示まで）"
             >
-              | Open: {activeConnection.tableOpenTimeMs.toFixed(1)}ms
+              | Open: {activeQueryConnection.tableOpenTimeMs.toFixed(1)}ms
             </span>
           )}
         </div>
         <div className={styles.statusCenter}>{activeQuery && <span>{activeQuery.name}</span>}</div>
         <div className={styles.statusRight}>
           <span
-            className={`${styles.statusItem} ${activeConnection ? styles.connected : styles.disconnected}`}
+            className={`${styles.statusItem} ${activeQueryConnection ? styles.connected : styles.disconnected}`}
           >
             <span className={styles.connectionDot} />
-            {activeConnection
-              ? `${activeConnection.server}/${activeConnection.database}`
+            {activeQueryConnection
+              ? `${activeQueryConnection.server}/${activeQueryConnection.database}`
               : '未接続'}
           </span>
         </div>

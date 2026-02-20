@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react';
-import { useActiveQuery } from '../../store/queryStore';
+import { lazy, Suspense, useCallback } from 'react';
+import { useConnectionStore } from '../../store/connectionStore';
+import { useActiveQuery, useQueryStore } from '../../store/queryStore';
 import { log } from '../../utils/logger';
 import { EditorTabs } from '../editor/EditorTabs';
 import styles from './CenterPanel.module.css';
@@ -27,8 +28,19 @@ function EditorLoadingFallback() {
 
 export function CenterPanel() {
   const activeQuery = useActiveQuery();
+  const connections = useConnectionStore((s) => s.connections);
+  const updateQueryConnection = useQueryStore((s) => s.updateQueryConnection);
   const isDataView = activeQuery?.isDataView === true;
   const isERDiagram = activeQuery?.isERDiagram === true;
+
+  const activeQueryId = activeQuery?.id ?? null;
+  const handleConnectionChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      if (!activeQueryId) return;
+      updateQueryConnection(activeQueryId, e.target.value || null);
+    },
+    [activeQueryId, updateQueryConnection]
+  );
 
   log.debug(
     `[CenterPanel] Render: activeQuery=${activeQuery?.id}, isDataView=${isDataView}, isERDiagram=${isERDiagram}`
@@ -36,7 +48,30 @@ export function CenterPanel() {
 
   return (
     <div className={styles.container}>
-      <EditorTabs />
+      <div className={styles.tabBar}>
+        <EditorTabs />
+        <select
+          className={styles.connectionSelector}
+          value={activeQuery?.connectionId ?? ''}
+          onChange={handleConnectionChange}
+          disabled={connections.length === 0 || !activeQuery}
+          title="このタブの接続先"
+        >
+          {connections.length === 0 ? (
+            <option value="">未接続</option>
+          ) : (
+            <>
+              {!activeQuery?.connectionId && <option value="">接続を選択</option>}
+              {connections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.server}/{c.database}
+                  {c.isProduction ? ' (本番)' : ''}
+                </option>
+              ))}
+            </>
+          )}
+        </select>
+      </div>
       <div className={styles.editorContainer}>
         <Suspense fallback={<EditorLoadingFallback />}>
           {isERDiagram ? (

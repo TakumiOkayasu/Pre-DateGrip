@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
-import { useActiveConnection, useConnectionStore } from '../../store/connectionStore';
+import { useConnectionStore } from '../../store/connectionStore';
 import {
   useIsActiveDataView,
   useIsQueryExecuting,
@@ -44,11 +44,13 @@ interface ResultGridProps {
 function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps = {}) {
   // --- Store subscriptions ---
   const activeQueryId = useQueryStore((state) => state.activeQueryId);
-  const activeConnectionId = useConnectionStore((state) => state.activeConnectionId);
-  const activeConn = useActiveConnection();
   const isActiveDataView = useIsActiveDataView();
   const targetQueryId = excludeDataView && isActiveDataView ? null : (queryId ?? activeQueryId);
   const currentQuery = useQueryById(targetQueryId);
+  const queryConnectionId = currentQuery?.connectionId ?? null;
+  const activeConn = useConnectionStore(
+    (state) => state.connections.find((c) => c.id === queryConnectionId) ?? null
+  );
   const queryResult = useQueryResult(targetQueryId);
   const isExecuting = useIsQueryExecuting(targetQueryId);
   const error = useQueryError(targetQueryId);
@@ -147,7 +149,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
   } = useGridEdit({
     resultSet,
     currentQuery,
-    activeConnectionId,
+    activeConnectionId: queryConnectionId,
     rowData: baseRowData,
     selectedRows,
   });
@@ -164,13 +166,13 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
 
   const handleOpenRelatedTable = useCallback(
     (tableName: string, fkWhereClause: string) => {
-      if (activeConnectionId) openTableData(activeConnectionId, tableName, fkWhereClause);
+      if (queryConnectionId) openTableData(queryConnectionId, tableName, fkWhereClause);
     },
-    [activeConnectionId, openTableData]
+    [queryConnectionId, openTableData]
   );
 
   const { isForeignKeyColumn, navigateToRelatedRow } = useRelatedRows({
-    connectionId: activeConnectionId,
+    connectionId: queryConnectionId,
     tableName: currentQuery?.sourceTable ?? null,
     onOpenRelatedTable: handleOpenRelatedTable,
   });
@@ -296,31 +298,31 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
 
   const handleWhereKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && activeQueryId && activeConnectionId && currentQuery?.sourceTable) {
-        applyWhereFilter(activeQueryId, activeConnectionId, whereClause);
+      if (e.key === 'Enter' && activeQueryId && queryConnectionId && currentQuery?.sourceTable) {
+        applyWhereFilter(activeQueryId, queryConnectionId, whereClause);
       }
     },
-    [activeQueryId, activeConnectionId, currentQuery?.sourceTable, whereClause, applyWhereFilter]
+    [activeQueryId, queryConnectionId, currentQuery?.sourceTable, whereClause, applyWhereFilter]
   );
 
   const handleWhereApply = useCallback(() => {
-    if (activeQueryId && activeConnectionId) {
-      applyWhereFilter(activeQueryId, activeConnectionId, whereClause);
+    if (activeQueryId && queryConnectionId) {
+      applyWhereFilter(activeQueryId, queryConnectionId, whereClause);
     }
-  }, [activeQueryId, activeConnectionId, whereClause, applyWhereFilter]);
+  }, [activeQueryId, queryConnectionId, whereClause, applyWhereFilter]);
 
   const handleWhereClear = useCallback(() => {
     setWhereClause('');
-    if (activeQueryId && activeConnectionId) {
-      applyWhereFilter(activeQueryId, activeConnectionId, '');
+    if (activeQueryId && queryConnectionId) {
+      applyWhereFilter(activeQueryId, queryConnectionId, '');
     }
-  }, [activeQueryId, activeConnectionId, applyWhereFilter]);
+  }, [activeQueryId, queryConnectionId, applyWhereFilter]);
 
   const handleRefresh = useCallback(() => {
-    if (targetQueryId && activeConnectionId) {
-      refreshDataView(targetQueryId, activeConnectionId);
+    if (targetQueryId && queryConnectionId) {
+      refreshDataView(targetQueryId, queryConnectionId);
     }
-  }, [targetQueryId, activeConnectionId, refreshDataView]);
+  }, [targetQueryId, queryConnectionId, refreshDataView]);
 
   const handleToggleColumnFilters = useCallback(() => {
     setShowColumnFilters((prev) => !prev);
@@ -335,8 +337,8 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
       <div className={styles.message}>
         <span className={styles.spinner}>{'\u23F3'}</span>
         <span>クエリ実行中...</span>
-        {activeConnectionId && (
-          <button onClick={() => cancelQuery(activeConnectionId)} className={styles.cancelButton}>
+        {queryConnectionId && (
+          <button onClick={() => cancelQuery(queryConnectionId)} className={styles.cancelButton}>
             キャンセル
           </button>
         )}
@@ -373,7 +375,7 @@ function ResultGridInner({ queryId, excludeDataView = false }: ResultGridProps =
       )}
 
       <GridToolbar
-        showRefresh={!!currentQuery?.sourceTable && !!activeConnectionId}
+        showRefresh={!!currentQuery?.sourceTable && !!queryConnectionId}
         isEditMode={isEditMode}
         hasChanges={hasChanges()}
         isApplying={isApplying}
