@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+PackageManager = tuple[str, Path]
+
 
 def get_project_root() -> Path:
     """Get the project root directory (resolves symlinks)."""
@@ -49,7 +51,7 @@ def run_command(
         return False, str(e)
 
 
-def find_package_manager() -> tuple[str, Path] | None:
+def find_package_manager() -> PackageManager | None:
     """Find available package manager (Bun or npm)."""
     # Try Bun first (preferred)
     bun_path = shutil.which("bun")
@@ -171,6 +173,40 @@ def check_build_tools(env: dict[str, str]) -> bool:
         print("WARNING: Ninja not found, will use slower generator")
 
     return True
+
+
+def ensure_frontend_deps() -> PackageManager | None:
+    """Ensure frontend dependencies are up-to-date. Returns PackageManager on success."""
+    project_root = get_project_root()
+    frontend_dir = project_root / "frontend"
+    node_modules = frontend_dir / "node_modules"
+    package_json = frontend_dir / "package.json"
+
+    pkg_info = find_package_manager()
+    if not pkg_info:
+        print("\nERROR: No package manager found")
+        print("  Install one of: bun (https://bun.sh), npm (https://nodejs.org)")
+        return None
+
+    pkg_manager, pkg_path = pkg_info
+
+    needs_install = not node_modules.exists()
+    if not needs_install and package_json.exists():
+        pkg_mtime = package_json.stat().st_mtime
+        nm_mtime = node_modules.stat().st_mtime
+        if pkg_mtime > nm_mtime:
+            print("[package.json updated since last install, reinstalling...]")
+            needs_install = True
+
+    if needs_install:
+        print("\n[Dependencies outdated, installing...]")
+        success, _ = run_command(
+            [str(pkg_path), "install"], f"{pkg_manager} install", cwd=frontend_dir
+        )
+        if not success:
+            print("\nERROR: Failed to install dependencies")
+            return None
+    return pkg_info
 
 
 def clear_webview2_cache(project_root: Path) -> None:

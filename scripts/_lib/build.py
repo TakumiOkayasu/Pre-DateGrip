@@ -32,44 +32,15 @@ def build_frontend(clean: bool = False) -> bool:
                 except Exception as e:
                     print(f"  [FAIL] {e}")
 
-    # Find package manager
-    print("\n[1/3] Detecting package manager...")
-    pkg_info = utils.find_package_manager()
+    # Check dependencies and get package manager
+    pkg_info = utils.ensure_frontend_deps()
     if not pkg_info:
-        print("\nERROR: No package manager found (Bun or npm)")
-        print("\nInstall options:")
-        print('  1. Bun (recommended): powershell -c "irm bun.sh/install.ps1 | iex"')
-        print("  2. npm: winget install OpenJS.NodeJS")
         return False
 
     pkg_manager, pkg_path = pkg_info
-    print(f"Found {pkg_manager}: {pkg_path}")
-
-    # Check dependencies
-    print("\n[2/3] Checking dependencies...")
-    node_modules = frontend_dir / "node_modules"
-    package_json = frontend_dir / "package.json"
-
-    needs_install = not node_modules.exists()
-    if not needs_install and package_json.exists():
-        pkg_mtime = package_json.stat().st_mtime
-        nm_mtime = node_modules.stat().st_mtime
-        if pkg_mtime > nm_mtime:
-            print("  package.json modified, reinstalling...")
-            needs_install = True
-
-    if needs_install:
-        success, _ = utils.run_command(
-            [str(pkg_path), "install"], f"{pkg_manager} install", cwd=frontend_dir
-        )
-        if not success:
-            print("\nERROR: Failed to install dependencies")
-            return False
-    else:
-        print("  Dependencies up to date")
 
     # Build
-    print("\n[3/3] Building...")
+    print("\n[Building...]")
     success, _ = utils.run_command(
         [str(pkg_path), "run", "build"], f"{pkg_manager} run build", cwd=frontend_dir
     )

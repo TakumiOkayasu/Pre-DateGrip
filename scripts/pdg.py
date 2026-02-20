@@ -91,9 +91,9 @@ def cmd_dev(_args: argparse.Namespace) -> bool:
     print("#  Starting Development Server")
     print(f"{'#' * 60}")
 
-    pkg_info = utils.find_package_manager()
+    # Ensure dependencies
+    pkg_info = utils.ensure_frontend_deps()
     if not pkg_info:
-        print("\nERROR: No package manager found")
         return False
 
     pkg_manager, pkg_path = pkg_info

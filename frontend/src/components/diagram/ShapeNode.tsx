@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { blendColor, hexToRgba, readableColor } from '../../utils/colorContrast';
+import { hexToRgba, readableColor } from '../../utils/colorContrast';
 import styles from './ShapeNode.module.css';
 
 interface ShapeNodeData {
@@ -25,8 +25,8 @@ export const ShapeNode = memo(function ShapeNode({ data }: ShapeNodeProps) {
 
   const backgroundColor = fillColor ? hexToRgba(fillColor, fillAlpha) : 'transparent';
 
-  const effectiveBg = fillColor ? blendColor(fillColor, fillAlpha, CANVAS_BG) : CANVAS_BG;
-  const textColor = fontColor ? readableColor(effectiveBg, fontColor) : undefined;
+  const effectiveBg = fillColor ?? CANVAS_BG;
+  const textColor = readableColor(effectiveBg, fontColor);
 
   return (
     <div
@@ -36,7 +36,7 @@ export const ShapeNode = memo(function ShapeNode({ data }: ShapeNodeProps) {
         height: height || undefined,
         backgroundColor,
         borderRadius: isRound ? 8 : 0,
-        color: textColor || 'var(--text-primary)',
+        color: textColor,
         fontSize: fontSize || 9,
       }}
     >
