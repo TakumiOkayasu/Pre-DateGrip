@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { bridge } from '../../api/bridge';
 import type { DatabaseType, EnvironmentType, SshAuthType } from '../../types';
+import { envStyleClass } from '../../utils/colorContrast';
 import styles from './ConnectionDialog.module.css';
 import { useConnectionProfile } from './hooks/useConnectionProfile';
 import { ConnectionFormSection } from './sections/ConnectionFormSection';
@@ -152,21 +153,24 @@ export function ConnectionDialog({ isOpen, onClose, onConnect }: ConnectionDialo
               </button>
             </div>
             <div className={styles.profileItems}>
-              {profiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className={`${styles.profileItem} ${mode === 'edit' && editingProfileId === profile.id ? styles.selected : ''}`}
-                  onClick={() => handleProfileSelect(profile.id)}
-                >
-                  <span className={styles.profileIcon}>🗄️</span>
-                  <div className={styles.profileInfo}>
-                    <span className={styles.profileName}>{profile.name}</span>
-                    <span className={styles.profileServer}>
-                      {profile.server}/{profile.database}
-                    </span>
+              {profiles.map((profile) => {
+                const envClass = envStyleClass(profile.environment, styles);
+                return (
+                  <div
+                    key={profile.id}
+                    className={`${styles.profileItem} ${mode === 'edit' && editingProfileId === profile.id ? styles.selected : ''} ${envClass}`}
+                    onClick={() => handleProfileSelect(profile.id)}
+                  >
+                    <span className={styles.profileIcon}>🗄️</span>
+                    <div className={styles.profileInfo}>
+                      <span className={styles.profileName}>{profile.name}</span>
+                      <span className={styles.profileServer}>
+                        {profile.server}/{profile.database}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {profiles.length === 0 && <div className={styles.noProfiles}>保存済み接続なし</div>}
             </div>
           </div>

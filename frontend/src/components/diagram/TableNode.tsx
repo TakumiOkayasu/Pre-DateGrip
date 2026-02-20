@@ -1,6 +1,7 @@
 import { Handle, type HandleType, Position } from '@xyflow/react';
 import { memo } from 'react';
 import type { ERColumn } from '../../types';
+import { readableColor } from '../../utils/colorContrast';
 import styles from './TableNode.module.css';
 
 interface TableNodeData {
@@ -16,7 +17,6 @@ interface TableNodeProps {
   selected?: boolean;
 }
 
-// Unicode icons
 const icons = {
   table: '\uD83D\uDCCB', // 📋
   key: '\uD83D\uDD11', // 🔑
@@ -77,10 +77,9 @@ export const TableNode = memo(function TableNode({ data, selected }: TableNodePr
       <div
         className={styles.header}
         title={logicalName ? tableName : undefined}
-        style={{
-          ...(bkColor && { backgroundColor: bkColor }),
-          ...(color && { color }),
-        }}
+        style={
+          bkColor ? { backgroundColor: bkColor, color: readableColor(bkColor, color) } : undefined
+        }
       >
         <span className={styles.icon}>{icons.table}</span>
         <span className={styles.tableName}>{logicalName || tableName}</span>

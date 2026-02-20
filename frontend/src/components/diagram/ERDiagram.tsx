@@ -65,15 +65,15 @@ function buildEdges(relations: ERRelationEdge[], posMap: PosMap): Edge[] {
       type: 'smoothstep',
       animated: false,
       label: rel.data.cardinality,
-      labelStyle: { fontSize: 10, fill: '#888' },
-      labelBgStyle: { fill: '#1e1e1e', fillOpacity: 0.8 },
+      labelStyle: { fontSize: 11, fill: '#bbb' },
+      labelBgStyle: { fill: '#2b2d30', fillOpacity: 0.9 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 15,
         height: 15,
-        color: '#888',
+        color: '#666',
       },
-      style: { stroke: '#888', strokeWidth: 1 },
+      style: { stroke: '#666', strokeWidth: 1 },
     };
   });
 }

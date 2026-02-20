@@ -1,6 +1,7 @@
-import { lazy, Suspense, useCallback } from 'react';
+import { lazy, Suspense, useCallback, useMemo } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useActiveQuery, useQueryStore } from '../../store/queryStore';
+import { envStyleClass } from '../../utils/colorContrast';
 import { log } from '../../utils/logger';
 import { EditorTabs } from '../editor/EditorTabs';
 import styles from './CenterPanel.module.css';
@@ -33,6 +34,12 @@ export function CenterPanel() {
   const isDataView = activeQuery?.isDataView === true;
   const isERDiagram = activeQuery?.isERDiagram === true;
 
+  const selectorEnvClass = useMemo(() => {
+    if (!activeQuery?.connectionId) return '';
+    const conn = connections.find((c) => c.id === activeQuery.connectionId);
+    return envStyleClass(conn?.environment, styles);
+  }, [activeQuery?.connectionId, connections]);
+
   const activeQueryId = activeQuery?.id ?? null;
   const handleConnectionChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -51,7 +58,7 @@ export function CenterPanel() {
       <div className={styles.tabBar}>
         <EditorTabs />
         <select
-          className={styles.connectionSelector}
+          className={`${styles.connectionSelector} ${selectorEnvClass}`}
           value={activeQuery?.connectionId ?? ''}
           onChange={handleConnectionChange}
           disabled={connections.length === 0 || !activeQuery}

@@ -31,8 +31,8 @@ const SearchDialog = lazy(() =>
 const SettingsDialog = lazy(() =>
   import('../dialogs/SettingsDialog').then((module) => ({ default: module.SettingsDialog }))
 );
-const A5ERImportDialog = lazy(() =>
-  import('../dialogs/A5ERImportDialog').then((module) => ({ default: module.A5ERImportDialog }))
+const ERImportDialog = lazy(() =>
+  import('../dialogs/ERImportDialog').then((module) => ({ default: module.ERImportDialog }))
 );
 
 // Simple loading fallback
@@ -115,7 +115,7 @@ export function MainLayout() {
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false);
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [isA5ERImportDialogOpen, setIsA5ERImportDialogOpen] = useState(false);
+  const [isERImportDialogOpen, setIsERImportDialogOpen] = useState(false);
   const [queryConfirmDialog, setQueryConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -317,7 +317,7 @@ export function MainLayout() {
   // Note: isBottomPanelVisible is NOT persisted - it's always hidden on startup
 
   const hasOpenDialog =
-    isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isA5ERImportDialogOpen;
+    isConnectionDialogOpen || isSearchDialogOpen || isSettingsDialogOpen || isERImportDialogOpen;
 
   // Keyboard shortcuts
   useKeyboardHandler((e: KeyboardEvent) => {
@@ -449,7 +449,7 @@ export function MainLayout() {
 
         {/* Import */}
         <div className={styles.toolbarGroup}>
-          <button onClick={() => setIsA5ERImportDialogOpen(true)} title="A5:ERファイルをインポート">
+          <button onClick={() => setIsERImportDialogOpen(true)} title="ER図ファイルをインポート">
             {Icons.import}
             <span>インポート</span>
           </button>
@@ -614,11 +614,11 @@ export function MainLayout() {
         </Suspense>
       )}
 
-      {isA5ERImportDialogOpen && (
+      {isERImportDialogOpen && (
         <Suspense fallback={<LoadingFallback />}>
-          <A5ERImportDialog
-            isOpen={isA5ERImportDialogOpen}
-            onClose={() => setIsA5ERImportDialogOpen(false)}
+          <ERImportDialog
+            isOpen={isERImportDialogOpen}
+            onClose={() => setIsERImportDialogOpen(false)}
             onImport={(model) => {
               loadFromParsedModel(model);
               openERDiagram(model.name || 'ER Diagram');
