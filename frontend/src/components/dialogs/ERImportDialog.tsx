@@ -1,15 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
 import { bridge, toERDiagramModel } from '../../api/bridge';
 import type { ERDiagramModel } from '../../utils/erDiagramParser';
-import styles from './A5ERImportDialog.module.css';
+import styles from './ERImportDialog.module.css';
 
-interface A5ERImportDialogProps {
+interface ERImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (model: ERDiagramModel) => void;
 }
 
-export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialogProps) {
+export function ERImportDialog({ isOpen, onClose, onImport }: ERImportDialogProps) {
   const [fileName, setFileName] = useState<string>('');
   const [parsedModel, setParsedModel] = useState<ERDiagramModel | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +71,10 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
         }}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="a5er-import-dialog-title"
+        aria-labelledby="er-import-dialog-title"
       >
         <div className={styles.header}>
-          <h2 id="a5er-import-dialog-title">A5:ERファイルをインポート</h2>
+          <h2 id="er-import-dialog-title">ER図ファイルをインポート</h2>
           <button type="button" className={styles.closeButton} onClick={onClose}>
             {'\u2715'}
           </button>
@@ -82,7 +82,7 @@ export function A5ERImportDialog({ isOpen, onClose, onImport }: A5ERImportDialog
 
         <div className={styles.content}>
           <div className={styles.fileSection}>
-            <span className={styles.fileLabel}>.a5erファイルを選択</span>
+            <span className={styles.fileLabel}>ER図ファイルを選択</span>
             <div className={styles.fileRow}>
               <button
                 type="button"

@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { blendColor, hexToRgba, readableColor } from '../../utils/colorContrast';
 import styles from './ShapeNode.module.css';
 
 interface ShapeNodeData {
@@ -16,21 +17,16 @@ interface ShapeNodeProps {
   data: ShapeNodeData;
 }
 
-function hexToRgba(hex: string, alpha: number): string {
-  if (hex.length < 7 || hex[0] !== '#') return 'transparent';
-  const r = Number.parseInt(hex.slice(1, 3), 16);
-  const g = Number.parseInt(hex.slice(3, 5), 16);
-  const b = Number.parseInt(hex.slice(5, 7), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return 'transparent';
-  const a = Math.max(0, Math.min(1, alpha / 255));
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
+const CANVAS_BG = '#1e1e1e';
 
 export const ShapeNode = memo(function ShapeNode({ data }: ShapeNodeProps) {
   const { shapeType, text, fillColor, fontColor, fillAlpha, fontSize, width, height } = data;
   const isRound = shapeType === 'roundrect';
 
   const backgroundColor = fillColor ? hexToRgba(fillColor, fillAlpha) : 'transparent';
+
+  const effectiveBg = fillColor ? blendColor(fillColor, fillAlpha, CANVAS_BG) : CANVAS_BG;
+  const textColor = fontColor ? readableColor(effectiveBg, fontColor) : undefined;
 
   return (
     <div
@@ -40,7 +36,7 @@ export const ShapeNode = memo(function ShapeNode({ data }: ShapeNodeProps) {
         height: height || undefined,
         backgroundColor,
         borderRadius: isRound ? 8 : 0,
-        color: fontColor || 'var(--text-primary)',
+        color: textColor || 'var(--text-primary)',
         fontSize: fontSize || 9,
       }}
     >
